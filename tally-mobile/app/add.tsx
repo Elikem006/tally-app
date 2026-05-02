@@ -1,12 +1,10 @@
-import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View } from 'react-native';
 
-export default function App() {
+export default function AddScreen() {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Tally 💰</Text>
-      <Text style={styles.subtitle}>Track your money. Split with friends.</Text>
-      <StatusBar style="auto" />
+      <Text style={styles.title}>Add Expense</Text>
+      <Text style={styles.subtitle}>Coming soon — we'll build this next</Text>
     </View>
   );
 }
@@ -15,17 +13,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0F1117',
+    padding: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
   title: {
-    fontSize: 40,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#00C896',
-    marginBottom: 10,
+    color: '#ffffff',
+    marginBottom: 8,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#8890A0',
   },
 });
