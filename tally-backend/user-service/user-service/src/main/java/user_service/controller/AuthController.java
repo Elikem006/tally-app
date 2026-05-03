@@ -22,7 +22,6 @@ public class AuthController {
             String email = request.get("email");
             String password = request.get("password");
 
-            // Validate inputs
             if (name == null || email == null || password == null) {
                 return ResponseEntity.badRequest()
                         .body(Map.of("error", "Name, email and password are required"));
@@ -36,6 +35,26 @@ public class AuthController {
                     "name", user.getName(),
                     "email", user.getEmail()
             ));
+
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody Map<String, String> request) {
+        try {
+            String email = request.get("email");
+            String password = request.get("password");
+
+            if (email == null || password == null) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Email and password are required"));
+            }
+
+            Map<String, Object> result = userService.loginUser(email, password);
+            return ResponseEntity.ok(result);
 
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest()
