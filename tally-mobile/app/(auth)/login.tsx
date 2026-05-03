@@ -7,18 +7,38 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
+import { authAPI } from '../../services/api';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
- function handleLogin() {
-  // TODO: connect to Spring Boot backend later
-  // For now navigate straight to home
-  router.replace('/(tabs)');
-}
+  async function handleLogin() {
+    if (!email || !password) {
+      Alert.alert('Error', 'Please enter your email and password');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await authAPI.login(email, password);
+      const { token, name } = response.data;
+      Alert.alert('Success', `Welcome back ${name}!`);
+      router.replace('/(tabs)');
+
+    } catch (error: any) {
+      console.log('Login error:', JSON.stringify(error));
+      const message = error.response?.data?.error || 'Login failed. Check your connection.';
+      Alert.alert('Login Failed', message);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <KeyboardAvoidingView
@@ -26,7 +46,6 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.inner}>
-
         <Text style={styles.logo}>Tally 💰</Text>
         <Text style={styles.tagline}>Track your money. Split with friends.</Text>
 
@@ -52,8 +71,16 @@ export default function LoginScreen() {
             secureTextEntry
           />
 
-          <TouchableOpacity style={styles.button} onPress={handleLogin}>
-            <Text style={styles.buttonText}>Log In</Text>
+          <TouchableOpacity
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleLogin}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#000000" />
+            ) : (
+              <Text style={styles.buttonText}>Log In</Text>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
@@ -63,7 +90,6 @@ export default function LoginScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-
       </View>
     </KeyboardAvoidingView>
   );
@@ -118,6 +144,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
     marginBottom: 24,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   buttonText: {
     color: '#000000',
