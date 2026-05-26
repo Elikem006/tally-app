@@ -7,18 +7,44 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
+  Alert,
   ScrollView,
 } from 'react-native';
 import { router } from 'expo-router';
+import { authAPI } from '../../services/api';
 
 export default function RegisterScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  function handleRegister() {
-    // TODO: connect to Spring Boot backend later
-    router.replace('/');
+  async function handleRegister() {
+    if (!name || !email || !password) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await authAPI.register(name, email, password);
+      Alert.alert(
+        'Account Created!',
+        'Your account has been created successfully. Please log in.',
+        [{ text: 'OK', onPress: () => router.replace('/(auth)/login') }]
+      );
+    } catch (error: any) {
+      const message = error.response?.data?.error || 'Registration failed. Please try again.';
+      Alert.alert('Registration Failed', message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -27,7 +53,6 @@ export default function RegisterScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView contentContainerStyle={styles.inner}>
-
         <Text style={styles.logo}>Tally 💰</Text>
         <Text style={styles.tagline}>Create your account</Text>
 
@@ -35,7 +60,7 @@ export default function RegisterScreen() {
           <Text style={styles.label}>Full Name</Text>
           <TextInput
             style={styles.input}
-            placeholder="Elikem Emmanuel"
+            placeholder="Your full name"
             placeholderTextColor="#8890A0"
             value={name}
             onChangeText={setName}
@@ -56,15 +81,23 @@ export default function RegisterScreen() {
           <Text style={styles.label}>Password</Text>
           <TextInput
             style={styles.input}
-            placeholder="Create a password"
+            placeholder="At least 6 characters"
             placeholderTextColor="#8890A0"
             value={password}
             onChangeText={setPassword}
             secureTextEntry
           />
 
-          <TouchableOpacity style={styles.button} onPress={handleRegister}>
-            <Text style={styles.buttonText}>Create Account</Text>
+          <TouchableOpacity
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleRegister}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#000000" />
+            ) : (
+              <Text style={styles.buttonText}>Create Account</Text>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
@@ -74,7 +107,6 @@ export default function RegisterScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -129,6 +161,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
     marginBottom: 24,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   buttonText: {
     color: '#000000',
