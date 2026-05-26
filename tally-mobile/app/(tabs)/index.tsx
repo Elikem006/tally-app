@@ -1,15 +1,108 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+} from 'react-native';
+import { expenseAPI } from '../../services/api';
+
+const CATEGORY_ICONS: { [key: string]: string } = {
+  Food: '🍔',
+  Transport: '🚗',
+  Entertainment: '🎮',
+  Utilities: '💡',
+  Other: '📦',
+};
 
 export default function HomeScreen() {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Good morning, Elikem 👋</Text>
-      <Text style={styles.subtitle}>Here's your spending this month</Text>
-      <View style={styles.card}>
-        <Text style={styles.cardLabel}>Total Spent</Text>
-        <Text style={styles.cardAmount}>GHS 0.00</Text>
+  const [expenses, setExpenses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchExpenses();
+  }, []);
+
+  async function fetchExpenses() {
+    try {
+      const response = await expenseAPI.getUserExpenses('1');
+      setExpenses(response.data);
+    } catch (error) {
+      console.log('Error fetching expenses:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const totalSpent = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+
+  const categoryTotals = expenses.reduce((acc: any, e) => {
+    acc[e.category] = (acc[e.category] || 0) + parseFloat(e.amount);
+    return acc;
+  }, {});
+
+  const recentExpenses = expenses.slice(0, 3);
+
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#00C896" />
       </View>
-    </View>
+    );
+  }
+
+  return (
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <Text style={styles.greeting}>Good day, Elikem 👋</Text>
+      <Text style={styles.subtitle}>Here's your spending summary</Text>
+
+      <View style={styles.totalCard}>
+        <Text style={styles.totalLabel}>Total Spent</Text>
+        <Text style={styles.totalAmount}>GHS {totalSpent.toFixed(2)}</Text>
+        <Text style={styles.totalSub}>{expenses.length} expenses recorded</Text>
+      </View>
+
+      {Object.keys(categoryTotals).length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>By Category</Text>
+          {Object.entries(categoryTotals).map(([category, total]: any) => (
+            <View key={category} style={styles.categoryRow}>
+              <Text style={styles.categoryIcon}>{CATEGORY_ICONS[category] || '📦'}</Text>
+              <Text style={styles.categoryName}>{category}</Text>
+              <Text style={styles.categoryAmount}>GHS {total.toFixed(2)}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {recentExpenses.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Recent Expenses</Text>
+          {recentExpenses.map((expense) => (
+            <View key={expense.id} style={styles.expenseRow}>
+              <View>
+                <Text style={styles.expenseName}>
+                  {expense.description || expense.category}
+                </Text>
+                <Text style={styles.expenseDate}>{expense.date}</Text>
+              </View>
+              <Text style={styles.expenseAmount}>
+                GHS {parseFloat(expense.amount).toFixed(2)}
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {expenses.length === 0 && (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyIcon}>💰</Text>
+          <Text style={styles.emptyText}>No expenses yet</Text>
+          <Text style={styles.emptySubtext}>Tap Add to record your first expense</Text>
+        </View>
+      )}
+    </ScrollView>
   );
 }
 
@@ -17,34 +110,127 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0F1117',
+  },
+  centered: {
+    flex: 1,
+    backgroundColor: '#0F1117',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  content: {
     padding: 24,
   },
-  title: {
+  greeting: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#ffffff',
-    marginTop: 16,
+    marginBottom: 4,
   },
   subtitle: {
     fontSize: 14,
     color: '#8890A0',
-    marginTop: 4,
     marginBottom: 24,
   },
-  card: {
+  totalCard: {
     backgroundColor: '#1A1F2E',
     borderRadius: 16,
     padding: 24,
     alignItems: 'center',
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#00C89630',
   },
-  cardLabel: {
-    fontSize: 14,
+  totalLabel: {
+    fontSize: 13,
     color: '#8890A0',
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  cardAmount: {
+  totalAmount: {
     fontSize: 40,
     fontWeight: 'bold',
     color: '#00C896',
+    marginBottom: 4,
+  },
+  totalSub: {
+    fontSize: 12,
+    color: '#8890A0',
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 12,
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1A1F2E',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#ffffff10',
+  },
+  categoryIcon: {
+    fontSize: 20,
+    marginRight: 12,
+  },
+  categoryName: {
+    flex: 1,
+    fontSize: 14,
+    color: '#ffffff',
+    fontWeight: '500',
+  },
+  categoryAmount: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#00C896',
+  },
+  expenseRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#1A1F2E',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#ffffff10',
+  },
+  expenseName: {
+    fontSize: 14,
+    color: '#ffffff',
+    fontWeight: '500',
+    marginBottom: 3,
+  },
+  expenseDate: {
+    fontSize: 12,
+    color: '#8890A0',
+  },
+  expenseAmount: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#00C896',
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingTop: 40,
+  },
+  emptyIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#8890A0',
   },
 });
