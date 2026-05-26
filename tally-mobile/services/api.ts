@@ -18,4 +18,18 @@ export const authAPI = {
     api.post('/api/auth/login', { email, password }),
 };
 
+export const expenseAPI = {
+  createExpense: (userId: string, amount: string, category: string, description: string, date: string) =>
+    api.post('/api/expenses', { userId, amount, category, description, date }),
+
+  getUserExpenses: (userId: string) =>
+    api.get(`/api/expenses/user/${userId}`),
+
+  getUserExpensesByCategory: (userId: string, category: string) =>
+    api.get(`/api/expenses/user/${userId}?category=${category}`),
+
+  deleteExpense: (expenseId: string) =>
+    api.delete(`/api/expenses/${expenseId}`),
+};
+
 export default api;
