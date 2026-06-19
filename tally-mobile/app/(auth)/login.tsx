@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState } from "react";
 import {
   View,
   Text,
@@ -9,18 +9,25 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
-} from 'react-native';
-import { router } from 'expo-router';
-import { authAPI } from '../../services/api';
+} from "react-native";
+import { router } from "expo-router";
+import { authAPI } from "../../services/api";
+
+// Global store for user session
+export let currentUser = {
+  token: "",
+  userId: "1",
+  userName: "User",
+};
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
- async function handleLogin() {
+  async function handleLogin() {
     if (!email || !password) {
-      Alert.alert('Error', 'Please enter your email and password');
+      Alert.alert("Error", "Please enter your email and password");
       return;
     }
 
@@ -28,30 +35,26 @@ export default function LoginScreen() {
     try {
       const response = await authAPI.login(email, password);
       const { token, userId, name } = response.data;
-
-      await AsyncStorage.setItem('token', token);
-      await AsyncStorage.setItem('userId', String(userId));
-      await AsyncStorage.setItem('userName', name);
-
-      router.replace('/(tabs)');
-
-    } catch (error: any) {
-      console.log('Login error:', JSON.stringify(error));
-      const message = error.response?.data?.error || 'Login failed. Check your connection.';
-      Alert.alert('Login Failed', message);
-    } finally {
+      currentUser.token = token;
+      currentUser.userId = String(userId);
+      currentUser.userName = name;
       setLoading(false);
+      router.replace("/(tabs)");
+    } catch (error: any) {
+      setLoading(false);
+      Alert.alert("Login Failed", String(error));
     }
   }
-
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={styles.inner}>
         <Text style={styles.logo}>Tally 💰</Text>
-        <Text style={styles.tagline}>Track your money. Split with friends.</Text>
+        <Text style={styles.tagline}>
+          Track your money. Split with friends.
+        </Text>
 
         <View style={styles.form}>
           <Text style={styles.label}>Email</Text>
@@ -87,9 +90,9 @@ export default function LoginScreen() {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
+          <TouchableOpacity onPress={() => router.push("/(auth)/register")}>
             <Text style={styles.link}>
-              Don't have an account?{' '}
+              Don't have an account?{" "}
               <Text style={styles.linkBold}>Sign up</Text>
             </Text>
           </TouchableOpacity>
@@ -102,24 +105,24 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F1117',
+    backgroundColor: "#0F1117",
   },
   inner: {
     flex: 1,
     padding: 24,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   logo: {
     fontSize: 40,
-    fontWeight: 'bold',
-    color: '#00C896',
-    textAlign: 'center',
+    fontWeight: "bold",
+    color: "#00C896",
+    textAlign: "center",
     marginBottom: 8,
   },
   tagline: {
     fontSize: 14,
-    color: '#8890A0',
-    textAlign: 'center',
+    color: "#8890A0",
+    textAlign: "center",
     marginBottom: 48,
   },
   form: {
@@ -127,25 +130,25 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 14,
-    color: '#ffffff',
-    fontWeight: '500',
+    color: "#ffffff",
+    fontWeight: "500",
     marginBottom: 4,
   },
   input: {
-    backgroundColor: '#1A1F2E',
+    backgroundColor: "#1A1F2E",
     borderRadius: 12,
     padding: 16,
-    color: '#ffffff',
+    color: "#ffffff",
     fontSize: 15,
     borderWidth: 1,
-    borderColor: '#ffffff15',
+    borderColor: "#ffffff15",
     marginBottom: 16,
   },
   button: {
-    backgroundColor: '#00C896',
+    backgroundColor: "#00C896",
     borderRadius: 12,
     padding: 16,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 8,
     marginBottom: 24,
   },
@@ -153,17 +156,17 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
-    color: '#000000',
+    color: "#000000",
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   link: {
-    color: '#8890A0',
-    textAlign: 'center',
+    color: "#8890A0",
+    textAlign: "center",
     fontSize: 14,
   },
   linkBold: {
-    color: '#00C896',
-    fontWeight: 'bold',
+    color: "#00C896",
+    fontWeight: "bold",
   },
 });
