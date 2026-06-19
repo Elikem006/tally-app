@@ -18,7 +18,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  async function handleLogin() {
+ async function handleLogin() {
     if (!email || !password) {
       Alert.alert('Error', 'Please enter your email and password');
       return;
@@ -27,8 +27,12 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const response = await authAPI.login(email, password);
-      const { token, name } = response.data;
-      Alert.alert('Success', `Welcome back ${name}!`);
+      const { token, userId, name } = response.data;
+
+      await AsyncStorage.setItem('token', token);
+      await AsyncStorage.setItem('userId', String(userId));
+      await AsyncStorage.setItem('userName', name);
+
       router.replace('/(tabs)');
 
     } catch (error: any) {
