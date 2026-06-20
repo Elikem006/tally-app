@@ -30,11 +30,18 @@ export const expenseAPI = {
 
   getUserExpenses: (userId: string) => api.get(`/api/expenses/user/${userId}`),
 
-  getUserExpensesByCategory: (userId: string, category: string) =>
-    api.get(`/api/expenses/user/${userId}?category=${category}`),
-
   deleteExpense: (expenseId: string) =>
     api.delete(`/api/expenses/${expenseId}`),
+};
+
+export const budgetAPI = {
+  setBudget: (userId: string, category: string, monthlyLimit: string) =>
+    api.post("/api/budgets", { userId, category, monthlyLimit }),
+
+  getUserBudgets: (userId: string) => api.get(`/api/budgets/user/${userId}`),
+
+  getBudgetSummary: (userId: string) =>
+    api.get(`/api/budgets/user/${userId}/summary`),
 };
 
 export default api;

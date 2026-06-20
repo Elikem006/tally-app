@@ -41,6 +41,14 @@ export default function TabLayout() {
         name="profile"
         options={{ title: "Profile", tabBarLabel: "Profile" }}
       />
+      <Tabs.Screen
+        name="budget"
+        options={{ title: "Budget", tabBarLabel: "Budget" }}
+      />
+      <Tabs.Screen
+        name="budget-overview"
+        options={{ title: "Overview", tabBarLabel: "Overview" }}
+      />
     </Tabs>
   );
 }
