@@ -44,4 +44,30 @@ export const budgetAPI = {
     api.get(`/api/budgets/user/${userId}/summary`),
 };
 
+export const groupAPI = {
+  createGroup: (name: string, createdBy: string) =>
+    api.post("/api/groups", { name, createdBy }),
+
+  getUserGroups: (userId: string) => api.get(`/api/groups/user/${userId}`),
+
+  getGroupDetails: (groupId: string) => api.get(`/api/groups/${groupId}`),
+
+  addMember: (groupId: string, userId: string) =>
+    api.post(`/api/groups/${groupId}/members`, { userId }),
+
+  addSharedExpense: (
+    groupId: string,
+    paidBy: string,
+    amount: string,
+    description: string,
+  ) =>
+    api.post(`/api/groups/${groupId}/expenses`, {
+      paidBy,
+      amount,
+      description,
+    }),
+
+  getBalances: (groupId: string) => api.get(`/api/groups/${groupId}/balances`),
+};
+
 export default api;

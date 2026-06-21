@@ -49,6 +49,10 @@ export default function TabLayout() {
         name="budget-overview"
         options={{ title: "Overview", tabBarLabel: "Overview" }}
       />
+      <Tabs.Screen
+        name="groups"
+        options={{ title: "Groups", tabBarLabel: "Groups" }}
+      />
     </Tabs>
   );
 }
