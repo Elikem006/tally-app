@@ -102,16 +102,31 @@ export default function GroupDetailScreen() {
           <Text style={styles.sectionTitle}>Balances</Text>
           {balances.map((b: any, index: number) => (
             <View key={index} style={styles.balanceRow}>
-              <Text style={styles.balanceText}>User #{b.userId}</Text>
-              <Text
+              <View>
+                <Text style={styles.balanceText}>User #{b.userId}</Text>
+                <Text style={styles.balanceSub}>
+                  {b.owes ? "Owes money" : "Is owed money"}
+                </Text>
+              </View>
+              <View
                 style={[
-                  styles.balanceAmount,
-                  { color: b.owes ? "#E05C5C" : "#00C896" },
+                  styles.balanceBadge,
+                  {
+                    backgroundColor: b.owes ? "#E05C5C20" : "#00C89620",
+                    borderColor: b.owes ? "#E05C5C" : "#00C896",
+                  },
                 ]}
               >
-                {b.owes ? "-" : "+"}GHS{" "}
-                {Math.abs(parseFloat(b.balance)).toFixed(2)}
-              </Text>
+                <Text
+                  style={[
+                    styles.balanceAmount,
+                    { color: b.owes ? "#E05C5C" : "#00C896" },
+                  ]}
+                >
+                  {b.owes ? "Owes" : "Owed"} GHS{" "}
+                  {Math.abs(parseFloat(b.balance)).toFixed(2)}
+                </Text>
+              </View>
             </View>
           ))}
         </View>
@@ -364,5 +379,16 @@ const styles = StyleSheet.create({
   backButtonText: {
     color: "#8890A0",
     fontSize: 14,
+  },
+  balanceSub: {
+    fontSize: 12,
+    color: "#8890A0",
+    marginTop: 2,
+  },
+  balanceBadge: {
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
   },
 });
