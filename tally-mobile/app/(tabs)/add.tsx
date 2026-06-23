@@ -10,6 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { expenseAPI } from '../../services/api';
+import { getUserId } from '../../services/storage';
 
 const CATEGORIES = ['Food', 'Transport', 'Entertainment', 'Utilities', 'Other'];
 
@@ -33,8 +34,8 @@ export default function AddScreen() {
     setLoading(true);
     try {
       const today = new Date().toISOString().split('T')[0];
-      // TODO: replace '1' with actual userId from storage
-      await expenseAPI.createExpense('1', amount, selectedCategory, description, today);
+      const userId = getUserId();
+      await expenseAPI.createExpense(userId, amount, selectedCategory, description, today);
       Alert.alert('Success', 'Expense added successfully!');
       setAmount('');
       setDescription('');

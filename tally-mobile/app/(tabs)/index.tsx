@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { expenseAPI } from '../../services/api';
+import { getUserId } from '../../services/storage';
 
 const CATEGORY_ICONS: { [key: string]: string } = {
   Food: '🍔',
@@ -26,7 +27,8 @@ export default function HomeScreen() {
 
   async function fetchExpenses() {
     try {
-      const response = await expenseAPI.getUserExpenses('1');
+      const userId = getUserId();
+      const response = await expenseAPI.getUserExpenses(userId);
       setExpenses(response.data);
     } catch (error) {
       console.log('Error fetching expenses:', error);

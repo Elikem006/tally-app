@@ -25,7 +25,7 @@ export default function BudgetOverviewScreen() {
 
   useEffect(() => {
     fetchSummary();
-  });
+  }, []);
 
   async function fetchSummary() {
     try {

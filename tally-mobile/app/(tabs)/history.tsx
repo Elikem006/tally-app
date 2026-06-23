@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { expenseAPI } from '../../services/api';
+import { getUserId } from '../../services/storage';
 
 const CATEGORY_COLORS: { [key: string]: string } = {
   Food: '#00C896',
@@ -36,8 +37,8 @@ export default function HistoryScreen() {
 
   async function fetchExpenses() {
     try {
-      // TODO: replace '1' with actual userId from storage
-      const response = await expenseAPI.getUserExpenses('1');
+      const userId = getUserId();
+      const response = await expenseAPI.getUserExpenses(userId);
       setExpenses(response.data);
     } catch (error) {
       Alert.alert('Error', 'Failed to load expenses');

@@ -18,7 +18,7 @@ export default function GroupsScreen() {
 
   useEffect(() => {
     fetchGroups();
-  });
+  }, []);
 
   async function fetchGroups() {
     try {
