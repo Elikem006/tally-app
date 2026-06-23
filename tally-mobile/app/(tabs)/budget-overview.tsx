@@ -10,6 +10,7 @@ import {
 import { router } from "expo-router";
 import { budgetAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
+import { notifyBudgetWarning } from "../../services/notifications";
 
 const CATEGORY_ICONS: { [key: string]: string } = {
   Food: "🍔",
@@ -24,14 +25,46 @@ export default function BudgetOverviewScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchSummary();
-  });
+    let notificationsSent = false;
 
+    async function load() {
+      try {
+        const userId = getUserId();
+        const response = await budgetAPI.getBudgetSummary(userId);
+        setSummary(response.data);
+
+        // Only send notifications once per screen load
+        if (!notificationsSent) {
+          notificationsSent = true;
+          const data = response.data;
+          for (const category in data) {
+            if (data[category].isNearLimit || data[category].isOverBudget) {
+              await notifyBudgetWarning(category, data[category].percentage);
+            }
+          }
+        }
+      } catch (error) {
+        console.log("Error fetching budget summary:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    load();
+  }, []);
   async function fetchSummary() {
     try {
       const userId = getUserId();
       const response = await budgetAPI.getBudgetSummary(userId);
       setSummary(response.data);
+
+      // Check if any category is near or over the limit
+      const data = response.data;
+      for (const category in data) {
+        if (data[category].isNearLimit || data[category].isOverBudget) {
+          await notifyBudgetWarning(category, data[category].percentage);
+        }
+      }
     } catch (error) {
       console.log("Error fetching budget summary:", error);
     } finally {

@@ -1,4 +1,8 @@
 import { useState, useEffect } from "react";
+import { notifyNewSharedExpense } from "../services/notifications";
+import { useLocalSearchParams, router } from "expo-router";
+import { groupAPI } from "../services/api";
+import { getUserId } from "../services/storage";
 import {
   View,
   Text,
@@ -8,10 +12,9 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
-import { useLocalSearchParams, router } from "expo-router";
-import { groupAPI } from "../services/api";
-import { getUserId } from "../services/storage";
 
 export default function GroupDetailScreen() {
   const { groupId, groupName } = useLocalSearchParams();
@@ -62,6 +65,7 @@ export default function GroupDetailScreen() {
       setShowAddExpense(false);
       fetchDetails();
       Alert.alert("Success", "Expense added and split equally!");
+      await notifyNewSharedExpense(String(groupName), expenseAmount, "You");
     } catch (error) {
       Alert.alert("Error", "Failed to add expense");
     } finally {
@@ -78,134 +82,145 @@ export default function GroupDetailScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>{groupName}</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+      >
+        <Text style={styles.title}>{groupName}</Text>
 
-      {/* Members */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Members</Text>
-        {details?.members?.map((member: any) => (
-          <View key={member.id} style={styles.memberRow}>
-            <View style={styles.memberAvatar}>
-              <Text style={styles.memberAvatarText}>
-                {String(member.userId).charAt(0)}
-              </Text>
-            </View>
-            <Text style={styles.memberText}>User #{member.userId}</Text>
-          </View>
-        ))}
-      </View>
-
-      {/* Balances */}
-      {balances.length > 0 && (
+        {/* Members */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Balances</Text>
-          {balances.map((b: any, index: number) => (
-            <View key={index} style={styles.balanceRow}>
-              <View>
-                <Text style={styles.balanceText}>User #{b.userId}</Text>
-                <Text style={styles.balanceSub}>
-                  {b.owes ? "Owes money" : "Is owed money"}
+          <Text style={styles.sectionTitle}>Members</Text>
+          {details?.members?.map((member: any) => (
+            <View key={member.id} style={styles.memberRow}>
+              <View style={styles.memberAvatar}>
+                <Text style={styles.memberAvatarText}>
+                  {String(member.userId).charAt(0)}
                 </Text>
               </View>
-              <View
-                style={[
-                  styles.balanceBadge,
-                  {
-                    backgroundColor: b.owes ? "#E05C5C20" : "#00C89620",
-                    borderColor: b.owes ? "#E05C5C" : "#00C896",
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.balanceAmount,
-                    { color: b.owes ? "#E05C5C" : "#00C896" },
-                  ]}
-                >
-                  {b.owes ? "Owes" : "Owed"} GHS{" "}
-                  {Math.abs(parseFloat(b.balance)).toFixed(2)}
-                </Text>
-              </View>
+              <Text style={styles.memberText}>User #{member.userId}</Text>
             </View>
           ))}
         </View>
-      )}
 
-      {/* Shared Expenses */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Shared Expenses</Text>
-        {details?.expenses?.length === 0 ? (
-          <Text style={styles.emptyText}>No expenses yet</Text>
-        ) : (
-          details?.expenses?.map((expense: any) => (
-            <View key={expense.id} style={styles.expenseRow}>
-              <View>
-                <Text style={styles.expenseName}>{expense.description}</Text>
-                <Text style={styles.expenseSub}>
-                  Paid by User #{expense.paidBy} • Split equally
+        {/* Balances */}
+        {balances.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Balances</Text>
+            {balances.map((b: any, index: number) => (
+              <View key={index} style={styles.balanceRow}>
+                <View>
+                  <Text style={styles.balanceText}>User #{b.userId}</Text>
+                  <Text style={styles.balanceSub}>
+                    {b.owes ? "Owes money" : "Is owed money"}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.balanceBadge,
+                    {
+                      backgroundColor: b.owes ? "#E05C5C20" : "#00C89620",
+                      borderColor: b.owes ? "#E05C5C" : "#00C896",
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.balanceAmount,
+                      { color: b.owes ? "#E05C5C" : "#00C896" },
+                    ]}
+                  >
+                    {b.owes ? "Owes" : "Owed"} GHS{" "}
+                    {Math.abs(parseFloat(b.balance)).toFixed(2)}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Shared Expenses */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Shared Expenses</Text>
+          {details?.expenses?.length === 0 ? (
+            <Text style={styles.emptyText}>No expenses yet</Text>
+          ) : (
+            details?.expenses?.map((expense: any) => (
+              <View key={expense.id} style={styles.expenseRow}>
+                <View>
+                  <Text style={styles.expenseName}>{expense.description}</Text>
+                  <Text style={styles.expenseSub}>
+                    Paid by User #{expense.paidBy} • Split equally
+                  </Text>
+                </View>
+                <Text style={styles.expenseAmount}>
+                  GHS {parseFloat(expense.amount).toFixed(2)}
                 </Text>
               </View>
-              <Text style={styles.expenseAmount}>
-                GHS {parseFloat(expense.amount).toFixed(2)}
-              </Text>
-            </View>
-          ))
-        )}
-      </View>
-
-      {/* Add Expense Form */}
-      {showAddExpense && (
-        <View style={styles.addExpenseForm}>
-          <Text style={styles.sectionTitle}>Add Shared Expense</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Description (e.g. Dinner)"
-            placeholderTextColor="#8890A0"
-            value={expenseDescription}
-            onChangeText={setExpenseDescription}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Amount (GHS)"
-            placeholderTextColor="#8890A0"
-            value={expenseAmount}
-            onChangeText={setExpenseAmount}
-            keyboardType="decimal-pad"
-          />
-          <TouchableOpacity
-            style={[styles.button, addingExpense && styles.buttonDisabled]}
-            onPress={handleAddExpense}
-            disabled={addingExpense}
-          >
-            {addingExpense ? (
-              <ActivityIndicator color="#000000" />
-            ) : (
-              <Text style={styles.buttonText}>Add & Split Equally</Text>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.cancelButton}
-            onPress={() => setShowAddExpense(false)}
-          >
-            <Text style={styles.cancelText}>Cancel</Text>
-          </TouchableOpacity>
+            ))
+          )}
         </View>
-      )}
 
-      {!showAddExpense && (
+        {/* Add Expense Form */}
+        {showAddExpense && (
+          <View style={styles.addExpenseForm}>
+            <Text style={styles.sectionTitle}>Add Shared Expense</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Description (e.g. Dinner)"
+              placeholderTextColor="#8890A0"
+              value={expenseDescription}
+              onChangeText={setExpenseDescription}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Amount (GHS)"
+              placeholderTextColor="#8890A0"
+              value={expenseAmount}
+              onChangeText={setExpenseAmount}
+              keyboardType="decimal-pad"
+            />
+            <TouchableOpacity
+              style={[styles.button, addingExpense && styles.buttonDisabled]}
+              onPress={handleAddExpense}
+              disabled={addingExpense}
+            >
+              {addingExpense ? (
+                <ActivityIndicator color="#000000" />
+              ) : (
+                <Text style={styles.buttonText}>Add & Split Equally</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => setShowAddExpense(false)}
+            >
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {!showAddExpense && (
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => setShowAddExpense(true)}
+          >
+            <Text style={styles.addButtonText}>+ Add Shared Expense</Text>
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => setShowAddExpense(true)}
+          style={styles.backButton}
+          onPress={() => router.back()}
         >
-          <Text style={styles.addButtonText}>+ Add Shared Expense</Text>
+          <Text style={styles.backButtonText}>← Back to Groups</Text>
         </TouchableOpacity>
-      )}
-
-      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-        <Text style={styles.backButtonText}>← Back to Groups</Text>
-      </TouchableOpacity>
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
