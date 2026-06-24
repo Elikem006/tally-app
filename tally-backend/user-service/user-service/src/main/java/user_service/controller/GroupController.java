@@ -109,4 +109,19 @@ public class GroupController {
                     .body(Map.of("error", e.getMessage()));
         }
     }
+
+    // POST /api/groups/:id/settle — settle up
+    @PostMapping("/{groupId}/settle")
+    public ResponseEntity<?> settleUp(
+            @PathVariable Long groupId,
+            @RequestBody Map<String, String> request) {
+        try {
+            Long userId = Long.parseLong(request.get("userId"));
+            Map<String, Object> result = groupService.settleUp(groupId, userId);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
 }

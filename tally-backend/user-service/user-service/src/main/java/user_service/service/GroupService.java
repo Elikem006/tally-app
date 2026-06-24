@@ -123,4 +123,55 @@ public class GroupService {
         }
         return debts;
     }
+    // Settle up — clear all debts for a user in a group
+    public Map<String, Object> settleUp(Long groupId, Long userId) {
+        // Verify the group exists
+        groupRepository.findById(groupId)
+                .orElseThrow(() -> new RuntimeException("Group not found"));
+
+        // Verify the user is a member
+        if (!groupMemberRepository.existsByGroupIdAndUserId(groupId, userId)) {
+            throw new RuntimeException("User is not a member of this group");
+        }
+
+        // Add a settle up expense with negative amount to clear the balance
+        List<GroupMember> members = groupMemberRepository.findByGroupId(groupId);
+        List<SharedExpense> expenses = sharedExpenseRepository.findByGroupId(groupId);
+
+        // Calculate what this user owes
+        int memberCount = members.size();
+        Map<Long, java.math.BigDecimal> balances = new HashMap<>();
+        for (GroupMember m : members) {
+            balances.put(m.getUserId(), java.math.BigDecimal.ZERO);
+        }
+
+        for (SharedExpense expense : expenses) {
+            if (expense.getDescription().equals("SETTLED")) continue;
+            java.math.BigDecimal share = expense.getAmount()
+                    .divide(java.math.BigDecimal.valueOf(memberCount), 2, java.math.RoundingMode.HALF_UP);
+            balances.merge(expense.getPaidBy(), expense.getAmount(), java.math.BigDecimal::add);
+            for (GroupMember m : members) {
+                balances.merge(m.getUserId(), share.negate(), java.math.BigDecimal::add);
+            }
+        }
+
+        java.math.BigDecimal userBalance = balances.getOrDefault(userId, java.math.BigDecimal.ZERO);
+
+        // If user owes money, create a settlement expense
+        if (userBalance.compareTo(java.math.BigDecimal.ZERO) < 0) {
+            SharedExpense settlement = new SharedExpense();
+            settlement.setGroupId(groupId);
+            settlement.setPaidBy(userId);
+            settlement.setAmount(userBalance.negate().multiply(java.math.BigDecimal.valueOf(memberCount)));
+            settlement.setDescription("SETTLED");
+            settlement.setSplitType("EQUAL");
+            sharedExpenseRepository.save(settlement);
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("message", "Successfully settled up");
+        result.put("userId", userId);
+        result.put("groupId", groupId);
+        return result;
+    }
 }
