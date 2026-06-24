@@ -73,6 +73,28 @@ export default function GroupDetailScreen() {
     }
   }
 
+  async function handleSettleUp(userId: number) {
+    Alert.alert(
+      "Settle Up",
+      `Are you sure you want to settle up User #${userId}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Settle Up",
+          onPress: async () => {
+            try {
+              await groupAPI.settleUp(String(groupId), String(userId));
+              Alert.alert("Success", "Settled up successfully!");
+              fetchDetails();
+            } catch (error) {
+              Alert.alert("Error", "Failed to settle up");
+            }
+          },
+        },
+      ],
+    );
+  }
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -119,24 +141,34 @@ export default function GroupDetailScreen() {
                     {b.owes ? "Owes money" : "Is owed money"}
                   </Text>
                 </View>
-                <View
-                  style={[
-                    styles.balanceBadge,
-                    {
-                      backgroundColor: b.owes ? "#E05C5C20" : "#00C89620",
-                      borderColor: b.owes ? "#E05C5C" : "#00C896",
-                    },
-                  ]}
-                >
-                  <Text
+                <View style={{ alignItems: "flex-end", gap: 8 }}>
+                  <View
                     style={[
-                      styles.balanceAmount,
-                      { color: b.owes ? "#E05C5C" : "#00C896" },
+                      styles.balanceBadge,
+                      {
+                        backgroundColor: b.owes ? "#E05C5C20" : "#00C89620",
+                        borderColor: b.owes ? "#E05C5C" : "#00C896",
+                      },
                     ]}
                   >
-                    {b.owes ? "Owes" : "Owed"} GHS{" "}
-                    {Math.abs(parseFloat(b.balance)).toFixed(2)}
-                  </Text>
+                    <Text
+                      style={[
+                        styles.balanceAmount,
+                        { color: b.owes ? "#E05C5C" : "#00C896" },
+                      ]}
+                    >
+                      {b.owes ? "Owes" : "Owed"} GHS{" "}
+                      {Math.abs(parseFloat(b.balance)).toFixed(2)}
+                    </Text>
+                  </View>
+                  {b.owes && (
+                    <TouchableOpacity
+                      style={styles.settleButton}
+                      onPress={() => handleSettleUp(b.userId)}
+                    >
+                      <Text style={styles.settleButtonText}>Settle Up</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
             ))}
@@ -405,5 +437,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderWidth: 1,
+  },
+  settleButton: {
+    backgroundColor: "#00C89620",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "#00C896",
+  },
+  settleButtonText: {
+    color: "#00C896",
+    fontSize: 12,
+    fontWeight: "bold",
   },
 });

@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const BASE_URL = 'http://172.20.10.3:8082';
+const BASE_URL = "http://172.20.10.3:8082";
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -68,6 +68,9 @@ export const groupAPI = {
     }),
 
   getBalances: (groupId: string) => api.get(`/api/groups/${groupId}/balances`),
+
+  settleUp: (groupId: string, userId: string) =>
+    api.post(`/api/groups/${groupId}/settle`, { userId }),
 };
 
 export default api;
