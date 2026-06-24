@@ -85,9 +85,27 @@ public class GroupController {
             @PathVariable Long groupId,
             @RequestBody Map<String, String> request) {
         try {
-            Long paidBy = Long.parseLong(request.get("paidBy"));
-            BigDecimal amount = new BigDecimal(request.get("amount"));
+            String paidByStr = request.get("paidBy");
+            String amountStr = request.get("amount");
             String description = request.get("description");
+
+            if (paidByStr == null || amountStr == null || description == null) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "paidBy, amount and description are required"));
+            }
+
+            if (description.isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Description cannot be empty"));
+            }
+
+            Long paidBy = Long.parseLong(paidByStr);
+            BigDecimal amount = new BigDecimal(amountStr);
+
+            if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Amount must be greater than zero"));
+            }
 
             SharedExpense expense = groupService.addSharedExpense(
                     groupId, paidBy, amount, description);

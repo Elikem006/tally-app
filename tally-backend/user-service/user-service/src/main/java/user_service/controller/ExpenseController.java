@@ -21,11 +21,31 @@ public class ExpenseController {
     @PostMapping
     public ResponseEntity<?> createExpense(@RequestBody Map<String, String> request) {
         try {
-            Long userId = Long.parseLong(request.get("userId"));
-            BigDecimal amount = new BigDecimal(request.get("amount"));
+            String userIdStr = request.get("userId");
+            String amountStr = request.get("amount");
             String category = request.get("category");
+            String dateStr = request.get("date");
+
+            if (userIdStr == null || amountStr == null || category == null || dateStr == null) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "userId, amount, category and date are required"));
+            }
+
+            if (category.isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Category cannot be empty"));
+            }
+
+            Long userId = Long.parseLong(userIdStr);
+            BigDecimal amount = new BigDecimal(amountStr);
+
+            if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Amount must be greater than zero"));
+            }
+
             String description = request.get("description");
-            LocalDate date = LocalDate.parse(request.get("date"));
+            LocalDate date = LocalDate.parse(dateStr);
 
             Expense expense = expenseService.createExpense(userId, amount, category, description, date);
             return ResponseEntity.ok(expense);
