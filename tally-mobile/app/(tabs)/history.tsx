@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Alert,
 } from "react-native";
+import { useFocusEffect } from "expo-router";
 import { expenseAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
 
@@ -31,13 +32,14 @@ export default function HistoryScreen() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchExpenses();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchExpenses();
+    }, []),
+  );
 
   async function fetchExpenses() {
     try {
-      // TODO: replace '1' with actual userId from storage
       const userId = getUserId();
       const response = await expenseAPI.getUserExpenses(userId);
       setExpenses(response.data);

@@ -12,8 +12,8 @@ export default function ProfileScreen() {
         onPress: () => {
           // Clear the global user session
           currentUser.token = "";
-          currentUser.userId = "1";
-          currentUser.userName = "User";
+          currentUser.userId = "";
+          currentUser.userName = "";
           // Navigate back to login
           router.replace("/(auth)/login");
         },

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,19 +8,19 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { groupAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
-import { useFocusEffect } from "expo-router";
-import { useCallback } from "react";
 
 export default function GroupsScreen() {
   const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchGroups();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchGroups();
+    }, []),
+  );
 
   async function fetchGroups() {
     try {

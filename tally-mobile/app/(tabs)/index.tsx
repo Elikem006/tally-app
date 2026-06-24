@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
+import { useFocusEffect } from "expo-router";
 import { expenseAPI } from "../../services/api";
 import { getUserId, getUserName } from "../../services/storage";
 
@@ -22,9 +23,11 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState("");
 
-  useEffect(() => {
-    fetchExpenses();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchExpenses();
+    }, []),
+  );
 
   async function fetchExpenses() {
     try {

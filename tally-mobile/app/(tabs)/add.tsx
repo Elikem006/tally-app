@@ -35,7 +35,13 @@ export default function AddScreen() {
     try {
       const today = new Date().toISOString().split("T")[0];
       const userId = getUserId();
-      const response = await expenseAPI.getUserExpenses(userId);
+      await expenseAPI.createExpense(
+        userId,
+        amount,
+        selectedCategory,
+        description,
+        today,
+      );
       Alert.alert("Success", "Expense added successfully!");
       setAmount("");
       setDescription("");

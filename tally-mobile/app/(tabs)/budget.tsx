@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { budgetAPI } from '../../services/api';
 import { getUserId } from '../../services/storage';
 
@@ -33,9 +34,11 @@ export default function BudgetScreen() {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
 
-  useEffect(() => {
-    loadExistingBudgets();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadExistingBudgets();
+    }, []),
+  );
 
   async function loadExistingBudgets() {
     try {

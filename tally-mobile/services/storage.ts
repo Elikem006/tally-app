@@ -1,7 +1,7 @@
 import { currentUser } from "../app/(auth)/login";
 
 export function getUserId(): string {
-  return currentUser.userId || "1";
+  return currentUser.userId || "";
 }
 
 export function getUserName(): string {
