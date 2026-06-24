@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,15 +9,65 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { expenseAPI } from '../../services/api';
+import { expenseAPI, budgetAPI } from '../../services/api';
+import { getUserId } from '../../services/storage';
 
 const CATEGORIES = ['Food', 'Transport', 'Entertainment', 'Utilities', 'Other'];
+
+const CATEGORY_ICONS: { [key: string]: string } = {
+  Food: '🍔',
+  Transport: '🚗',
+  Entertainment: '🎮',
+  Utilities: '💡',
+  Other: '📦',
+};
 
 export default function AddScreen() {
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Food');
   const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(true);
+
+  // Dynamic monthly totals and budget limits
+  const [spent, setSpent] = useState<{ [key: string]: number }>({});
+  const [limits, setLimits] = useState<{ [key: string]: number }>({});
+
+  // Input focus status for outline treatments
+  const [amountFocused, setAmountFocused] = useState(false);
+  const [descFocused, setDescFocused] = useState(false);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  async function loadData() {
+    setFetching(true);
+    try {
+      const userId = getUserId();
+      const [expensesRes, budgetsRes] = await Promise.all([
+        expenseAPI.getUserExpenses(userId),
+        budgetAPI.getUserBudgets(userId)
+      ]);
+      
+      const totals: { [key: string]: number } = {};
+      expensesRes.data.forEach((expense: any) => {
+        const cat = expense.category || 'Other';
+        totals[cat] = (totals[cat] || 0) + parseFloat(expense.amount || '0');
+      });
+      setSpent(totals);
+
+      const budgetMap: { [key: string]: number } = {};
+      budgetsRes.data.forEach((budget: any) => {
+        budgetMap[budget.category] = parseFloat(budget.monthlyLimit) || 0;
+      });
+      setLimits(budgetMap);
+    } catch (err) {
+      console.log('Error loading dynamic metrics for categories:', err);
+    } finally {
+      setFetching(false);
+    }
+  }
 
   async function handleAddExpense() {
     if (!amount) {
@@ -33,9 +83,17 @@ export default function AddScreen() {
     setLoading(true);
     try {
       const today = new Date().toISOString().split('T')[0];
-      // TODO: replace '1' with actual userId from storage
-      await expenseAPI.createExpense('1', amount, selectedCategory, description, today);
+      const userId = getUserId();
+      await expenseAPI.createExpense(userId, amount, selectedCategory, description, today);
       Alert.alert('Success', 'Expense added successfully!');
+      
+      // Update spent values locally for responsive UI feedback
+      const addedAmt = parseFloat(amount) || 0;
+      setSpent(prev => ({
+        ...prev,
+        [selectedCategory]: (prev[selectedCategory] || 0) + addedAmt
+      }));
+
       setAmount('');
       setDescription('');
       setSelectedCategory('Food');
@@ -47,65 +105,112 @@ export default function AddScreen() {
     }
   }
 
+  // Get dynamic ring color based on budget consumption
+  const getRingColor = (cat: string) => {
+    const spentAmt = spent[cat] || 0;
+    const limitAmt = limits[cat] || 0;
+
+    if (limitAmt > 0) {
+      const ratio = spentAmt / limitAmt;
+      if (ratio > 1) return '#FF3B30'; // Red - over budget
+      if (ratio >= 0.8) return '#FF9500'; // Orange - warning
+      if (ratio >= 0.5) return '#FFCC00'; // Yellow - intermediate
+      return '#34C759'; // Green - healthy
+    }
+    return spentAmt > 0 ? '#34C759' : '#C8D2DC'; // Neutral fallback
+  };
+
+  if (fetching) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#111111" />
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Add Expense</Text>
+      {/* Light card container */}
+      <View style={styles.mainCard}>
+        <Text style={styles.cardHeaderTitle}>Add Expense</Text>
 
-      <Text style={styles.label}>Amount (GHS)</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="0.00"
-        placeholderTextColor="#8890A0"
-        value={amount}
-        onChangeText={setAmount}
-        keyboardType="decimal-pad"
-      />
+        {/* Enter Amount box styled for the theme */}
+        <Text style={styles.label}>Amount</Text>
+        <View style={[
+          styles.amountBox,
+          amountFocused && styles.amountBoxFocused
+        ]}>
+          <Text style={styles.amountPrefix}>GHS</Text>
+          <TextInput
+            style={styles.amountInput}
+            placeholder="0.00"
+            placeholderTextColor="#C8D2DC"
+            value={amount}
+            onChangeText={setAmount}
+            keyboardType="decimal-pad"
+            onFocus={() => setAmountFocused(true)}
+            onBlur={() => setAmountFocused(false)}
+          />
+        </View>
 
-      <Text style={styles.label}>Category</Text>
-      <View style={styles.categories}>
-        {CATEGORIES.map((cat) => (
-          <TouchableOpacity
-            key={cat}
-            style={[
-              styles.categoryBtn,
-              selectedCategory === cat && styles.categoryBtnActive,
-            ]}
-            onPress={() => setSelectedCategory(cat)}
-          >
-            <Text
+        {/* Categories capsule selection list */}
+        <Text style={styles.label}>Select Category</Text>
+        <View style={styles.categoryList}>
+          {CATEGORIES.map((cat) => (
+            <TouchableOpacity
+              key={cat}
               style={[
-                styles.categoryText,
-                selectedCategory === cat && styles.categoryTextActive,
+                styles.categoryCapsule,
+                selectedCategory === cat && styles.categoryCapsuleActive,
               ]}
+              onPress={() => setSelectedCategory(cat)}
+              activeOpacity={0.8}
             >
-              {cat}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <View style={styles.categoryLeft}>
+                <Text style={styles.categoryEmoji}>{CATEGORY_ICONS[cat]}</Text>
+                <Text style={styles.categoryNameText}>{cat}</Text>
+              </View>
+              <View style={styles.categoryRight}>
+                <Text style={styles.categoryAmountText}>
+                  GHS {(spent[cat] || 0).toFixed(2)}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Description box */}
+        <Text style={styles.label}>Description (optional)</Text>
+        <TextInput
+          style={[
+            styles.descriptionBox,
+            styles.textArea,
+            descFocused && styles.descriptionBoxFocused
+          ]}
+          placeholder="What was this for?"
+          placeholderTextColor="#8E9AA6"
+          value={description}
+          onChangeText={setDescription}
+          onFocus={() => setDescFocused(true)}
+          onBlur={() => setDescFocused(false)}
+          multiline
+          numberOfLines={3}
+        />
+
+        {/* Black capsule action button */}
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleAddExpense}
+          disabled={loading}
+          activeOpacity={0.85}
+        >
+          {loading ? (
+            <ActivityIndicator color="#ffffff" />
+          ) : (
+            <Text style={styles.buttonText}>⊕ Add Expense</Text>
+          )}
+        </TouchableOpacity>
       </View>
-
-      <Text style={styles.label}>Description (optional)</Text>
-      <TextInput
-        style={[styles.input, styles.textArea]}
-        placeholder="What was this for?"
-        placeholderTextColor="#8890A0"
-        value={description}
-        onChangeText={setDescription}
-        multiline
-        numberOfLines={3}
-      />
-
-      <TouchableOpacity
-        style={[styles.button, loading && styles.buttonDisabled]}
-        onPress={handleAddExpense}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#000000" />
-        ) : (
-          <Text style={styles.buttonText}>Add Expense</Text>
-        )}
-      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -113,77 +218,182 @@ export default function AddScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F1117',
+    backgroundColor: '#F2F4F7', // Soft light gray backdrop from mockup
+  },
+  centered: {
+    flex: 1,
+    backgroundColor: '#F2F4F7',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: {
-    padding: 24,
+    paddingHorizontal: 20,
+    paddingTop: 30,
+    paddingBottom: 40,
   },
-  title: {
-    fontSize: 24,
+  mainCard: {
+    backgroundColor: '#ffffff', // Card wrapper from mockup
+    borderRadius: 28,
+    padding: 24,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    elevation: 3,
+  },
+  cardHeaderTitle: {
+    fontSize: 22,
     fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 24,
+    color: '#111111',
+    marginBottom: 20,
   },
   label: {
-    fontSize: 14,
-    color: '#ffffff',
-    fontWeight: '500',
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#8E9AA6',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
     marginBottom: 8,
+    marginTop: 8,
   },
-  input: {
-    backgroundColor: '#1A1F2E',
-    borderRadius: 12,
-    padding: 16,
-    color: '#ffffff',
-    fontSize: 15,
+  amountBox: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderWidth: 1,
-    borderColor: '#ffffff15',
-    marginBottom: 20,
+    borderColor: '#EAEBEF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  amountBoxFocused: {
+    borderColor: '#111111', // Black border on focus
+  },
+  amountPrefix: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111111',
+    marginRight: 8,
+  },
+  amountInput: {
+    flex: 1,
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#111111',
+    padding: 0,
+  },
+  categoryList: {
+    marginBottom: 16,
+  },
+  categoryCapsule: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  categoryCapsuleActive: {
+    borderColor: '#111111', // Rounded black outline on selection
+    borderWidth: 1.5,
+  },
+  categoryLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  categoryEmoji: {
+    fontSize: 20,
+  },
+  categoryNameText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111111',
+    marginLeft: 4,
+  },
+  categoryRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  categoryAmountText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111111',
+    marginRight: 6,
+  },
+  circleRing: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 3,
+  },
+  descriptionBox: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+    color: '#111111',
+    fontSize: 15,
+    marginBottom: 24,
+  },
+  descriptionBoxFocused: {
+    borderColor: '#111111',
   },
   textArea: {
-    height: 100,
+    height: 80,
     textAlignVertical: 'top',
   },
-  categories: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 20,
-  },
-  categoryBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#ffffff20',
-    backgroundColor: '#1A1F2E',
-  },
-  categoryBtnActive: {
-    backgroundColor: '#00C896',
-    borderColor: '#00C896',
-  },
-  categoryText: {
-    color: '#8890A0',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  categoryTextActive: {
-    color: '#000000',
-    fontWeight: 'bold',
-  },
   button: {
-    backgroundColor: '#00C896',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: '#111111', // Black background button
+    borderRadius: 28,
+    padding: 18,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
     marginTop: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   buttonText: {
-    color: '#000000',
+    color: '#ffffff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  paginationDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 20,
+    gap: 6,
+  },
+  dotActive: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#111111',
+  },
+  dotInactive: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#C8D2DC',
   },
 });

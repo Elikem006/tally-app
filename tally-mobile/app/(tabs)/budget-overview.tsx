@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,82 +6,67 @@ import {
   ScrollView,
   ActivityIndicator,
   TouchableOpacity,
-} from "react-native";
-import { router } from "expo-router";
-import { budgetAPI } from "../../services/api";
-import { getUserId } from "../../services/storage";
-import { notifyBudgetWarning } from "../../services/notifications";
+} from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { budgetAPI } from '../../services/api';
+import { getUserId } from '../../services/storage';
 
 const CATEGORY_ICONS: { [key: string]: string } = {
-  Food: "🍔",
-  Transport: "🚗",
-  Entertainment: "🎮",
-  Utilities: "💡",
-  Other: "📦",
+  Food: '🍔',
+  Transport: '🚗',
+  Entertainment: '🎮',
+  Utilities: '💡',
+  Other: '📦',
 };
 
 export default function BudgetOverviewScreen() {
   const [summary, setSummary] = useState<{ [key: string]: any }>({});
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let notificationsSent = false;
+  useFocusEffect(
+    useCallback(() => {
+      fetchSummary();
+    }, [])
+  );
 
-    async function load() {
-      try {
-        const userId = getUserId();
-        const response = await budgetAPI.getBudgetSummary(userId);
-        setSummary(response.data);
-
-        // Only send notifications once per screen load
-        if (!notificationsSent) {
-          notificationsSent = true;
-          const data = response.data;
-          for (const category in data) {
-            if (data[category].isNearLimit || data[category].isOverBudget) {
-              await notifyBudgetWarning(category, data[category].percentage);
-            }
-          }
-        }
-      } catch (error) {
-        console.log("Error fetching budget summary:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    load();
-  }, []);
   async function fetchSummary() {
+    setLoading(true);
+    setError(null);
     try {
       const userId = getUserId();
       const response = await budgetAPI.getBudgetSummary(userId);
-      setSummary(response.data);
-
-      // Check if any category is near or over the limit
-      const data = response.data;
-      for (const category in data) {
-        if (data[category].isNearLimit || data[category].isOverBudget) {
-          await notifyBudgetWarning(category, data[category].percentage);
-        }
-      }
-    } catch (error) {
-      console.log("Error fetching budget summary:", error);
+      setSummary(response.data || {});
+    } catch (err: any) {
+      console.log('Error fetching budget summary:', err);
+      setError('Failed to load budget summary. Please check your connection.');
     } finally {
       setLoading(false);
     }
   }
 
-  function getBarColor(percentage: number, isOverBudget: boolean) {
-    if (isOverBudget) return "#E05C5C";
-    if (percentage >= 80) return "#F7A84F";
-    return "#00C896";
+  function getBarColor(isOverBudget: boolean, isNearLimit: boolean) {
+    if (isOverBudget) return '#FF3B30'; // Red
+    if (isNearLimit) return '#FF9500'; // Orange
+    return '#8B5CF6'; // Violet / Purple
   }
 
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#00C896" />
+        <ActivityIndicator size="large" color="#111111" />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.errorIcon}>⚠️</Text>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={fetchSummary}>
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -89,12 +74,14 @@ export default function BudgetOverviewScreen() {
   if (Object.keys(summary).length === 0) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.emptyIcon}>📊</Text>
+        <View style={styles.emptyIconCircle}>
+          <Text style={styles.emptyIcon}>📊</Text>
+        </View>
         <Text style={styles.emptyText}>No budgets set yet</Text>
-        <Text style={styles.emptySubtext}>Set your monthly limits first</Text>
+        <Text style={styles.emptySubtext}>Set your monthly limits first to track overview statistics</Text>
         <TouchableOpacity
           style={styles.setupButton}
-          onPress={() => router.push("/(tabs)/budget")}
+          onPress={() => router.push('/(tabs)/budget')}
         >
           <Text style={styles.setupButtonText}>Set Up Budgets</Text>
         </TouchableOpacity>
@@ -104,77 +91,85 @@ export default function BudgetOverviewScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Budget Overview</Text>
-      <Text style={styles.subtitle}>
-        Your spending this month vs your limits
-      </Text>
+      {/* Light card container */}
+      <View style={styles.mainCard}>
+        <Text style={styles.cardHeaderTitle}>Budget Overview</Text>
+        <Text style={styles.subtitle}>
+          Your spending this month vs your limits
+        </Text>
 
-      {Object.entries(summary).map(([category, data]: [string, any]) => {
-        const percentage = Math.min(data.percentage, 100);
-        const barColor = getBarColor(data.percentage, data.isOverBudget);
+        {Object.entries(summary).map(([category, data]: [string, any]) => {
+          const percentage = Math.min(data.percentage, 100);
+          const barColor = getBarColor(data.isOverBudget, data.isNearLimit);
 
-        return (
-          <View key={category} style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={styles.cardLeft}>
-                <Text style={styles.icon}>
-                  {CATEGORY_ICONS[category] || "📦"}
+          return (
+            <View key={category} style={styles.categoryCard}>
+              <View style={styles.cardHeader}>
+                <View style={styles.cardLeft}>
+                  <View style={styles.iconCircle}>
+                    <Text style={styles.icon}>{CATEGORY_ICONS[category] || '📦'}</Text>
+                  </View>
+                  <Text style={styles.categoryName}>{category}</Text>
+                </View>
+                
+                {data.isOverBudget && (
+                  <View style={styles.warningBadge}>
+                    <Text style={styles.warningText}>Over!</Text>
+                  </View>
+                )}
+                {data.isNearLimit && !data.isOverBudget && (
+                  <View style={styles.nearBadge}>
+                    <Text style={styles.nearText}>Near limit</Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.progressContainer}>
+                <View style={styles.progressBackground}>
+                  <View
+                    style={[
+                      styles.progressBar,
+                      {
+                        width: `${percentage}%` as any,
+                        backgroundColor: barColor,
+                      },
+                    ]}
+                  />
+                </View>
+                <Text style={[styles.percentage, { color: barColor }]}>
+                  {data.percentage.toFixed(0)}%
                 </Text>
-                <Text style={styles.categoryName}>{category}</Text>
               </View>
-              {data.isOverBudget && (
-                <View style={styles.warningBadge}>
-                  <Text style={styles.warningText}>Over!</Text>
-                </View>
-              )}
-              {data.isNearLimit && !data.isOverBudget && (
-                <View style={styles.nearBadge}>
-                  <Text style={styles.nearText}>Near limit</Text>
-                </View>
-              )}
-            </View>
 
-            <View style={styles.progressContainer}>
-              <View style={styles.progressBackground}>
-                <View
-                  style={[
-                    styles.progressBar,
-                    {
-                      width: `${percentage}%` as any,
-                      backgroundColor: barColor,
-                    },
-                  ]}
-                />
+              <View style={styles.amountRow}>
+                <Text style={styles.spentText}>
+                  GHS {parseFloat(data.spent).toFixed(2)} spent
+                </Text>
+                <Text style={styles.limitText}>
+                  of GHS {parseFloat(data.limit).toFixed(2)}
+                </Text>
               </View>
-              <Text style={[styles.percentage, { color: barColor }]}>
-                {data.percentage.toFixed(0)}%
+
+              <Text style={[
+                styles.remaining,
+                data.isOverBudget && styles.remainingOver
+              ]}>
+                {data.isOverBudget
+                  ? `GHS ${(parseFloat(data.spent) - parseFloat(data.limit)).toFixed(2)} over budget`
+                  : `GHS ${(parseFloat(data.limit) - parseFloat(data.spent)).toFixed(2)} remaining`}
               </Text>
             </View>
+          );
+        })}
 
-            <View style={styles.amountRow}>
-              <Text style={styles.spentText}>
-                GHS {parseFloat(data.spent).toFixed(2)} spent
-              </Text>
-              <Text style={styles.limitText}>
-                of GHS {parseFloat(data.limit).toFixed(2)}
-              </Text>
-            </View>
-
-            <Text style={styles.remaining}>
-              {data.isOverBudget
-                ? `GHS ${(parseFloat(data.spent) - parseFloat(data.limit)).toFixed(2)} over budget`
-                : `GHS ${(parseFloat(data.limit) - parseFloat(data.spent)).toFixed(2)} remaining`}
-            </Text>
-          </View>
-        );
-      })}
-
-      <TouchableOpacity
-        style={styles.editButton}
-        onPress={() => router.push("/(tabs)/budget")}
-      >
-        <Text style={styles.editButtonText}>Edit Budgets</Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.editButton}
+          onPress={() => router.push('/(tabs)/budget')}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.editButtonText}>Edit Budgets</Text>
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }
@@ -182,162 +177,232 @@ export default function BudgetOverviewScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0F1117",
+    backgroundColor: '#F2F4F7', // Soft light gray backdrop
   },
   centered: {
     flex: 1,
-    backgroundColor: "#0F1117",
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: '#F2F4F7',
+    alignItems: 'center',
+    justifyContent: 'center',
     padding: 24,
   },
-  emptyIcon: {
-    fontSize: 48,
+  emptyIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+  },
+  emptyIcon: {
+    fontSize: 36,
   },
   emptyText: {
     fontSize: 18,
-    fontWeight: "bold",
-    color: "#ffffff",
+    fontWeight: 'bold',
+    color: '#111111',
     marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 14,
-    color: "#8890A0",
+    color: '#8E9AA6',
     marginBottom: 24,
-    textAlign: "center",
+    textAlign: 'center',
+    paddingHorizontal: 16,
   },
   setupButton: {
-    backgroundColor: "#00C896",
-    borderRadius: 12,
-    padding: 14,
+    backgroundColor: '#111111',
+    borderRadius: 28,
+    paddingVertical: 16,
     paddingHorizontal: 28,
   },
   setupButtonText: {
-    color: "#000000",
-    fontWeight: "bold",
+    color: '#ffffff',
+    fontWeight: 'bold',
     fontSize: 15,
   },
   content: {
-    padding: 24,
+    paddingHorizontal: 20,
+    paddingTop: 30,
+    paddingBottom: 40,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#ffffff",
-    marginBottom: 8,
+  mainCard: {
+    backgroundColor: '#ffffff', // White container card
+    borderRadius: 28,
+    padding: 20,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    elevation: 3,
+  },
+  cardHeaderTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#111111',
+    marginBottom: 4,
   },
   subtitle: {
-    fontSize: 14,
-    color: "#8890A0",
+    fontSize: 13,
+    color: '#8E9AA6',
     marginBottom: 24,
   },
-  card: {
-    backgroundColor: "#1A1F2E",
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 12,
+  categoryCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 16,
+    marginBottom: 10,
     borderWidth: 1,
-    borderColor: "#ffffff10",
+    borderColor: '#EAEBEF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 4,
+    elevation: 1,
   },
   cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 14,
   },
   cardLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  iconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F8F9FA',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   icon: {
-    fontSize: 22,
+    fontSize: 18,
   },
   categoryName: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111111',
   },
   warningBadge: {
-    backgroundColor: "#E05C5C20",
-    borderRadius: 6,
-    paddingHorizontal: 10,
+    backgroundColor: '#FF3B3012',
+    borderRadius: 8,
+    paddingHorizontal: 8,
     paddingVertical: 3,
     borderWidth: 1,
-    borderColor: "#E05C5C",
+    borderColor: '#FF3B30',
   },
   warningText: {
-    color: "#E05C5C",
-    fontSize: 12,
-    fontWeight: "bold",
+    color: '#FF3B30',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
   nearBadge: {
-    backgroundColor: "#F7A84F20",
-    borderRadius: 6,
-    paddingHorizontal: 10,
+    backgroundColor: '#FF950012',
+    borderRadius: 8,
+    paddingHorizontal: 8,
     paddingVertical: 3,
     borderWidth: 1,
-    borderColor: "#F7A84F",
+    borderColor: '#FF9500',
   },
   nearText: {
-    color: "#F7A84F",
-    fontSize: 12,
-    fontWeight: "bold",
+    color: '#FF9500',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
   progressContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   progressBackground: {
     flex: 1,
-    height: 10,
-    backgroundColor: "#ffffff15",
-    borderRadius: 5,
-    overflow: "hidden",
+    height: 8,
+    backgroundColor: '#F2F4F7',
+    borderRadius: 4,
+    overflow: 'hidden',
   },
   progressBar: {
-    height: "100%",
-    borderRadius: 5,
+    height: '100%',
+    borderRadius: 4,
   },
   percentage: {
-    fontSize: 13,
-    fontWeight: "bold",
-    width: 40,
-    textAlign: "right",
+    fontSize: 12,
+    fontWeight: 'bold',
+    width: 36,
+    textAlign: 'right',
   },
   amountRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 4,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
   },
   spentText: {
     fontSize: 13,
-    color: "#ffffff",
-    fontWeight: "500",
+    color: '#111111',
+    fontWeight: '600',
   },
   limitText: {
     fontSize: 13,
-    color: "#8890A0",
+    color: '#8E9AA6',
   },
   remaining: {
     fontSize: 12,
-    color: "#8890A0",
+    color: '#8E9AA6',
     marginTop: 2,
   },
+  remainingOver: {
+    color: '#FF3B30',
+    fontWeight: '500',
+  },
   editButton: {
-    borderWidth: 1,
-    borderColor: "#00C896",
-    borderRadius: 12,
-    padding: 14,
-    alignItems: "center",
-    marginTop: 8,
+    backgroundColor: '#111111', // Black rounded button
+    borderRadius: 28,
+    padding: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    marginTop: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
   },
   editButtonText: {
-    color: "#00C896",
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  errorIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#8E9AA6',
+    textAlign: 'center',
+    marginBottom: 24,
+    paddingHorizontal: 24,
+  },
+  retryButton: {
+    backgroundColor: '#111111',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  retryButtonText: {
+    color: '#ffffff',
     fontSize: 15,
-    fontWeight: "600",
+    fontWeight: 'bold',
   },
 });

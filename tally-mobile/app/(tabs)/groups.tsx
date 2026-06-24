@@ -1,32 +1,38 @@
-import { useState, useEffect } from "react";
+import { useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  FlatList,
+  ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
-} from "react-native";
-import { router } from "expo-router";
-import { groupAPI } from "../../services/api";
-import { getUserId } from "../../services/storage";
+} from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { Feather } from '@expo/vector-icons';
+import { groupAPI } from '../../services/api';
+import { getUserId } from '../../services/storage';
 
 export default function GroupsScreen() {
   const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchGroups();
-  });
+  useFocusEffect(
+    useCallback(() => {
+      fetchGroups();
+    }, [])
+  );
 
   async function fetchGroups() {
+    setLoading(true);
+    setError(null);
     try {
       const userId = getUserId();
       const response = await groupAPI.getUserGroups(userId);
-      setGroups(response.data);
-    } catch (error) {
-      console.log("Error fetching groups:", error);
+      setGroups(response.data || []);
+    } catch (err: any) {
+      console.log('Error fetching groups:', err);
+      setError('Failed to load groups. Please check your connection.');
     } finally {
       setLoading(false);
     }
@@ -35,143 +41,245 @@ export default function GroupsScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#00C896" />
+        <ActivityIndicator size="large" color="#111111" />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.errorIcon}>⚠️</Text>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={fetchGroups}>
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {groups.length === 0 ? (
-        <View style={styles.centered}>
-          <Text style={styles.emptyIcon}>👥</Text>
-          <Text style={styles.emptyText}>No groups yet</Text>
-          <Text style={styles.emptySubtext}>
-            Create a group to split expenses with friends
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={groups}
-          keyExtractor={(item) => String(item.id)}
-          contentContainerStyle={styles.list}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.groupCard}
-              onPress={() =>
-                router.push(
-                  `/group-detail?groupId=${item.id}&groupName=${item.name}`,
-                )
-              }
-            >
-              <View style={styles.groupAvatar}>
-                <Text style={styles.groupAvatarText}>
-                  {item.name.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-              <View style={styles.groupInfo}>
-                <Text style={styles.groupName}>{item.name}</Text>
-                <Text style={styles.groupSub}>Tap to view details</Text>
-              </View>
-              <Text style={styles.arrow}>›</Text>
-            </TouchableOpacity>
-          )}
-        />
-      )}
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {/* Light card container */}
+      <View style={styles.mainCard}>
+        <Text style={styles.cardHeaderTitle}>My Groups</Text>
 
-      <TouchableOpacity
-        style={styles.createButton}
-        onPress={() => router.push("/create-group")}
-      >
-        <Text style={styles.createButtonText}>+ Create Group</Text>
-      </TouchableOpacity>
-    </View>
+        {groups.length === 0 ? (
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIconCircle}>
+              <Text style={styles.emptyIcon}>👥</Text>
+            </View>
+            <Text style={styles.emptyText}>No groups yet</Text>
+            <Text style={styles.emptySubtext}>
+              Create a group to start splitting and tracking shared expenses with friends
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.groupList}>
+            {groups.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.groupCard}
+                onPress={() =>
+                  router.push(
+                    `/group-detail?groupId=${item.id}&groupName=${item.name}`
+                  )
+                }
+                activeOpacity={0.8}
+              >
+                <View style={styles.groupLeft}>
+                  <View style={styles.groupAvatar}>
+                    <Text style={styles.groupAvatarText}>
+                      {item.name.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={styles.groupInfo}>
+                    <Text style={styles.groupName}>{item.name}</Text>
+                    <Text style={styles.groupSub}>
+                      {item.members ? item.members.length : 0} members • {item.expenses ? item.expenses.length : 0} expenses
+                    </Text>
+                  </View>
+                </View>
+                <Feather name="chevron-right" size={18} color="#8E9AA6" style={styles.arrow} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={styles.createButton}
+          onPress={() => router.push('/create-group')}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.createButtonText}>+ Create Group</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0F1117",
+    backgroundColor: '#F2F4F7', // Soft light gray backdrop
   },
   centered: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: '#F2F4F7',
+    alignItems: 'center',
+    justifyContent: 'center',
     padding: 24,
   },
-  emptyIcon: {
-    fontSize: 48,
+  content: {
+    paddingHorizontal: 20,
+    paddingTop: 30,
+    paddingBottom: 40,
+  },
+  mainCard: {
+    backgroundColor: '#ffffff', // Main card container
+    borderRadius: 28,
+    padding: 20,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    elevation: 3,
+  },
+  cardHeaderTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#111111',
+    marginBottom: 20,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#F8F9FA',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+  },
+  emptyIcon: {
+    fontSize: 36,
   },
   emptyText: {
     fontSize: 18,
-    fontWeight: "bold",
-    color: "#ffffff",
+    fontWeight: 'bold',
+    color: '#111111',
     marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 14,
-    color: "#8890A0",
-    textAlign: "center",
-    marginBottom: 32,
+    color: '#8E9AA6',
+    textAlign: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 12,
   },
-  list: {
-    padding: 16,
+  groupList: {
+    marginBottom: 16,
   },
   groupCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1A1F2E",
-    borderRadius: 14,
-    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: "#ffffff10",
+    borderColor: '#EAEBEF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  groupLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 16,
   },
   groupAvatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: "#00C89620",
-    alignItems: "center",
-    justifyContent: "center",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F8F9FA',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 14,
     borderWidth: 1,
-    borderColor: "#00C89640",
+    borderColor: '#EAEBEF',
   },
   groupAvatarText: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#00C896",
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111111',
   },
   groupInfo: {
     flex: 1,
   },
   groupName: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111111',
     marginBottom: 3,
   },
   groupSub: {
     fontSize: 12,
-    color: "#8890A0",
+    color: '#8E9AA6',
   },
   arrow: {
-    fontSize: 22,
-    color: "#8890A0",
+    marginLeft: 8,
   },
   createButton: {
-    margin: 16,
-    backgroundColor: "#00C896",
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
+    backgroundColor: '#111111', // Black rounded button
+    borderRadius: 28,
+    padding: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    marginTop: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
   },
   createButtonText: {
-    color: "#000000",
+    color: '#ffffff',
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: 'bold',
+  },
+  errorIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#8E9AA6',
+    textAlign: 'center',
+    marginBottom: 24,
+    paddingHorizontal: 24,
+  },
+  retryButton: {
+    backgroundColor: '#111111',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  retryButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: 'bold',
   },
 });
