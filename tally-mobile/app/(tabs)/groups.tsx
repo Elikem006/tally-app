@@ -11,6 +11,8 @@ import {
 import { router } from "expo-router";
 import { groupAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
+import { useFocusEffect } from "expo-router";
+import { useCallback } from "react";
 
 export default function GroupsScreen() {
   const [groups, setGroups] = useState<any[]>([]);
@@ -18,7 +20,7 @@ export default function GroupsScreen() {
 
   useEffect(() => {
     fetchGroups();
-  });
+  }, []);
 
   async function fetchGroups() {
     try {

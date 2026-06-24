@@ -9,8 +9,6 @@ import {
 import { expenseAPI } from "../../services/api";
 import { getUserId, getUserName } from "../../services/storage";
 
-const [userName, setUserName] = useState("");
-
 const CATEGORY_ICONS: { [key: string]: string } = {
   Food: "🍔",
   Transport: "🚗",
@@ -22,10 +20,11 @@ const CATEGORY_ICONS: { [key: string]: string } = {
 export default function HomeScreen() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userName, setUserName] = useState("");
 
   useEffect(() => {
     fetchExpenses();
-  });
+  }, []);
 
   async function fetchExpenses() {
     try {
@@ -42,12 +41,10 @@ export default function HomeScreen() {
   }
 
   const totalSpent = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
-
   const categoryTotals = expenses.reduce((acc: any, e) => {
     acc[e.category] = (acc[e.category] || 0) + parseFloat(e.amount);
     return acc;
   }, {});
-
   const recentExpenses = expenses.slice(0, 3);
 
   if (loading) {
@@ -62,13 +59,11 @@ export default function HomeScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.greeting}>Good day, {userName} 👋</Text>
       <Text style={styles.subtitle}>Here's your spending summary</Text>
-
       <View style={styles.totalCard}>
         <Text style={styles.totalLabel}>Total Spent</Text>
         <Text style={styles.totalAmount}>GHS {totalSpent.toFixed(2)}</Text>
         <Text style={styles.totalSub}>{expenses.length} expenses recorded</Text>
       </View>
-
       {Object.keys(categoryTotals).length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>By Category</Text>
@@ -83,7 +78,6 @@ export default function HomeScreen() {
           ))}
         </View>
       )}
-
       {recentExpenses.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Recent Expenses</Text>
@@ -102,7 +96,6 @@ export default function HomeScreen() {
           ))}
         </View>
       )}
-
       {expenses.length === 0 && (
         <View style={styles.emptyState}>
           <Text style={styles.emptyIcon}>💰</Text>
@@ -117,30 +110,21 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#0F1117",
-  },
+  container: { flex: 1, backgroundColor: "#0F1117" },
   centered: {
     flex: 1,
     backgroundColor: "#0F1117",
     alignItems: "center",
     justifyContent: "center",
   },
-  content: {
-    padding: 24,
-  },
+  content: { padding: 24 },
   greeting: {
     fontSize: 24,
     fontWeight: "bold",
     color: "#ffffff",
     marginBottom: 4,
   },
-  subtitle: {
-    fontSize: 14,
-    color: "#8890A0",
-    marginBottom: 24,
-  },
+  subtitle: { fontSize: 14, color: "#8890A0", marginBottom: 24 },
   totalCard: {
     backgroundColor: "#1A1F2E",
     borderRadius: 16,
@@ -150,24 +134,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#00C89630",
   },
-  totalLabel: {
-    fontSize: 13,
-    color: "#8890A0",
-    marginBottom: 6,
-  },
+  totalLabel: { fontSize: 13, color: "#8890A0", marginBottom: 6 },
   totalAmount: {
     fontSize: 40,
     fontWeight: "bold",
     color: "#00C896",
     marginBottom: 4,
   },
-  totalSub: {
-    fontSize: 12,
-    color: "#8890A0",
-  },
-  section: {
-    marginBottom: 24,
-  },
+  totalSub: { fontSize: 12, color: "#8890A0" },
+  section: { marginBottom: 24 },
   sectionTitle: {
     fontSize: 16,
     fontWeight: "bold",
@@ -184,21 +159,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#ffffff10",
   },
-  categoryIcon: {
-    fontSize: 20,
-    marginRight: 12,
-  },
-  categoryName: {
-    flex: 1,
-    fontSize: 14,
-    color: "#ffffff",
-    fontWeight: "500",
-  },
-  categoryAmount: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#00C896",
-  },
+  categoryIcon: { fontSize: 20, marginRight: 12 },
+  categoryName: { flex: 1, fontSize: 14, color: "#ffffff", fontWeight: "500" },
+  categoryAmount: { fontSize: 14, fontWeight: "bold", color: "#00C896" },
   expenseRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -216,31 +179,15 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginBottom: 3,
   },
-  expenseDate: {
-    fontSize: 12,
-    color: "#8890A0",
-  },
-  expenseAmount: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#00C896",
-  },
-  emptyState: {
-    alignItems: "center",
-    paddingTop: 40,
-  },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
+  expenseDate: { fontSize: 12, color: "#8890A0" },
+  expenseAmount: { fontSize: 14, fontWeight: "bold", color: "#00C896" },
+  emptyState: { alignItems: "center", paddingTop: 40 },
+  emptyIcon: { fontSize: 48, marginBottom: 16 },
   emptyText: {
     fontSize: 18,
     fontWeight: "bold",
     color: "#ffffff",
     marginBottom: 8,
   },
-  emptySubtext: {
-    fontSize: 14,
-    color: "#8890A0",
-  },
+  emptySubtext: { fontSize: 14, color: "#8890A0" },
 });

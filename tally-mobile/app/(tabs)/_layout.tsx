@@ -81,8 +81,6 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <TabIcon emoji="👥" color={color} />,
         }}
       />
-      <Tabs.Screen name="group-detail" options={{ href: null }} />
-      <Tabs.Screen name="create-group" options={{ href: null }} />
     </Tabs>
   );
 }
