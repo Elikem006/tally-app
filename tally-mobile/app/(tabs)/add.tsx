@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState } from "react";
 import {
   View,
   Text,
@@ -8,40 +8,41 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
-} from 'react-native';
-import { expenseAPI } from '../../services/api';
+} from "react-native";
+import { expenseAPI } from "../../services/api";
+import { getUserId } from "../../services/storage";
 
-const CATEGORIES = ['Food', 'Transport', 'Entertainment', 'Utilities', 'Other'];
+const CATEGORIES = ["Food", "Transport", "Entertainment", "Utilities", "Other"];
 
 export default function AddScreen() {
-  const [amount, setAmount] = useState('');
-  const [description, setDescription] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('Food');
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("Food");
   const [loading, setLoading] = useState(false);
 
   async function handleAddExpense() {
     if (!amount) {
-      Alert.alert('Error', 'Please enter an amount');
+      Alert.alert("Error", "Please enter an amount");
       return;
     }
 
     if (isNaN(parseFloat(amount))) {
-      Alert.alert('Error', 'Please enter a valid amount');
+      Alert.alert("Error", "Please enter a valid amount");
       return;
     }
 
     setLoading(true);
     try {
-      const today = new Date().toISOString().split('T')[0];
-      // TODO: replace '1' with actual userId from storage
-      await expenseAPI.createExpense('1', amount, selectedCategory, description, today);
-      Alert.alert('Success', 'Expense added successfully!');
-      setAmount('');
-      setDescription('');
-      setSelectedCategory('Food');
+      const today = new Date().toISOString().split("T")[0];
+      const userId = getUserId();
+      const response = await expenseAPI.getUserExpenses(userId);
+      Alert.alert("Success", "Expense added successfully!");
+      setAmount("");
+      setDescription("");
+      setSelectedCategory("Food");
     } catch (error: any) {
-      const message = error.response?.data?.error || 'Failed to add expense.';
-      Alert.alert('Error', message);
+      const message = error.response?.data?.error || "Failed to add expense.";
+      Alert.alert("Error", message);
     } finally {
       setLoading(false);
     }
@@ -113,40 +114,40 @@ export default function AddScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F1117',
+    backgroundColor: "#0F1117",
   },
   content: {
     padding: 24,
   },
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#ffffff',
+    fontWeight: "bold",
+    color: "#ffffff",
     marginBottom: 24,
   },
   label: {
     fontSize: 14,
-    color: '#ffffff',
-    fontWeight: '500',
+    color: "#ffffff",
+    fontWeight: "500",
     marginBottom: 8,
   },
   input: {
-    backgroundColor: '#1A1F2E',
+    backgroundColor: "#1A1F2E",
     borderRadius: 12,
     padding: 16,
-    color: '#ffffff',
+    color: "#ffffff",
     fontSize: 15,
     borderWidth: 1,
-    borderColor: '#ffffff15',
+    borderColor: "#ffffff15",
     marginBottom: 20,
   },
   textArea: {
     height: 100,
-    textAlignVertical: 'top',
+    textAlignVertical: "top",
   },
   categories: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
     marginBottom: 20,
   },
@@ -155,35 +156,35 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#ffffff20',
-    backgroundColor: '#1A1F2E',
+    borderColor: "#ffffff20",
+    backgroundColor: "#1A1F2E",
   },
   categoryBtnActive: {
-    backgroundColor: '#00C896',
-    borderColor: '#00C896',
+    backgroundColor: "#00C896",
+    borderColor: "#00C896",
   },
   categoryText: {
-    color: '#8890A0',
+    color: "#8890A0",
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   categoryTextActive: {
-    color: '#000000',
-    fontWeight: 'bold',
+    color: "#000000",
+    fontWeight: "bold",
   },
   button: {
-    backgroundColor: '#00C896',
+    backgroundColor: "#00C896",
     borderRadius: 12,
     padding: 16,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 8,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   buttonText: {
-    color: '#000000',
+    color: "#000000",
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
 });

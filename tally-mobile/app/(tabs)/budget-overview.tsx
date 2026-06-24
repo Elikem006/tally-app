@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,7 +7,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { budgetAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
 import { notifyBudgetWarning } from "../../services/notifications";
@@ -24,53 +24,35 @@ export default function BudgetOverviewScreen() {
   const [summary, setSummary] = useState<{ [key: string]: any }>({});
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let notificationsSent = false;
+  useFocusEffect(
+    useCallback(() => {
+      let notificationsSent = false;
 
-    async function load() {
-      try {
-        const userId = getUserId();
-        const response = await budgetAPI.getBudgetSummary(userId);
-        setSummary(response.data);
+      async function load() {
+        try {
+          const userId = getUserId();
+          const response = await budgetAPI.getBudgetSummary(userId);
+          setSummary(response.data);
 
-        // Only send notifications once per screen load
-        if (!notificationsSent) {
-          notificationsSent = true;
-          const data = response.data;
-          for (const category in data) {
-            if (data[category].isNearLimit || data[category].isOverBudget) {
-              await notifyBudgetWarning(category, data[category].percentage);
+          if (!notificationsSent) {
+            notificationsSent = true;
+            const data = response.data;
+            for (const category in data) {
+              if (data[category].isNearLimit || data[category].isOverBudget) {
+                await notifyBudgetWarning(category, data[category].percentage);
+              }
             }
           }
-        }
-      } catch (error) {
-        console.log("Error fetching budget summary:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    load();
-  }, []);
-  async function fetchSummary() {
-    try {
-      const userId = getUserId();
-      const response = await budgetAPI.getBudgetSummary(userId);
-      setSummary(response.data);
-
-      // Check if any category is near or over the limit
-      const data = response.data;
-      for (const category in data) {
-        if (data[category].isNearLimit || data[category].isOverBudget) {
-          await notifyBudgetWarning(category, data[category].percentage);
+        } catch (error) {
+          console.log("Error fetching budget summary:", error);
+        } finally {
+          setLoading(false);
         }
       }
-    } catch (error) {
-      console.log("Error fetching budget summary:", error);
-    } finally {
-      setLoading(false);
-    }
-  }
+
+      load();
+    }, []),
+  );
 
   function getBarColor(percentage: number, isOverBudget: boolean) {
     if (isOverBudget) return "#E05C5C";
