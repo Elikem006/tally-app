@@ -22,7 +22,7 @@ Built as a group project at KNUST.
 ### Prerequisites
 - Node.js and npm installed
 - Expo Go app on your phone
-- Java JDK 17+ and IntelliJ IDEA
+- Java JDK 21+ and IntelliJ IDEA
 - PostgreSQL running (via Docker or locally)
 
 ### 1. Clone the repository
@@ -32,14 +32,14 @@ cd tally-app
 ```
 
 ### 2. Run the Backend
-- Open the `backend/` folder in IntelliJ IDEA
+- Open the `tally-backend/user-service/user-service/` folder in IntelliJ IDEA
 - Let Maven download dependencies
 - Run the main `Application.java` class
-- Backend runs on `http://localhost:8080`
+- Backend runs on `http://localhost:8082`
 
 ### 3. Run the Frontend
 ```bash
-cd frontend
+cd tally-mobile
 npm install
 npx expo start
 ```
@@ -52,6 +52,9 @@ npx expo start
 - Add and track personal expenses by category
 - View expense history with totals
 - Home dashboard with category breakdown
+- Budget tracking with category limits
+- Group creation and management
+- Shared expense splitting between group members
 
 ---
 
