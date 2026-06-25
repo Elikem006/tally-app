@@ -90,7 +90,7 @@ export default function BudgetScreen() {
         const catData = data[category];
         if (catData) {
           newLimits[category] = catData.limit > 0 ? String(catData.limit) : '';
-          newSpent[category] = catData.spent || 0;
+          newSpent[category] = parseFloat(catData.spent) || 0;
         } else {
           newLimits[category] = '';
           newSpent[category] = 0;
@@ -369,7 +369,7 @@ export default function BudgetScreen() {
                         <View style={{ flex: 1 }}>
                           <Text style={styles.categoryLabelName}>{category}</Text>
                           <Text style={styles.categorySpentText} numberOfLines={1}>
-                            Spent: GHS {categorySpent.toFixed(2)}
+                            Spent: GHS {(Number(categorySpent) || 0).toFixed(2)}
                           </Text>
                         </View>
                       </View>
