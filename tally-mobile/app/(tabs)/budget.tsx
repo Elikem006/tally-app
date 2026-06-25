@@ -115,7 +115,7 @@ export default function BudgetScreen() {
       }
     } catch (err: any) {
       console.log('Error fetching budget summary:', err);
-      setError('Failed to load budget data. Please check your connection.');
+      setError(err?.message || String(err));
     } finally {
       if (showLoading) setFetching(false);
     }
