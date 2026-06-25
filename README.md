@@ -34,16 +34,16 @@ cd tally-app
 ### 2. Run the Backend
 - Open the `tally-backend/user-service/user-service/` folder in IntelliJ IDEA
 - Let Maven download dependencies
-- Run the main `Application.java` class
+- Run the main `UserServiceApplication.java` class
 - Backend runs on `http://localhost:8082`
 
 ### 3. Run the Frontend
 ```bash
 cd tally-mobile
-npm install
+npm install --legacy-peer-deps
 npx expo start
 ```
-- Scan the QR code with Expo Go on your phone
+- Scan the QR code with Expo Go on your phone > Important: Your phone and laptop must be on the same WiFi network. Before scanning the QR code, open `tally-mobile/services/api.ts` and update the `BASE_URL` with your laptop's current IP address. Run `ipconfig` in PowerShell to find it (look for the IPv4 address under your WiFi adapter).
 
 ---
 
