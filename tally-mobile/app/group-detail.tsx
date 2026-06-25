@@ -25,6 +25,9 @@ export default function GroupDetailScreen() {
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expenseDescription, setExpenseDescription] = useState("");
   const [addingExpense, setAddingExpense] = useState(false);
+  const [showAddMember, setShowAddMember] = useState(false);
+  const [memberUserId, setMemberUserId] = useState("");
+  const [addingMember, setAddingMember] = useState(false);
 
   useEffect(() => {
     fetchDetails();
@@ -95,6 +98,51 @@ export default function GroupDetailScreen() {
     );
   }
 
+  async function handleAddMember() {
+    if (!memberUserId) {
+      Alert.alert("Error", "Please enter a user ID");
+      return;
+    }
+    setAddingMember(true);
+    try {
+      await groupAPI.addMember(String(groupId), memberUserId);
+      setMemberUserId("");
+      setShowAddMember(false);
+      fetchDetails();
+      Alert.alert("Success", "Member added successfully!");
+    } catch (error: any) {
+      Alert.alert(
+        "Error",
+        "Failed to add member. Make sure the user ID is correct.",
+      );
+    } finally {
+      setAddingMember(false);
+    }
+  }
+
+  async function handleDeleteGroup() {
+    Alert.alert(
+      "Delete Group",
+      "Are you sure you want to delete this group? This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await groupAPI.deleteGroup(String(groupId));
+              Alert.alert("Success", "Group deleted");
+              router.back();
+            } catch (error) {
+              Alert.alert("Error", "Failed to delete group");
+            }
+          },
+        },
+      ],
+    );
+  }
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -128,6 +176,43 @@ export default function GroupDetailScreen() {
             </View>
           ))}
         </View>
+        {showAddMember ? (
+          <View style={styles.addExpenseForm}>
+            <Text style={styles.sectionTitle}>Add Member by User ID</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter User ID (e.g. 2)"
+              placeholderTextColor="#8890A0"
+              value={memberUserId}
+              onChangeText={setMemberUserId}
+              keyboardType="numeric"
+            />
+            <TouchableOpacity
+              style={[styles.button, addingMember && styles.buttonDisabled]}
+              onPress={handleAddMember}
+              disabled={addingMember}
+            >
+              {addingMember ? (
+                <ActivityIndicator color="#000000" />
+              ) : (
+                <Text style={styles.buttonText}>Add Member</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => setShowAddMember(false)}
+            >
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => setShowAddMember(true)}
+          >
+            <Text style={styles.addButtonText}>+ Add Member</Text>
+          </TouchableOpacity>
+        )}
 
         {/* Balances */}
         {balances.length > 0 && (
@@ -244,6 +329,12 @@ export default function GroupDetailScreen() {
             <Text style={styles.addButtonText}>+ Add Shared Expense</Text>
           </TouchableOpacity>
         )}
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={handleDeleteGroup}
+        >
+          <Text style={styles.deleteButtonText}>Delete Group</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.backButton}
@@ -450,5 +541,18 @@ const styles = StyleSheet.create({
     color: "#00C896",
     fontSize: 12,
     fontWeight: "bold",
+  },
+  deleteButton: {
+    borderWidth: 1,
+    borderColor: "#E05C5C",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  deleteButtonText: {
+    color: "#E05C5C",
+    fontSize: 15,
+    fontWeight: "600",
   },
 });

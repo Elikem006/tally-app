@@ -71,6 +71,8 @@ export const groupAPI = {
 
   settleUp: (groupId: string, userId: string) =>
     api.post(`/api/groups/${groupId}/settle`, { userId }),
+
+  deleteGroup: (groupId: string) => api.delete(`/api/groups/${groupId}`),
 };
 
 export default api;
