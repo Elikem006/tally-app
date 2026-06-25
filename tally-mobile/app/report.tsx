@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Dimensions,
+  SafeAreaView,
 } from "react-native";
 import { router } from "expo-router";
 import { LineChart } from "react-native-chart-kit";
@@ -136,14 +137,19 @@ export default function ReportScreen() {
   const hasSpending = dailyTotals.some((v) => v > 0);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <TouchableOpacity style={styles.backRow} onPress={() => router.back()}>
-        <Text style={styles.backArrow}>←</Text>
-        <Text style={styles.backLabel}>Budget Overview</Text>
-      </TouchableOpacity>
+    <SafeAreaView style={styles.safeArea}>
+      {/* Fixed nav bar — always reachable */}
+      <View style={styles.navBar}>
+        <TouchableOpacity style={styles.backRow} onPress={() => router.back()}>
+          <Text style={styles.backArrow}>←</Text>
+          <Text style={styles.backLabel}>Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.navTitle}>Monthly Report</Text>
+        <View style={styles.navSpacer} />
+      </View>
 
-      <Text style={styles.title}>Monthly Report</Text>
-      <Text style={styles.subtitle}>{currentMonthName} {currentYear}</Text>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <Text style={styles.title}>{currentMonthName} {currentYear}</Text>
 
       {/* ── Spending chart ── */}
       <View style={styles.card}>
@@ -300,11 +306,24 @@ export default function ReportScreen() {
       )}
 
       <View style={{ height: 24 }} />
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: "#0F1117" },
+  navBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ffffff10",
+  },
+  navTitle: { color: "#ffffff", fontSize: 17, fontWeight: "700" },
+  navSpacer: { width: 60 },
   container: { flex: 1, backgroundColor: "#0F1117" },
   content: { padding: 20 },
   centered: {

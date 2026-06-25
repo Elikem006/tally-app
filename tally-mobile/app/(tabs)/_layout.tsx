@@ -71,6 +71,7 @@ export default function TabLayout() {
           title: "Overview",
           tabBarLabel: "Overview",
           tabBarIcon: ({ color }) => <TabIcon emoji="📊" color={color} />,
+          headerShown: false,
         }}
       />
       <Tabs.Screen
@@ -79,6 +80,22 @@ export default function TabLayout() {
           title: "Groups",
           tabBarLabel: "Groups",
           tabBarIcon: ({ color }) => <TabIcon emoji="👥" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="reminders"
+        options={{
+          title: "Reminders",
+          tabBarLabel: "Reminders",
+          tabBarIcon: ({ color }) => <TabIcon emoji="🔔" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="report"
+        options={{
+          title: "Report",
+          tabBarLabel: "Report",
+          tabBarIcon: ({ color }) => <TabIcon emoji="📈" color={color} />,
         }}
       />
     </Tabs>

@@ -6,6 +6,7 @@ import {
   ScrollView,
   ActivityIndicator,
   TouchableOpacity,
+  SafeAreaView,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { budgetAPI } from "../../services/api";
@@ -86,8 +87,18 @@ export default function BudgetOverviewScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Budget Overview</Text>
+    <SafeAreaView style={styles.safeArea}>
+      {/* Fixed nav bar — always within reach */}
+      <View style={styles.navBar}>
+        <TouchableOpacity style={styles.backRow} onPress={() => router.back()}>
+          <Text style={styles.backArrow}>←</Text>
+          <Text style={styles.backLabel}>Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.navTitle}>Budget Overview</Text>
+        <View style={styles.navSpacer} />
+      </View>
+
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.subtitle}>
         Your spending this month vs your limits
       </Text>
@@ -165,11 +176,47 @@ export default function BudgetOverviewScreen() {
       >
         <Text style={styles.editButtonText}>Edit Budgets</Text>
       </TouchableOpacity>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#0F1117",
+  },
+  navBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ffffff10",
+  },
+  backRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  backArrow: {
+    color: "#00C896",
+    fontSize: 22,
+  },
+  backLabel: {
+    color: "#00C896",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  navTitle: {
+    color: "#ffffff",
+    fontSize: 17,
+    fontWeight: "700",
+  },
+  navSpacer: {
+    width: 60, // mirrors back button width to keep title centred
+  },
   container: {
     flex: 1,
     backgroundColor: "#0F1117",
@@ -210,12 +257,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 24,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#ffffff",
-    marginBottom: 8,
+    paddingTop: 16,
   },
   subtitle: {
     fontSize: 14,
