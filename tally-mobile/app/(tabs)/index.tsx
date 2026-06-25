@@ -321,31 +321,34 @@ export default function HomeScreen() {
             );
           })}
 
-          {/* Data Points (Dots) & Day Labels */}
+          {/* Data Points (Dots) */}
           {points.map((point, idx) => (
-            <View key={`pt-container-${idx}`}>
-              {/* Dot */}
-              <View
-                style={[
-                  styles.chartDot,
-                  {
-                    left: point.x - 6,
-                    top: point.y - 6,
-                  }
-                ]}
-              />
-              {/* Label */}
-              <View
-                style={{
-                  position: 'absolute',
+            <View
+              key={`dot-${idx}`}
+              style={[
+                styles.chartDot,
+                {
+                  left: point.x - 6,
+                  top: point.y - 6,
+                }
+              ]}
+            />
+          ))}
+        </View>
+
+        {/* Separated Days of the Week Component */}
+        <View style={styles.chartDaysContainer}>
+          {points.map((point, idx) => (
+            <View
+              key={`day-label-${idx}`}
+              style={[
+                styles.chartDayCol,
+                {
                   left: point.x - 20,
-                  bottom: -26,
-                  width: 40,
-                  alignItems: 'center',
-                }}
-              >
-                <Text style={styles.chartDayText}>{point.day}</Text>
-              </View>
+                }
+              ]}
+            >
+              <Text style={styles.chartDayText}>{point.day}</Text>
             </View>
           ))}
         </View>
@@ -620,7 +623,16 @@ const styles = StyleSheet.create({
   chartContainer: {
     position: 'relative',
     height: 140,
-    marginBottom: 30,
+  },
+  chartDaysContainer: {
+    position: 'relative',
+    height: 20,
+    marginTop: 12,
+  },
+  chartDayCol: {
+    position: 'absolute',
+    width: 40,
+    alignItems: 'center',
   },
   gridLineHorizontal: {
     position: 'absolute',
