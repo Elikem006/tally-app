@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Image,
+  Dimensions,
 } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -19,6 +20,24 @@ const CATEGORY_ICONS: { [key: string]: string } = {
   Entertainment: '🎮',
   Utilities: '💡',
   Other: '📦',
+};
+
+const getLineStyle = (x1: number, y1: number, x2: number, y2: number) => {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  const angle = Math.atan2(dy, dx);
+  
+  return {
+    position: 'absolute' as const,
+    left: x1,
+    top: y1,
+    width: distance,
+    height: 2.5,
+    backgroundColor: '#8B5CF6',
+    transform: [{ rotate: `${angle}rad` }] as any,
+    transformOrigin: '0% 50%' as any,
+  };
 };
 
 export default function HomeScreen() {
@@ -140,6 +159,21 @@ export default function HomeScreen() {
 
   const { chartBars, weeklySum } = getWeeklyData();
 
+  const { width: screenWidth } = Dimensions.get('window');
+  const chartWidth = screenWidth - 88; // 20*2 screen horizontal padding + 24*2 card padding
+  const chartHeight = 100;
+  const paddingVertical = 15;
+  const plotHeight = chartHeight - 2 * paddingVertical;
+  const maxSpend = Math.max(...chartBars.map(b => b.spend), 0);
+
+  const points = chartBars.map((bar, idx) => {
+    const x = (chartWidth / 6) * idx;
+    const y = maxSpend > 0 
+      ? chartHeight - (paddingVertical + (bar.spend / maxSpend) * plotHeight)
+      : chartHeight / 2;
+    return { x, y, ...bar };
+  });
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -247,17 +281,49 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.chartContainer}>
-          {chartBars.map((bar, idx) => (
-            <View key={idx} style={styles.chartColumn}>
-              <View style={styles.chartBarTrack}>
-                <View
-                  style={[
-                    styles.chartBarFill,
-                    { height: `${bar.heightPercentage}%` as any },
-                  ]}
-                />
+          {/* Horizontal Grid Lines */}
+          <View style={[styles.gridLineHorizontal, { top: paddingVertical }]} />
+          <View style={[styles.gridLineHorizontal, { top: chartHeight / 2 }]} />
+          <View style={[styles.gridLineHorizontal, { top: chartHeight - paddingVertical }]} />
+
+          {/* Connection Line Segments */}
+          {points.map((point, idx) => {
+            if (idx === points.length - 1) return null;
+            const nextPoint = points[idx + 1];
+            const lineStyle = getLineStyle(point.x, point.y, nextPoint.x, nextPoint.y);
+            return (
+              <View
+                key={`line-${idx}`}
+                style={lineStyle}
+              />
+            );
+          })}
+
+          {/* Data Points (Dots) & Day Labels */}
+          {points.map((point, idx) => (
+            <View key={`pt-container-${idx}`}>
+              {/* Dot */}
+              <View
+                style={[
+                  styles.chartDot,
+                  {
+                    left: point.x - 6,
+                    top: point.y - 6,
+                  }
+                ]}
+              />
+              {/* Label */}
+              <View
+                style={{
+                  position: 'absolute',
+                  left: point.x - 20,
+                  bottom: -22,
+                  width: 40,
+                  alignItems: 'center',
+                }}
+              >
+                <Text style={styles.chartDayText}>{point.day}</Text>
               </View>
-              <Text style={styles.chartDayText}>{bar.day}</Text>
             </View>
           ))}
         </View>
@@ -530,29 +596,30 @@ const styles = StyleSheet.create({
     color: '#8E9AA6',
   },
   chartContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    height: 140,
-    paddingHorizontal: 4,
-  },
-  chartColumn: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  chartBarTrack: {
+    position: 'relative',
     height: 100,
-    width: 14,
-    backgroundColor: '#F2F4F7',
-    borderRadius: 7,
-    justifyContent: 'flex-end',
-    overflow: 'hidden',
-    marginBottom: 8,
+    marginBottom: 25,
   },
-  chartBarFill: {
-    width: '100%',
-    borderRadius: 7,
-    backgroundColor: '#8B5CF6', // Violet color fill matching dashboard
+  gridLineHorizontal: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: '#F2F4F7',
+  },
+  chartDot: {
+    position: 'absolute',
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#ffffff',
+    borderWidth: 2.5,
+    borderColor: '#8B5CF6',
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 3,
   },
   chartDayText: {
     fontSize: 10,
