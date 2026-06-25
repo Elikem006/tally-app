@@ -36,7 +36,7 @@ const getLineStyle = (x1: number, y1: number, x2: number, y2: number) => {
     height: 3,
     backgroundColor: '#8B5CF6',
     transform: [{ rotate: `${angle}rad` }] as any,
-    transformOrigin: ['0%', '50%', '0px'] as any,
+    transformOrigin: ['0%', '50%', 0] as any,
   };
 };
 
