@@ -42,6 +42,9 @@ export const budgetAPI = {
 
   getBudgetSummary: (userId: string) =>
     api.get(`/api/budgets/user/${userId}/summary`),
+
+  deleteBudget: (userId: string, category: string) =>
+    api.delete(`/api/budgets/user/${userId}/${category}`),
 };
 
 export const groupAPI = {

@@ -18,6 +18,7 @@ export let currentUser = {
   token: "",
   userId: "1",
   userName: "User",
+  email: "",
 };
 
 export default function LoginScreen() {
@@ -34,10 +35,11 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const response = await authAPI.login(email, password);
-      const { token, userId, name } = response.data;
+      const { token, userId, name, email: userEmail } = response.data;
       currentUser.token = token;
       currentUser.userId = String(userId);
       currentUser.userName = name;
+      currentUser.email = userEmail ?? "";
       setLoading(false);
       router.replace("/(tabs)");
     } catch (error: any) {

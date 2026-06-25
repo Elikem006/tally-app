@@ -7,6 +7,8 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { router } from "expo-router";
 import { groupAPI } from "../services/api";
@@ -37,7 +39,11 @@ export default function CreateGroupScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+    <View style={styles.inner}>
       <Text style={styles.title}>Create a Group</Text>
       <Text style={styles.subtitle}>
         Give your group a name — like "KNUST Friends" or "Roommates"
@@ -72,6 +78,7 @@ export default function CreateGroupScreen() {
         <Text style={styles.cancelText}>Cancel</Text>
       </TouchableOpacity>
     </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -79,6 +86,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#0F1117",
+  },
+  inner: {
+    flex: 1,
     padding: 24,
   },
   title: {

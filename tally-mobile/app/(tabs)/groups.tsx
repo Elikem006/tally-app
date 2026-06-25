@@ -51,42 +51,49 @@ export default function GroupsScreen() {
           <Text style={styles.emptySubtext}>
             Create a group to split expenses with friends
           </Text>
+          <TouchableOpacity
+            style={styles.createButton}
+            onPress={() => router.push("/create-group")}
+          >
+            <Text style={styles.createButtonText}>Create Your First Group</Text>
+          </TouchableOpacity>
         </View>
       ) : (
-        <FlatList
-          data={groups}
-          keyExtractor={(item) => String(item.id)}
-          contentContainerStyle={styles.list}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.groupCard}
-              onPress={() =>
-                router.push(
-                  `/group-detail?groupId=${item.id}&groupName=${item.name}`,
-                )
-              }
-            >
-              <View style={styles.groupAvatar}>
-                <Text style={styles.groupAvatarText}>
-                  {item.name.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-              <View style={styles.groupInfo}>
-                <Text style={styles.groupName}>{item.name}</Text>
-                <Text style={styles.groupSub}>Tap to view details</Text>
-              </View>
-              <Text style={styles.arrow}>›</Text>
-            </TouchableOpacity>
-          )}
-        />
+        <>
+          <FlatList
+            data={groups}
+            keyExtractor={(item) => String(item.id)}
+            contentContainerStyle={styles.list}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.groupCard}
+                onPress={() =>
+                  router.push(
+                    `/group-detail?groupId=${item.id}&groupName=${item.name}`,
+                  )
+                }
+              >
+                <View style={styles.groupAvatar}>
+                  <Text style={styles.groupAvatarText}>
+                    {item.name.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+                <View style={styles.groupInfo}>
+                  <Text style={styles.groupName}>{item.name}</Text>
+                  <Text style={styles.groupSub}>Tap to view details</Text>
+                </View>
+                <Text style={styles.arrow}>›</Text>
+              </TouchableOpacity>
+            )}
+          />
+          <TouchableOpacity
+            style={styles.createButton}
+            onPress={() => router.push("/create-group")}
+          >
+            <Text style={styles.createButtonText}>+ Create Group</Text>
+          </TouchableOpacity>
+        </>
       )}
-
-      <TouchableOpacity
-        style={styles.createButton}
-        onPress={() => router.push("/create-group")}
-      >
-        <Text style={styles.createButtonText}>+ Create Group</Text>
-      </TouchableOpacity>
     </View>
   );
 }

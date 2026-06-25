@@ -14,6 +14,7 @@ export default function ProfileScreen() {
           currentUser.token = "";
           currentUser.userId = "";
           currentUser.userName = "";
+          currentUser.email = "";
           // Navigate back to login
           router.replace("/(auth)/login");
         },
@@ -43,6 +44,11 @@ export default function ProfileScreen() {
       <View style={styles.card}>
         <Text style={styles.cardLabel}>User ID</Text>
         <Text style={styles.cardValue}>#{currentUser.userId}</Text>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardLabel}>Email</Text>
+        <Text style={styles.cardValue}>{currentUser.email}</Text>
       </View>
 
       {/* Logout button */}

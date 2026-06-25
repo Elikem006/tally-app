@@ -8,11 +8,19 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { expenseAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
 
-const CATEGORIES = ["Food", "Transport", "Entertainment", "Utilities", "Other"];
+const CATEGORIES = [
+  { name: "Food", emoji: "🍔" },
+  { name: "Transport", emoji: "🚗" },
+  { name: "Entertainment", emoji: "🎮" },
+  { name: "Utilities", emoji: "💡" },
+  { name: "Other", emoji: "📦" },
+];
 
 export default function AddScreen() {
   const [amount, setAmount] = useState("");
@@ -55,6 +63,10 @@ export default function AddScreen() {
   }
 
   return (
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Add Expense</Text>
 
@@ -69,26 +81,23 @@ export default function AddScreen() {
       />
 
       <Text style={styles.label}>Category</Text>
-      <View style={styles.categories}>
-        {CATEGORIES.map((cat) => (
-          <TouchableOpacity
-            key={cat}
-            style={[
-              styles.categoryBtn,
-              selectedCategory === cat && styles.categoryBtnActive,
-            ]}
-            onPress={() => setSelectedCategory(cat)}
-          >
-            <Text
-              style={[
-                styles.categoryText,
-                selectedCategory === cat && styles.categoryTextActive,
-              ]}
+      <View style={styles.categoryGrid}>
+        {CATEGORIES.map((cat) => {
+          const isSelected = selectedCategory === cat.name;
+          return (
+            <TouchableOpacity
+              key={cat.name}
+              style={[styles.categoryCard, isSelected && styles.categoryCardActive]}
+              onPress={() => setSelectedCategory(cat.name)}
+              activeOpacity={0.7}
             >
-              {cat}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
+              <Text style={[styles.categoryName, isSelected && styles.categoryNameActive]}>
+                {cat.name}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       <Text style={styles.label}>Description (optional)</Text>
@@ -114,10 +123,15 @@ export default function AddScreen() {
         )}
       </TouchableOpacity>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+    backgroundColor: "#0F1117",
+  },
   container: {
     flex: 1,
     backgroundColor: "#0F1117",
@@ -151,32 +165,40 @@ const styles = StyleSheet.create({
     height: 100,
     textAlignVertical: "top",
   },
-  categories: {
+  categoryGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 10,
     marginBottom: 20,
   },
-  categoryBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#ffffff20",
+  categoryCard: {
+    width: "18%",
+    flexGrow: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 6,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: "#ffffff10",
     backgroundColor: "#1A1F2E",
+    gap: 6,
   },
-  categoryBtnActive: {
-    backgroundColor: "#00C896",
+  categoryCardActive: {
     borderColor: "#00C896",
+    backgroundColor: "#00C89615",
   },
-  categoryText: {
+  categoryEmoji: {
+    fontSize: 26,
+  },
+  categoryName: {
+    fontSize: 11,
+    fontWeight: "600",
     color: "#8890A0",
-    fontSize: 13,
-    fontWeight: "500",
+    textAlign: "center",
   },
-  categoryTextActive: {
-    color: "#000000",
-    fontWeight: "bold",
+  categoryNameActive: {
+    color: "#00C896",
   },
   button: {
     backgroundColor: "#00C896",

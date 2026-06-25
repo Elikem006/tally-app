@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -7,10 +7,23 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Alert,
+  ScrollView,
 } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, router } from "expo-router";
 import { expenseAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
+
+function getMonthFilters() {
+  const filters: { label: string; value: string }[] = [{ label: "All", value: "all" }];
+  const now = new Date();
+  for (let i = 0; i < 3; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const label = d.toLocaleString("default", { month: "short", year: "numeric" });
+    filters.push({ label, value });
+  }
+  return filters;
+}
 
 const CATEGORY_COLORS: { [key: string]: string } = {
   Food: "#00C896",
@@ -28,9 +41,12 @@ const CATEGORY_ICONS: { [key: string]: string } = {
   Other: "📦",
 };
 
+const MONTH_FILTERS = getMonthFilters();
+
 export default function HistoryScreen() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeFilter, setActiveFilter] = useState("all");
 
   useFocusEffect(
     useCallback(() => {
@@ -72,6 +88,13 @@ export default function HistoryScreen() {
     );
   }
 
+  const filteredExpenses = useMemo(() => {
+    if (activeFilter === "all") return expenses;
+    return expenses.filter((e) => e.date && e.date.startsWith(activeFilter));
+  }, [expenses, activeFilter]);
+
+  const totalSpent = filteredExpenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -86,13 +109,17 @@ export default function HistoryScreen() {
         <Text style={styles.emptyIcon}>📭</Text>
         <Text style={styles.emptyText}>No expenses yet</Text>
         <Text style={styles.emptySubtext}>
-          Tap Add to record your first expense
+          Start recording your spending to see your history here
         </Text>
+        <TouchableOpacity
+          style={styles.emptyButton}
+          onPress={() => router.push("/(tabs)/add")}
+        >
+          <Text style={styles.emptyButtonText}>Add Your First Expense</Text>
+        </TouchableOpacity>
       </View>
     );
   }
-
-  const totalSpent = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
 
   return (
     <View style={styles.container}>
@@ -101,8 +128,36 @@ export default function HistoryScreen() {
         <Text style={styles.totalAmount}>GHS {totalSpent.toFixed(2)}</Text>
       </View>
 
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.filterRow}
+      >
+        {MONTH_FILTERS.map((f) => (
+          <TouchableOpacity
+            key={f.value}
+            style={[styles.filterBtn, activeFilter === f.value && styles.filterBtnActive]}
+            onPress={() => setActiveFilter(f.value)}
+          >
+            <Text style={[styles.filterText, activeFilter === f.value && styles.filterTextActive]}>
+              {f.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {filteredExpenses.length === 0 && (
+        <View style={styles.filteredEmpty}>
+          <Text style={styles.emptyIcon}>🔍</Text>
+          <Text style={styles.emptyText}>No expenses this month</Text>
+          <Text style={styles.emptySubtext}>
+            Try selecting a different month or add a new expense
+          </Text>
+        </View>
+      )}
+
       <FlatList
-        data={expenses}
+        data={filteredExpenses}
         keyExtractor={(item) => String(item.id)}
         contentContainerStyle={styles.list}
         renderItem={({ item }) => (
@@ -170,6 +225,24 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 14,
     color: "#8890A0",
+    textAlign: "center",
+    marginBottom: 24,
+  },
+  emptyButton: {
+    backgroundColor: "#00C896",
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+  },
+  emptyButtonText: {
+    color: "#000000",
+    fontSize: 15,
+    fontWeight: "bold",
+  },
+  filteredEmpty: {
+    alignItems: "center",
+    paddingVertical: 40,
+    paddingHorizontal: 24,
   },
   totalCard: {
     margin: 16,
@@ -189,6 +262,32 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: "bold",
     color: "#00C896",
+  },
+  filterRow: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    gap: 8,
+    flexDirection: "row",
+  },
+  filterBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#1A1F2E",
+    borderWidth: 1,
+    borderColor: "#ffffff15",
+  },
+  filterBtnActive: {
+    backgroundColor: "#00C896",
+    borderColor: "#00C896",
+  },
+  filterText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#8890A0",
+  },
+  filterTextActive: {
+    color: "#000000",
   },
   list: {
     padding: 16,

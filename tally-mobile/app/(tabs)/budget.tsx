@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,9 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
 import { budgetAPI } from '../../services/api';
 import { getUserId } from '../../services/storage';
 
@@ -34,13 +35,12 @@ export default function BudgetScreen() {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadExistingBudgets();
-    }, []),
-  );
+  useEffect(() => {
+    loadExistingBudgets();
+  }, []);
 
   async function loadExistingBudgets() {
+    setFetching(true);
     try {
       const userId = getUserId();
       const response = await budgetAPI.getUserBudgets(userId);
@@ -48,7 +48,14 @@ export default function BudgetScreen() {
       response.data.forEach((budget: any) => {
         existing[budget.category] = String(budget.monthlyLimit);
       });
-      setLimits(prev => ({ ...prev, ...existing }));
+      setLimits({
+        Food: '',
+        Transport: '',
+        Entertainment: '',
+        Utilities: '',
+        Other: '',
+        ...existing,
+      });
     } catch (error) {
       console.log('Error loading budgets:', error);
     } finally {
@@ -56,16 +63,44 @@ export default function BudgetScreen() {
     }
   }
 
+  function clearCategory(category: string) {
+    setLimits((prev) => ({ ...prev, [category]: '' }));
+  }
+
+  function resetAll() {
+    Alert.alert('Reset All Budgets', 'Clear all budget limits?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reset',
+        style: 'destructive',
+        onPress: async () => {
+          // Clear local state immediately — this always works regardless of backend
+          setLimits({ Food: '', Transport: '', Entertainment: '', Utilities: '', Other: '' });
+          // Sync to backend best-effort (requires backend restart if DELETE endpoint is new)
+          const userId = getUserId();
+          for (const category of CATEGORIES) {
+            try { await budgetAPI.deleteBudget(userId, category); } catch {}
+          }
+        },
+      },
+    ]);
+  }
+
   async function handleSave() {
     const userId = getUserId();
     setLoading(true);
     try {
       for (const category of CATEGORIES) {
-        if (limits[category] && limits[category] !== '0') {
-          await budgetAPI.setBudget(userId, category, limits[category]);
+        const value = limits[category];
+        if (value && value !== '0') {
+          await budgetAPI.setBudget(userId, category, value);
+        } else {
+          // Best-effort delete — don't let a failed delete block saving other categories
+          try { await budgetAPI.deleteBudget(userId, category); } catch {}
         }
       }
       Alert.alert('Success', 'Your budgets have been saved!');
+      await loadExistingBudgets();
     } catch (error: any) {
       Alert.alert('Error', 'Failed to save budgets. Please try again.');
     } finally {
@@ -82,50 +117,74 @@ export default function BudgetScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Monthly Budgets</Text>
-      <Text style={styles.subtitle}>
-        Set how much you want to spend per category this month
-      </Text>
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <Text style={styles.title}>Monthly Budgets</Text>
+        <Text style={styles.subtitle}>
+          Set how much you want to spend per category this month
+        </Text>
 
-      {CATEGORIES.map((category) => (
-        <View key={category} style={styles.categoryRow}>
-          <View style={styles.categoryLeft}>
-            <Text style={styles.categoryIcon}>{CATEGORY_ICONS[category]}</Text>
-            <Text style={styles.categoryName}>{category}</Text>
+        {CATEGORIES.map((category) => (
+          <View key={category} style={styles.categoryRow}>
+            <View style={styles.categoryLeft}>
+              <Text style={styles.categoryIcon}>{CATEGORY_ICONS[category]}</Text>
+              <Text style={styles.categoryName}>{category}</Text>
+            </View>
+            <View style={styles.rowRight}>
+              <View style={styles.inputContainer}>
+                <Text style={styles.currency}>GHS</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="0.00"
+                  placeholderTextColor="#8890A0"
+                  value={limits[category]}
+                  onChangeText={(text) =>
+                    setLimits((prev) => ({ ...prev, [category]: text }))
+                  }
+                  keyboardType="decimal-pad"
+                />
+              </View>
+              {limits[category] !== '' && (
+                <TouchableOpacity
+                  style={styles.clearBtn}
+                  onPress={() => clearCategory(category)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={styles.clearBtnText}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
-          <View style={styles.inputContainer}>
-            <Text style={styles.currency}>GHS</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="0.00"
-              placeholderTextColor="#8890A0"
-              value={limits[category]}
-              onChangeText={(text) =>
-                setLimits((prev) => ({ ...prev, [category]: text }))
-              }
-              keyboardType="decimal-pad"
-            />
-          </View>
-        </View>
-      ))}
+        ))}
 
-      <TouchableOpacity
-        style={[styles.button, loading && styles.buttonDisabled]}
-        onPress={handleSave}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#000000" />
-        ) : (
-          <Text style={styles.buttonText}>Save Budgets</Text>
-        )}
-      </TouchableOpacity>
-    </ScrollView>
+        <TouchableOpacity style={styles.resetButton} onPress={resetAll}>
+          <Text style={styles.resetButtonText}>Reset All</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.button, loading && styles.buttonDisabled]}
+          onPress={handleSave}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#000000" />
+          ) : (
+            <Text style={styles.buttonText}>Save Budgets</Text>
+          )}
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+    backgroundColor: '#0F1117',
+  },
   container: {
     flex: 1,
     backgroundColor: '#0F1117',
@@ -175,6 +234,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#ffffff',
   },
+  rowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -197,12 +261,41 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     textAlign: 'right',
   },
+  clearBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#E05C5C20',
+    borderWidth: 1,
+    borderColor: '#E05C5C60',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clearBtnText: {
+    color: '#E05C5C',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  resetButton: {
+    borderWidth: 1,
+    borderColor: '#E05C5C',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    marginTop: 8,
+    backgroundColor: '#E05C5C10',
+  },
+  resetButtonText: {
+    color: '#E05C5C',
+    fontSize: 15,
+    fontWeight: '600',
+  },
   button: {
     backgroundColor: '#00C896',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
-    marginTop: 24,
+    marginTop: 12,
   },
   buttonDisabled: {
     opacity: 0.6,

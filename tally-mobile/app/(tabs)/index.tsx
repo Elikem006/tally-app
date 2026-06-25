@@ -5,8 +5,9 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  TouchableOpacity,
 } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, router } from "expo-router";
 import { expenseAPI } from "../../services/api";
 import { getUserId, getUserName } from "../../services/storage";
 
@@ -104,8 +105,14 @@ export default function HomeScreen() {
           <Text style={styles.emptyIcon}>💰</Text>
           <Text style={styles.emptyText}>No expenses yet</Text>
           <Text style={styles.emptySubtext}>
-            Tap Add to record your first expense
+            Start tracking your spending by adding your first expense
           </Text>
+          <TouchableOpacity
+            style={styles.emptyButton}
+            onPress={() => router.push("/(tabs)/add")}
+          >
+            <Text style={styles.emptyButtonText}>Add Your First Expense</Text>
+          </TouchableOpacity>
         </View>
       )}
     </ScrollView>
@@ -192,5 +199,16 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     marginBottom: 8,
   },
-  emptySubtext: { fontSize: 14, color: "#8890A0" },
+  emptySubtext: { fontSize: 14, color: "#8890A0", textAlign: "center", marginBottom: 24 },
+  emptyButton: {
+    backgroundColor: "#00C896",
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+  },
+  emptyButtonText: {
+    color: "#000000",
+    fontSize: 15,
+    fontWeight: "bold",
+  },
 });

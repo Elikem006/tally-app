@@ -29,6 +29,7 @@ export default function BudgetOverviewScreen() {
       let notificationsSent = false;
 
       async function load() {
+        setLoading(true);
         try {
           const userId = getUserId();
           const response = await budgetAPI.getBudgetSummary(userId);

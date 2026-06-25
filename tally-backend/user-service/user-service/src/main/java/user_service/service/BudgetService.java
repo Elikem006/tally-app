@@ -44,6 +44,11 @@ public class BudgetService {
         return budgetRepository.findByUserId(userId);
     }
 
+    public void deleteBudget(Long userId, String category) {
+        Optional<Budget> existing = budgetRepository.findByUserIdAndCategory(userId, category);
+        existing.ifPresent(budgetRepository::delete);
+    }
+
     public Map<String, Object> getBudgetSummary(Long userId) {
         List<Budget> budgets = budgetRepository.findByUserId(userId);
         List<Expense> expenses = expenseRepository.findByUserIdOrderByDateDesc(userId);
