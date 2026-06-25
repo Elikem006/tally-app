@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  Image,
 } from 'react-native';
 import { router } from 'expo-router';
 import { authAPI } from '../../services/api';
@@ -177,7 +178,10 @@ export default function RegisterScreen() {
                 activeOpacity={0.7}
                 onPress={() => Alert.alert('Google Login', 'Integration coming soon!')}
               >
-                <AntDesign name="google" size={16} color="#EA4335" />
+                <Image
+                  source={{ uri: 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/48px-Google_%22G%22_logo.svg.png' }}
+                  style={styles.googleIcon}
+                />
                 <Text style={styles.socialButtonText}>Google</Text>
               </TouchableOpacity>
 
@@ -351,5 +355,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     color: '#111111',
+  },
+  googleIcon: {
+    width: 18,
+    height: 18,
   },
 });
