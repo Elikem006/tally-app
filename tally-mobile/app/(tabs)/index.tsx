@@ -161,8 +161,8 @@ export default function HomeScreen() {
 
   const { width: screenWidth } = Dimensions.get('window');
   const chartWidth = screenWidth - 88; // 20*2 screen horizontal padding + 24*2 card padding
-  const chartHeight = 100;
-  const paddingVertical = 15;
+  const chartHeight = 140;
+  const paddingVertical = 25;
   const chartInset = 16; // Safety margin to prevent dots and labels overflowing
   const plotWidth = chartWidth - 2 * chartInset;
   const plotHeight = chartHeight - 2 * paddingVertical;
@@ -339,7 +339,7 @@ export default function HomeScreen() {
                 style={{
                   position: 'absolute',
                   left: point.x - 20,
-                  bottom: -22,
+                  bottom: -26,
                   width: 40,
                   alignItems: 'center',
                 }}
@@ -619,8 +619,8 @@ const styles = StyleSheet.create({
   },
   chartContainer: {
     position: 'relative',
-    height: 100,
-    marginBottom: 25,
+    height: 140,
+    marginBottom: 30,
   },
   gridLineHorizontal: {
     position: 'absolute',
