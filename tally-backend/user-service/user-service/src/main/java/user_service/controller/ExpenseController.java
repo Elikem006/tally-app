@@ -83,4 +83,25 @@ public class ExpenseController {
                     .body(Map.of("error", e.getMessage()));
         }
     }
+
+    @GetMapping("/user/{userId}/report")
+    public ResponseEntity<?> getMonthlyReport(@PathVariable Long userId) {
+        try {
+            Map<String, Object> report = expenseService.getMonthlyReport(userId);
+            return ResponseEntity.ok(report);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/user/{userId}/history")
+    public ResponseEntity<?> getCombinedHistory(@PathVariable Long userId) {
+        try {
+            return ResponseEntity.ok(expenseService.getCombinedHistory(userId));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
 }

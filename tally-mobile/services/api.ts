@@ -47,6 +47,14 @@ export const budgetAPI = {
     api.delete(`/api/budgets/user/${userId}/${category}`),
 };
 
+export const reportAPI = {
+  getMonthlyReport: (userId: string) =>
+    api.get(`/api/expenses/user/${userId}/report`),
+
+  getCombinedHistory: (userId: string) =>
+    api.get(`/api/expenses/user/${userId}/history`),
+};
+
 export const groupAPI = {
   createGroup: (name: string, createdBy: string) =>
     api.post("/api/groups", { name, createdBy }),

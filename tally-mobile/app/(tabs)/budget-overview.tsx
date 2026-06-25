@@ -153,6 +153,13 @@ export default function BudgetOverviewScreen() {
       })}
 
       <TouchableOpacity
+        style={styles.reportButton}
+        onPress={() => router.push("/report")}
+      >
+        <Text style={styles.reportButtonText}>📈  View Monthly Report</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
         style={styles.editButton}
         onPress={() => router.push("/(tabs)/budget")}
       >
@@ -310,13 +317,25 @@ const styles = StyleSheet.create({
     color: "#8890A0",
     marginTop: 2,
   },
+  reportButton: {
+    backgroundColor: "#00C896",
+    borderRadius: 12,
+    padding: 14,
+    alignItems: "center",
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  reportButtonText: {
+    color: "#000000",
+    fontSize: 15,
+    fontWeight: "bold",
+  },
   editButton: {
     borderWidth: 1,
     borderColor: "#00C896",
     borderRadius: 12,
     padding: 14,
     alignItems: "center",
-    marginTop: 8,
   },
   editButtonText: {
     color: "#00C896",

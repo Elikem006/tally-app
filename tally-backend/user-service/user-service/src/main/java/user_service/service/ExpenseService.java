@@ -2,17 +2,34 @@ package user_service.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import user_service.model.Budget;
 import user_service.model.Expense;
+import user_service.model.GroupMember;
+import user_service.model.SharedExpense;
+import user_service.repository.BudgetRepository;
 import user_service.repository.ExpenseRepository;
+import user_service.repository.GroupMemberRepository;
+import user_service.repository.SharedExpenseRepository;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class ExpenseService {
 
     @Autowired
     private ExpenseRepository expenseRepository;
+
+    @Autowired
+    private BudgetRepository budgetRepository;
+
+    @Autowired
+    private GroupMemberRepository groupMemberRepository;
+
+    @Autowired
+    private SharedExpenseRepository sharedExpenseRepository;
 
     public Expense createExpense(Long userId, BigDecimal amount, String category,
                                  String description, LocalDate date) {
@@ -35,5 +52,141 @@ public class ExpenseService {
 
     public void deleteExpense(Long expenseId) {
         expenseRepository.deleteById(expenseId);
+    }
+
+    public Map<String, Object> getMonthlyReport(Long userId) {
+        List<Expense> allExpenses = expenseRepository.findByUserIdOrderByDateDesc(userId);
+
+        LocalDate now = LocalDate.now();
+        int currentYear = now.getYear();
+        int currentMonth = now.getMonthValue();
+        int prevYear = now.minusMonths(1).getYear();
+        int prevMonth = now.minusMonths(1).getMonthValue();
+
+        // Filter expenses by month
+        List<Expense> currentMonthExpenses = allExpenses.stream()
+                .filter(e -> e.getDate().getYear() == currentYear && e.getDate().getMonthValue() == currentMonth)
+                .collect(Collectors.toList());
+
+        List<Expense> previousMonthExpenses = allExpenses.stream()
+                .filter(e -> e.getDate().getYear() == prevYear && e.getDate().getMonthValue() == prevMonth)
+                .collect(Collectors.toList());
+
+        // Totals
+        BigDecimal currentTotal = currentMonthExpenses.stream()
+                .map(Expense::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal previousTotal = previousMonthExpenses.stream()
+                .map(Expense::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // Percentage change
+        double percentageChange = 0.0;
+        if (previousTotal.compareTo(BigDecimal.ZERO) != 0) {
+            percentageChange = currentTotal.subtract(previousTotal)
+                    .divide(previousTotal, 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100))
+                    .doubleValue();
+        }
+
+        // Category breakdown for current month
+        Map<String, BigDecimal> categoryBreakdown = new HashMap<>();
+        for (Expense e : currentMonthExpenses) {
+            categoryBreakdown.merge(e.getCategory(), e.getAmount(), BigDecimal::add);
+        }
+
+        // Highest category
+        Map<String, Object> highestCategory = new HashMap<>();
+        categoryBreakdown.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .ifPresent(entry -> {
+                    highestCategory.put("category", entry.getKey());
+                    highestCategory.put("amount", entry.getValue());
+                });
+
+        // Budget performance
+        List<Budget> budgets = budgetRepository.findByUserId(userId);
+        List<Map<String, Object>> budgetPerformance = new ArrayList<>();
+        for (Budget budget : budgets) {
+            BigDecimal spent = categoryBreakdown.getOrDefault(budget.getCategory(), BigDecimal.ZERO);
+            double percentage = budget.getMonthlyLimit().compareTo(BigDecimal.ZERO) > 0
+                    ? spent.divide(budget.getMonthlyLimit(), 4, RoundingMode.HALF_UP)
+                            .multiply(BigDecimal.valueOf(100)).doubleValue()
+                    : 0.0;
+
+            String status = spent.compareTo(budget.getMonthlyLimit()) > 0 ? "over"
+                    : percentage >= 80 ? "warning"
+                    : "good";
+
+            Map<String, Object> entry = new HashMap<>();
+            entry.put("category", budget.getCategory());
+            entry.put("limit", budget.getMonthlyLimit());
+            entry.put("spent", spent);
+            entry.put("percentage", percentage);
+            entry.put("status", status);
+            budgetPerformance.add(entry);
+        }
+
+        Map<String, Object> report = new HashMap<>();
+        report.put("currentMonth", currentTotal);
+        report.put("previousMonth", previousTotal);
+        report.put("percentageChange", percentageChange);
+        report.put("highestCategory", highestCategory);
+        report.put("categoryBreakdown", categoryBreakdown);
+        report.put("budgetPerformance", budgetPerformance);
+        return report;
+    }
+
+    public List<Map<String, Object>> getCombinedHistory(Long userId) {
+        List<Map<String, Object>> combined = new ArrayList<>();
+
+        // 1. Personal expenses
+        List<Expense> personalExpenses = expenseRepository.findByUserIdOrderByDateDesc(userId);
+        for (Expense e : personalExpenses) {
+            Map<String, Object> entry = new HashMap<>();
+            entry.put("id", e.getId());
+            entry.put("amount", e.getAmount());
+            entry.put("category", e.getCategory());
+            entry.put("description", e.getDescription());
+            entry.put("date", e.getDate().toString());
+            entry.put("type", "personal");
+            entry.put("groupId", null);
+            entry.put("createdAt", e.getCreatedAt() != null ? e.getCreatedAt().toString() : null);
+            combined.add(entry);
+        }
+
+        // 2. Shared expenses where this user paid
+        List<GroupMember> memberships = groupMemberRepository.findByUserId(userId);
+        for (GroupMember membership : memberships) {
+            List<SharedExpense> sharedExpenses = sharedExpenseRepository.findByGroupId(membership.getGroupId());
+            for (SharedExpense se : sharedExpenses) {
+                if (!se.getPaidBy().equals(userId)) continue;
+                Map<String, Object> entry = new HashMap<>();
+                entry.put("id", se.getId());
+                entry.put("amount", se.getAmount());
+                entry.put("category", "Shared");
+                entry.put("description", se.getDescription());
+                entry.put("date", se.getCreatedAt().toLocalDate().toString());
+                entry.put("type", "shared");
+                entry.put("groupId", se.getGroupId());
+                entry.put("createdAt", se.getCreatedAt().toString());
+                combined.add(entry);
+            }
+        }
+
+        // 3. Sort by date descending, then by createdAt descending for same-day entries
+        combined.sort((a, b) -> {
+            int dateCmp = ((String) b.get("date")).compareTo((String) a.get("date"));
+            if (dateCmp != 0) return dateCmp;
+            String aCreated = (String) a.get("createdAt");
+            String bCreated = (String) b.get("createdAt");
+            if (aCreated == null && bCreated == null) return 0;
+            if (aCreated == null) return 1;
+            if (bCreated == null) return -1;
+            return bCreated.compareTo(aCreated);
+        });
+
+        return combined;
     }
 }

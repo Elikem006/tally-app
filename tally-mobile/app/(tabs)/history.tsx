@@ -10,7 +10,7 @@ import {
   ScrollView,
 } from "react-native";
 import { useFocusEffect, router } from "expo-router";
-import { expenseAPI } from "../../services/api";
+import { expenseAPI, reportAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
 
 function getMonthFilters() {
@@ -31,6 +31,7 @@ const CATEGORY_COLORS: { [key: string]: string } = {
   Entertainment: "#F7A84F",
   Utilities: "#E05C5C",
   Other: "#8890A0",
+  Shared: "#A78BFA",
 };
 
 const CATEGORY_ICONS: { [key: string]: string } = {
@@ -39,6 +40,7 @@ const CATEGORY_ICONS: { [key: string]: string } = {
   Entertainment: "🎮",
   Utilities: "💡",
   Other: "📦",
+  Shared: "👥",
 };
 
 const MONTH_FILTERS = getMonthFilters();
@@ -57,7 +59,7 @@ export default function HistoryScreen() {
   async function fetchExpenses() {
     try {
       const userId = getUserId();
-      const response = await expenseAPI.getUserExpenses(userId);
+      const response = await reportAPI.getCombinedHistory(userId);
       setExpenses(response.data);
     } catch (error) {
       Alert.alert("Error", "Failed to load expenses");
@@ -66,7 +68,11 @@ export default function HistoryScreen() {
     }
   }
 
-  async function handleDelete(expenseId: string) {
+  async function handleLongPress(item: any) {
+    if (item.type === "shared") {
+      Alert.alert("Shared Expense", "Shared expenses can only be removed from the group.");
+      return;
+    }
     Alert.alert(
       "Delete Expense",
       "Are you sure you want to delete this expense?",
@@ -77,8 +83,8 @@ export default function HistoryScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              await expenseAPI.deleteExpense(expenseId);
-              setExpenses(expenses.filter((e) => e.id !== expenseId));
+              await expenseAPI.deleteExpense(String(item.id));
+              setExpenses(expenses.filter((e) => e.id !== item.id));
             } catch (error) {
               Alert.alert("Error", "Failed to delete expense");
             }
@@ -160,41 +166,42 @@ export default function HistoryScreen() {
         data={filteredExpenses}
         keyExtractor={(item) => String(item.id)}
         contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.expenseCard}
-            onLongPress={() => handleDelete(String(item.id))}
-          >
-            <View style={styles.expenseLeft}>
-              <View
-                style={[
-                  styles.iconBox,
-                  { backgroundColor: CATEGORY_COLORS[item.category] + "20" },
-                ]}
-              >
-                <Text style={styles.icon}>
-                  {CATEGORY_ICONS[item.category] || "📦"}
-                </Text>
-              </View>
-              <View>
-                <Text style={styles.expenseDescription}>
-                  {item.description || item.category}
-                </Text>
-                <Text style={styles.expenseCategory}>
-                  {item.category} • {item.date}
-                </Text>
-              </View>
-            </View>
-            <Text
-              style={[
-                styles.expenseAmount,
-                { color: CATEGORY_COLORS[item.category] },
-              ]}
+        renderItem={({ item }) => {
+          const isShared = item.type === "shared";
+          const color = CATEGORY_COLORS[item.category] || "#8890A0";
+          return (
+            <TouchableOpacity
+              style={[styles.expenseCard, isShared && styles.sharedCard]}
+              onLongPress={() => handleLongPress(item)}
             >
-              GHS {parseFloat(item.amount).toFixed(2)}
-            </Text>
-          </TouchableOpacity>
-        )}
+              <View style={styles.expenseLeft}>
+                <View style={[styles.iconBox, { backgroundColor: color + "20" }]}>
+                  <Text style={styles.icon}>
+                    {CATEGORY_ICONS[item.category] || "📦"}
+                  </Text>
+                </View>
+                <View>
+                  <View style={styles.descRow}>
+                    <Text style={styles.expenseDescription}>
+                      {item.description || item.category}
+                    </Text>
+                    {isShared && (
+                      <View style={styles.sharedBadge}>
+                        <Text style={styles.sharedBadgeText}>Group</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.expenseCategory}>
+                    {item.category} • {item.date}
+                  </Text>
+                </View>
+              </View>
+              <Text style={[styles.expenseAmount, { color }]}>
+                GHS {parseFloat(item.amount).toFixed(2)}
+              </Text>
+            </TouchableOpacity>
+          );
+        }}
       />
       <Text style={styles.hint}>Long press an expense to delete it</Text>
     </View>
@@ -320,11 +327,32 @@ const styles = StyleSheet.create({
   icon: {
     fontSize: 20,
   },
+  sharedCard: {
+    borderColor: "#A78BFA30",
+  },
+  descRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 3,
+  },
+  sharedBadge: {
+    backgroundColor: "#A78BFA20",
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderWidth: 1,
+    borderColor: "#A78BFA60",
+  },
+  sharedBadgeText: {
+    fontSize: 10,
+    color: "#A78BFA",
+    fontWeight: "600",
+  },
   expenseDescription: {
     fontSize: 14,
     fontWeight: "600",
     color: "#ffffff",
-    marginBottom: 3,
   },
   expenseCategory: {
     fontSize: 12,
