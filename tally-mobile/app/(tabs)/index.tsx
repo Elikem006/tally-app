@@ -10,6 +10,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { expenseAPI, budgetAPI } from '../../services/api';
 import { getUserId, getUserName } from '../../services/storage';
@@ -41,6 +42,7 @@ const getLineStyle = (x1: number, y1: number, x2: number, y2: number) => {
 };
 
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
   const [expenses, setExpenses] = useState<any[]>([]);
   const [budgets, setBudgets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -219,7 +221,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}>
       {/* Header Row */}
       <View style={styles.headerRow}>
         <View>

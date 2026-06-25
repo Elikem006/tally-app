@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { expenseAPI, budgetAPI } from '../../services/api';
 import { getUserId } from '../../services/storage';
 
@@ -23,6 +24,7 @@ const CATEGORY_ICONS: { [key: string]: string } = {
 };
 
 export default function AddScreen() {
+  const insets = useSafeAreaInsets();
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Food');
@@ -129,7 +131,7 @@ export default function AddScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}>
       {/* Light card container */}
       <View style={styles.mainCard}>
         <Text style={styles.cardHeaderTitle}>Add Expense</Text>

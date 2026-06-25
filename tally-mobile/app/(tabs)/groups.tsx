@@ -9,10 +9,12 @@ import {
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { groupAPI } from '../../services/api';
 import { getUserId } from '../../services/storage';
 
 export default function GroupsScreen() {
+  const insets = useSafeAreaInsets();
   const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +61,7 @@ export default function GroupsScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}>
       {/* Light card container */}
       <View style={styles.mainCard}>
         <Text style={styles.cardHeaderTitle}>My Groups</Text>

@@ -11,10 +11,12 @@ import {
   Platform,
 } from 'react-native';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { groupAPI } from '../services/api';
 import { getUserId } from '../services/storage';
 
 export default function CreateGroupScreen() {
+  const insets = useSafeAreaInsets();
   const [groupName, setGroupName] = useState('');
   const [loading, setLoading] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
@@ -44,7 +46,7 @@ export default function CreateGroupScreen() {
       style={styles.keyboardContainer}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingTop: Math.max(insets.top, 20), paddingBottom: Math.max(insets.bottom, 20) }]}>
         {/* Light card container */}
         <View style={styles.mainCard}>
           <Text style={styles.cardHeaderTitle}>Create a Group</Text>

@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { groupAPI } from '../services/api';
 import { getUserId } from '../services/storage';
 
@@ -28,6 +29,7 @@ const getUserDisplayName = (userId: string | number) => {
 };
 
 export default function GroupDetailScreen() {
+  const insets = useSafeAreaInsets();
   const { groupId, groupName } = useLocalSearchParams();
   const [details, setDetails] = useState<any>(null);
   const [balances, setBalances] = useState<any[]>([]);
@@ -187,7 +189,7 @@ export default function GroupDetailScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}>
       {/* Light card container */}
       <View style={styles.mainCard}>
         <Text style={styles.cardHeaderTitle}>{groupName}</Text>

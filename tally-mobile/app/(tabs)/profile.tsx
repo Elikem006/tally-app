@@ -12,11 +12,13 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { currentUser } from '../(auth)/login';
 
 export default function ProfileScreen() {
+  const insets = useSafeAreaInsets();
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [showUrlModal, setShowUrlModal] = useState(false);
   const [inputUrl, setInputUrl] = useState('');
@@ -160,7 +162,7 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}>
       {/* Light card container */}
       <View style={styles.mainCard}>
         <Text style={styles.cardHeaderTitle}>My Profile</Text>

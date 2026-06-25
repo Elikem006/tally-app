@@ -18,10 +18,21 @@ let mockUsers = [
   { id: 1, name: "Elikem", email: "elikem@test.com", password: "password123" }
 ];
 
+// Helper to get local date string offset by days ago (avoiding timezone shift)
+const getRelativeDateStr = (daysAgo: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() - daysAgo);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 let mockExpenses = [
-  { id: 1, userId: "1", amount: "55.00", category: "Food", description: "Lunch at cafeteria", date: new Date().toISOString().split("T")[0] },
-  { id: 2, userId: "1", amount: "120.00", category: "Transport", description: "Weekly fuel", date: new Date().toISOString().split("T")[0] },
-  { id: 3, userId: "1", amount: "80.00", category: "Entertainment", description: "Movie ticket & popcorn", date: new Date().toISOString().split("T")[0] }
+  { id: 1, userId: "1", amount: "55.00", category: "Food", description: "Lunch at cafeteria", date: getRelativeDateStr(0) },
+  { id: 2, userId: "1", amount: "120.00", category: "Transport", description: "Weekly fuel", date: getRelativeDateStr(2) },
+  { id: 3, userId: "1", amount: "80.00", category: "Entertainment", description: "Movie ticket & popcorn", date: getRelativeDateStr(10) },
+  { id: 4, userId: "1", amount: "210.00", category: "Utilities", description: "Water and electricity", date: getRelativeDateStr(45) }
 ];
 
 let mockBudgets = [
