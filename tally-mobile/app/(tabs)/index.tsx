@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,8 +6,10 @@ import {
   ScrollView,
   ActivityIndicator,
   TouchableOpacity,
+  Image,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { expenseAPI, budgetAPI } from '../../services/api';
 import { getUserId, getUserName } from '../../services/storage';
 
@@ -25,11 +27,28 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+
   useFocusEffect(
     useCallback(() => {
       fetchData();
+      loadProfileImage();
     }, [])
   );
+
+  async function loadProfileImage() {
+    try {
+      const userId = getUserId();
+      const saved = await AsyncStorage.getItem(`profile_image_${userId}`);
+      if (saved) {
+        setProfileImage(saved);
+      } else {
+        setProfileImage(null);
+      }
+    } catch (e) {
+      console.log('Error loading profile image on home screen:', e);
+    }
+  }
 
   async function fetchData() {
     setLoading(true);
@@ -149,6 +168,21 @@ export default function HomeScreen() {
           <Text style={styles.welcomeText}>Welcome back 👋</Text>
           <Text style={styles.greetingText}>Good day, {getUserName()}</Text>
         </View>
+        <TouchableOpacity
+          style={styles.avatarButton}
+          onPress={() => router.push('/(tabs)/profile')}
+          activeOpacity={0.8}
+        >
+          {profileImage ? (
+            <Image source={{ uri: profileImage }} style={styles.avatarImage} />
+          ) : (
+            <View style={styles.avatarPlaceholder}>
+              <Text style={styles.avatarText}>
+                {getUserName().charAt(0).toUpperCase()}
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
 
       {/* Expenses Overview Card */}
@@ -697,5 +731,31 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 15,
     fontWeight: 'bold',
+  },
+  avatarButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: '#EAEBEF',
+    backgroundColor: '#F8F9FA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarPlaceholder: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111111',
   },
 });
