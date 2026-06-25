@@ -33,14 +33,22 @@ export default function GroupDetailScreen() {
   const [balances, setBalances] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Add Expense form states
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseDescription, setExpenseDescription] = useState('');
   const [addingExpense, setAddingExpense] = useState(false);
+  
+  // Add Member form states
+  const [showAddMember, setShowAddMember] = useState(false);
+  const [memberUserId, setMemberUserId] = useState('');
+  const [addingMember, setAddingMember] = useState(false);
 
   // States to track input focus for outlines
   const [descFocused, setDescFocused] = useState(false);
   const [amtFocused, setAmtFocused] = useState(false);
+  const [memberInputFocused, setMemberInputFocused] = useState(false);
 
   useEffect(() => {
     fetchDetails();
@@ -89,6 +97,73 @@ export default function GroupDetailScreen() {
     } finally {
       setAddingExpense(false);
     }
+  }
+
+  async function handleSettleUp(userId: number) {
+    Alert.alert(
+      'Settle Up',
+      `Are you sure you want to settle up User #${userId}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Settle Up',
+          onPress: async () => {
+            try {
+              await groupAPI.settleUp(String(groupId), String(userId));
+              Alert.alert('Success', 'Settled up successfully!');
+              fetchDetails();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to settle up');
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  async function handleAddMember() {
+    if (!memberUserId) {
+      Alert.alert('Error', 'Please enter a user ID');
+      return;
+    }
+    setAddingMember(true);
+    try {
+      await groupAPI.addMember(String(groupId), memberUserId);
+      setMemberUserId('');
+      setShowAddMember(false);
+      fetchDetails();
+      Alert.alert('Success', 'Member added successfully!');
+    } catch (error: any) {
+      const message =
+        error.response?.data?.error ||
+        'Failed to add member. Make sure the user ID is correct.';
+      Alert.alert('Error', message);
+    } finally {
+      setAddingMember(false);
+    }
+  }
+
+  async function handleDeleteGroup() {
+    Alert.alert(
+      'Delete Group',
+      'Are you sure you want to delete this group? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await groupAPI.deleteGroup(String(groupId));
+              Alert.alert('Success', 'Group deleted');
+              router.back();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete group');
+            }
+          },
+        },
+      ]
+    );
   }
 
   if (loading) {
@@ -178,7 +253,7 @@ export default function GroupDetailScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Members */}
+        {/* Members Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Members</Text>
           {details?.members?.map((member: any) => (
@@ -195,7 +270,54 @@ export default function GroupDetailScreen() {
           ))}
         </View>
 
-        {/* Balances */}
+        {/* Add Member Form / Button */}
+        {showAddMember ? (
+          <View style={styles.addExpenseForm}>
+            <Text style={styles.formTitle}>Add Member by User ID</Text>
+            <TextInput
+              style={[
+                styles.input,
+                memberInputFocused && styles.inputFocused
+              ]}
+              placeholder="Enter User ID (e.g. 2)"
+              placeholderTextColor="#8E9AA6"
+              value={memberUserId}
+              onChangeText={setMemberUserId}
+              onFocus={() => setMemberInputFocused(true)}
+              onBlur={() => setMemberInputFocused(false)}
+              keyboardType="numeric"
+            />
+            <TouchableOpacity
+              style={[styles.button, addingMember && styles.buttonDisabled]}
+              onPress={handleAddMember}
+              disabled={addingMember}
+              activeOpacity={0.85}
+            >
+              {addingMember ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.buttonText}>Add Member</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => setShowAddMember(false)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => setShowAddMember(true)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.addButtonText}>+ Add Member</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Balances Section */}
         {balances.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Balances</Text>
@@ -209,30 +331,41 @@ export default function GroupDetailScreen() {
                     {b.owes ? 'Owes money' : 'Is owed money'}
                   </Text>
                 </View>
-                <View
-                  style={[
-                    styles.balanceBadge,
-                    {
-                      backgroundColor: b.owes ? '#FF3B3012' : '#34C75912',
-                      borderColor: b.owes ? '#FF3B30' : '#34C759',
-                    },
-                  ]}
-                >
-                  <Text
+                <View style={styles.balanceRight}>
+                  <View
                     style={[
-                      styles.balanceAmount,
-                      { color: b.owes ? '#FF3B30' : '#34C759' },
+                      styles.balanceBadge,
+                      {
+                        backgroundColor: b.owes ? '#FF3B3012' : '#34C75912',
+                        borderColor: b.owes ? '#FF3B30' : '#34C759',
+                      },
                     ]}
                   >
-                    {b.owes ? 'Owes' : 'Owed'} GHS {Math.abs(parseFloat(b.balance)).toFixed(2)}
-                  </Text>
+                    <Text
+                      style={[
+                        styles.balanceAmount,
+                        { color: b.owes ? '#FF3B30' : '#34C759' },
+                      ]}
+                    >
+                      {b.owes ? 'Owes' : 'Owed'} GHS {Math.abs(parseFloat(b.balance)).toFixed(2)}
+                    </Text>
+                  </View>
+                  {b.owes && (
+                    <TouchableOpacity
+                      style={styles.settleButton}
+                      onPress={() => handleSettleUp(b.userId)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.settleButtonText}>Settle Up</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
             ))}
           </View>
         )}
 
-        {/* Shared Expenses */}
+        {/* Shared Expenses Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Shared Expenses</Text>
           {details?.expenses?.length === 0 ? (
@@ -261,7 +394,16 @@ export default function GroupDetailScreen() {
           )}
         </View>
 
-        {/* Back button */}
+        {/* Delete Group Button */}
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={handleDeleteGroup}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.deleteButtonText}>Delete Group</Text>
+        </TouchableOpacity>
+
+        {/* Back Button */}
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
           <Text style={styles.backButtonText}>← Back to Groups</Text>
         </TouchableOpacity>
@@ -378,6 +520,9 @@ const styles = StyleSheet.create({
     color: '#8E9AA6',
     marginTop: 2,
   },
+  balanceRight: {
+    alignItems: 'flex-end',
+  },
   balanceBadge: {
     borderRadius: 12,
     paddingHorizontal: 12,
@@ -387,6 +532,21 @@ const styles = StyleSheet.create({
   balanceAmount: {
     fontSize: 13,
     fontWeight: 'bold',
+  },
+  settleButton: {
+    backgroundColor: '#FF3B3012',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#FF3B30',
+    marginTop: 6,
+  },
+  settleButtonText: {
+    color: '#FF3B30',
+    fontSize: 11,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
   expenseRow: {
     flexDirection: 'row',
@@ -545,6 +705,20 @@ const styles = StyleSheet.create({
   retryButtonText: {
     color: '#ffffff',
     fontSize: 15,
+    fontWeight: 'bold',
+  },
+  deleteButton: {
+    backgroundColor: '#FF3B3012',
+    borderWidth: 1,
+    borderColor: '#FF3B30',
+    borderRadius: 28,
+    padding: 16,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  deleteButtonText: {
+    color: '#FF3B30',
+    fontSize: 16,
     fontWeight: 'bold',
   },
 });

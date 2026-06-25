@@ -101,8 +101,9 @@ export default function ProfileScreen() {
         onPress: () => {
           // Clear global user session
           currentUser.token = '';
-          currentUser.userId = '1';
-          currentUser.userName = 'User';
+          currentUser.userId = '';
+          currentUser.userName = '';
+          currentUser.email = '';
           // Navigate back to login
           router.replace('/(auth)/login');
         },
@@ -195,6 +196,11 @@ export default function ProfileScreen() {
         <View style={styles.detailCapsule}>
           <Text style={styles.detailLabel}>Name</Text>
           <Text style={styles.detailValue}>{currentUser.userName}</Text>
+        </View>
+
+        <View style={styles.detailCapsule}>
+          <Text style={styles.detailLabel}>Email</Text>
+          <Text style={styles.detailValue}>{currentUser.email || 'N/A'}</Text>
         </View>
 
         <View style={styles.detailCapsule}>

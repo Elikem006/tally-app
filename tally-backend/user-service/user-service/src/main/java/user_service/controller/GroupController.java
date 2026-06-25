@@ -85,9 +85,27 @@ public class GroupController {
             @PathVariable Long groupId,
             @RequestBody Map<String, String> request) {
         try {
-            Long paidBy = Long.parseLong(request.get("paidBy"));
-            BigDecimal amount = new BigDecimal(request.get("amount"));
+            String paidByStr = request.get("paidBy");
+            String amountStr = request.get("amount");
             String description = request.get("description");
+
+            if (paidByStr == null || amountStr == null || description == null) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "paidBy, amount and description are required"));
+            }
+
+            if (description.isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Description cannot be empty"));
+            }
+
+            Long paidBy = Long.parseLong(paidByStr);
+            BigDecimal amount = new BigDecimal(amountStr);
+
+            if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Amount must be greater than zero"));
+            }
 
             SharedExpense expense = groupService.addSharedExpense(
                     groupId, paidBy, amount, description);
@@ -119,6 +137,17 @@ public class GroupController {
             Long userId = Long.parseLong(request.get("userId"));
             Map<String, Object> result = groupService.settleUp(groupId, userId);
             return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/{groupId}")
+    public ResponseEntity<?> deleteGroup(@PathVariable Long groupId) {
+        try {
+            groupService.deleteGroup(groupId);
+            return ResponseEntity.ok(Map.of("message", "Group deleted successfully"));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", e.getMessage()));

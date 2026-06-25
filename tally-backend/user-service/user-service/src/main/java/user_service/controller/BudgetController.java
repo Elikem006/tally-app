@@ -59,4 +59,17 @@ public class BudgetController {
                     .body(Map.of("error", e.getMessage()));
         }
     }
+
+    @DeleteMapping("/user/{userId}/{category}")
+    public ResponseEntity<?> deleteBudget(
+            @PathVariable Long userId,
+            @PathVariable String category) {
+        try {
+            budgetService.deleteBudget(userId, category);
+            return ResponseEntity.ok(Map.of("message", "Budget deleted"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
 }

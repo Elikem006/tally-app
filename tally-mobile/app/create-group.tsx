@@ -7,6 +7,8 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { groupAPI } from '../services/api';
@@ -38,55 +40,64 @@ export default function CreateGroupScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      {/* Light card container */}
-      <View style={styles.mainCard}>
-        <Text style={styles.cardHeaderTitle}>Create a Group</Text>
-        <Text style={styles.subtitle}>
-          Give your group a name — like "KNUST Friends" or "Roommates"
-        </Text>
+    <KeyboardAvoidingView
+      style={styles.keyboardContainer}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <View style={styles.container}>
+        {/* Light card container */}
+        <View style={styles.mainCard}>
+          <Text style={styles.cardHeaderTitle}>Create a Group</Text>
+          <Text style={styles.subtitle}>
+            Give your group a name — like "KNUST Friends" or "Roommates"
+          </Text>
 
-        <Text style={styles.label}>Group Name</Text>
-        <TextInput
-          style={[
-            styles.input,
-            inputFocused && styles.inputFocused
-          ]}
-          placeholder="Enter group name"
-          placeholderTextColor="#8E9AA6"
-          value={groupName}
-          onChangeText={setGroupName}
-          onFocus={() => setInputFocused(true)}
-          onBlur={() => setInputFocused(false)}
-          autoFocus
-        />
+          <Text style={styles.label}>Group Name</Text>
+          <TextInput
+            style={[
+              styles.input,
+              inputFocused && styles.inputFocused
+            ]}
+            placeholder="Enter group name"
+            placeholderTextColor="#8E9AA6"
+            value={groupName}
+            onChangeText={setGroupName}
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setInputFocused(false)}
+            autoFocus
+          />
 
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleCreateGroup}
-          disabled={loading}
-          activeOpacity={0.85}
-        >
-          {loading ? (
-            <ActivityIndicator color="#ffffff" />
-          ) : (
-            <Text style={styles.buttonText}>Create Group</Text>
-          )}
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleCreateGroup}
+            disabled={loading}
+            activeOpacity={0.85}
+          >
+            {loading ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Text style={styles.buttonText}>Create Group</Text>
+            )}
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.cancelButton}
-          onPress={() => router.back()}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.cancelText}>Cancel</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.cancelButton}
+            onPress={() => router.back()}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.cancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  keyboardContainer: {
+    flex: 1,
+    backgroundColor: '#F2F4F7',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F2F4F7', // Soft light gray backdrop

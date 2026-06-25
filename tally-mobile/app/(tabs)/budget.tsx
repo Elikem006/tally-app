@@ -8,6 +8,8 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { budgetAPI, expenseAPI } from '../../services/api';
@@ -74,16 +76,44 @@ export default function BudgetScreen() {
     }
   }
 
+  function clearCategory(category: string) {
+    setLimits((prev) => ({ ...prev, [category]: '' }));
+  }
+
+  function resetAll() {
+    Alert.alert('Reset All Budgets', 'Clear all budget limits?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reset',
+        style: 'destructive',
+        onPress: async () => {
+          // Clear local state immediately — this always works regardless of backend
+          setLimits({ Food: '', Transport: '', Entertainment: '', Utilities: '', Other: '' });
+          // Sync to backend best-effort (requires backend restart if DELETE endpoint is new)
+          const userId = getUserId();
+          for (const category of CATEGORIES) {
+            try { await budgetAPI.deleteBudget(userId, category); } catch {}
+          }
+        },
+      },
+    ]);
+  }
+
   async function handleSave() {
     const userId = getUserId();
     setLoading(true);
     try {
       for (const category of CATEGORIES) {
-        if (limits[category] && limits[category] !== '0') {
-          await budgetAPI.setBudget(userId, category, limits[category]);
+        const value = limits[category];
+        if (value && value !== '0') {
+          await budgetAPI.setBudget(userId, category, value);
+        } else {
+          // Best-effort delete — don't let a failed delete block saving other categories
+          try { await budgetAPI.deleteBudget(userId, category); } catch {}
         }
       }
       Alert.alert('Success', 'Your budgets have been saved!');
+      await loadExistingBudgets();
     } catch (error: any) {
       Alert.alert('Error', 'Failed to save budgets. Please try again.');
     } finally {
@@ -112,10 +142,14 @@ export default function BudgetScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Light card container */}
-      <View style={styles.mainCard}>
-        <Text style={styles.cardHeaderTitle}>Monthly Budgets</Text>
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        {/* Light card container */}
+        <View style={styles.mainCard}>
+          <Text style={styles.cardHeaderTitle}>Monthly Budgets</Text>
         <Text style={styles.subtitle}>
           Set how much you want to spend per category this month
         </Text>
@@ -164,6 +198,11 @@ export default function BudgetScreen() {
           })}
         </View>
 
+        {/* Reset All budgets button */}
+        <TouchableOpacity style={styles.resetButton} onPress={resetAll}>
+          <Text style={styles.resetButtonText}>Reset All Budgets</Text>
+        </TouchableOpacity>
+
         {/* Black capsule CTA button */}
         <TouchableOpacity
           style={[styles.button, loading && styles.buttonDisabled]}
@@ -178,11 +217,16 @@ export default function BudgetScreen() {
           )}
         </TouchableOpacity>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+    backgroundColor: '#0F1117',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F2F4F7', // Soft light gray backdrop
@@ -266,6 +310,11 @@ const styles = StyleSheet.create({
     color: '#8E9AA6',
     marginTop: 2,
   },
+  rowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -292,6 +341,35 @@ const styles = StyleSheet.create({
     width: 60,
     padding: 0,
     textAlign: 'right',
+  },
+  clearBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#E05C5C20',
+    borderWidth: 1,
+    borderColor: '#E05C5C60',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clearBtnText: {
+    color: '#E05C5C',
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  resetButton: {
+    borderWidth: 1,
+    borderColor: '#E05C5C',
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    marginTop: 8,
+    backgroundColor: '#E05C5C10',
+  },
+  resetButtonText: {
+    color: '#E05C5C',
+    fontSize: 15,
+    fontWeight: '600',
   },
   button: {
     backgroundColor: '#111111', // Black capsule button

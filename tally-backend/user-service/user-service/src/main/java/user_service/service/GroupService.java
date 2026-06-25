@@ -147,4 +147,17 @@ public class GroupService {
         result.put("groupId", groupId);
         return result;
     }
+
+    public void deleteGroup(Long groupId) {
+        // Delete all members first
+        List<GroupMember> members = groupMemberRepository.findByGroupId(groupId);
+        groupMemberRepository.deleteAll(members);
+
+        // Delete all expenses
+        List<SharedExpense> expenses = sharedExpenseRepository.findByGroupId(groupId);
+        sharedExpenseRepository.deleteAll(expenses);
+
+        // Delete the group
+        groupRepository.deleteById(groupId);
+    }
 }

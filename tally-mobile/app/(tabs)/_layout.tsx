@@ -27,32 +27,69 @@ export default function TabLayout() {
     >
       <Tabs.Screen
         name="index"
-        options={{ title: "Home", tabBarLabel: "Home" }}
+        options={{
+          title: "Home",
+          tabBarLabel: "Home",
+          tabBarIcon: ({ color }) => <TabIcon emoji="🏠" color={color} />,
+        }}
       />
       <Tabs.Screen
         name="add"
-        options={{ title: "Add Expense", tabBarLabel: "Add" }}
+        options={{
+          title: "Add Expense",
+          tabBarLabel: "Add",
+          tabBarIcon: ({ color }) => <TabIcon emoji="➕" color={color} />,
+        }}
       />
       <Tabs.Screen
         name="history"
-        options={{ title: "History", tabBarLabel: "History" }}
+        options={{
+          title: "History",
+          tabBarLabel: "History",
+          tabBarIcon: ({ color }) => <TabIcon emoji="📋" color={color} />,
+        }}
       />
       <Tabs.Screen
         name="profile"
-        options={{ title: "Profile", tabBarLabel: "Profile" }}
+        options={{
+          title: "Profile",
+          tabBarLabel: "Profile",
+          tabBarIcon: ({ color }) => <TabIcon emoji="👤" color={color} />,
+        }}
       />
       <Tabs.Screen
         name="budget"
-        options={{ title: "Budget", tabBarLabel: "Budget" }}
+        options={{
+          title: "Budget",
+          tabBarLabel: "Budget",
+          tabBarIcon: ({ color }) => <TabIcon emoji="💰" color={color} />,
+        }}
       />
       <Tabs.Screen
         name="budget-overview"
-        options={{ title: "Overview", tabBarLabel: "Overview" }}
+        options={{
+          title: "Overview",
+          tabBarLabel: "Overview",
+          tabBarIcon: ({ color }) => <TabIcon emoji="📊" color={color} />,
+        }}
       />
       <Tabs.Screen
         name="groups"
-        options={{ title: "Groups", tabBarLabel: "Groups" }}
+        options={{
+          title: "Groups",
+          tabBarLabel: "Groups",
+          tabBarIcon: ({ color }) => <TabIcon emoji="👥" color={color} />,
+        }}
       />
     </Tabs>
+  );
+}
+
+function TabIcon({ emoji, color }: { emoji: string; color: string }) {
+  const { Text } = require("react-native");
+  return (
+    <Text style={{ fontSize: 20, opacity: color === "#00C896" ? 1 : 0.5 }}>
+      {emoji}
+    </Text>
   );
 }

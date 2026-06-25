@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 import { budgetAPI } from '../../services/api';
 import { getUserId } from '../../services/storage';
+import { notifyBudgetWarning } from '../../services/notifications';
 
 const CATEGORY_ICONS: { [key: string]: string } = {
   Food: '🍔',
@@ -23,9 +24,11 @@ export default function BudgetOverviewScreen() {
   const [summary, setSummary] = useState<{ [key: string]: any }>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const notificationsSentRef = useRef(false);
 
   useFocusEffect(
     useCallback(() => {
+      notificationsSentRef.current = false;
       fetchSummary();
     }, [])
   );
@@ -36,7 +39,17 @@ export default function BudgetOverviewScreen() {
     try {
       const userId = getUserId();
       const response = await budgetAPI.getBudgetSummary(userId);
-      setSummary(response.data || {});
+      const data = response.data || {};
+      setSummary(data);
+
+      if (!notificationsSentRef.current) {
+        notificationsSentRef.current = true;
+        for (const category in data) {
+          if (data[category].isNearLimit || data[category].isOverBudget) {
+            await notifyBudgetWarning(category, data[category].percentage);
+          }
+        }
+      }
     } catch (err: any) {
       console.log('Error fetching budget summary:', err);
       setError('Failed to load budget summary. Please check your connection.');

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,18 @@ import { useFocusEffect } from 'expo-router';
 import { expenseAPI } from '../../services/api';
 import { getUserId } from '../../services/storage';
 
+function getMonthFilters() {
+  const filters: { label: string; value: string }[] = [{ label: 'All', value: 'all' }];
+  const now = new Date();
+  for (let i = 0; i < 3; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const label = d.toLocaleString('default', { month: 'short', year: 'numeric' });
+    filters.push({ label, value });
+  }
+  return filters;
+}
+
 const CATEGORY_ICONS: { [key: string]: string } = {
   Food: '🍔',
   Transport: '🚗',
@@ -22,12 +34,15 @@ const CATEGORY_ICONS: { [key: string]: string } = {
   Other: '📦',
 };
 
+const MONTH_FILTERS = getMonthFilters();
+
 export default function HistoryScreen() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+  const [activeFilter, setActiveFilter] = useState('all');
 
   useFocusEffect(
     useCallback(() => {
@@ -72,34 +87,24 @@ export default function HistoryScreen() {
     );
   }
 
-  if (loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#111111" />
-      </View>
-    );
-  }
+  // Filter by Month first, then by Search query
+  const filteredExpensesByMonth = useMemo(() => {
+    if (activeFilter === 'all') return expenses;
+    return expenses.filter((e) => e.date && e.date.startsWith(activeFilter));
+  }, [expenses, activeFilter]);
 
-  if (error) {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.errorIcon}>⚠️</Text>
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={fetchExpenses}>
-          <Text style={styles.retryButtonText}>Retry</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  const filteredExpenses = useMemo(() => {
+    return filteredExpensesByMonth.filter(e => {
+      const desc = (e.description || '').toLowerCase();
+      const cat = (e.category || '').toLowerCase();
+      const query = searchQuery.toLowerCase();
+      return desc.includes(query) || cat.includes(query);
+    });
+  }, [filteredExpensesByMonth, searchQuery]);
 
-  const totalSpent = expenses.reduce((sum, e) => sum + parseFloat(e.amount || '0'), 0);
-
-  const filteredExpenses = expenses.filter(e => {
-    const desc = (e.description || '').toLowerCase();
-    const cat = (e.category || '').toLowerCase();
-    const query = searchQuery.toLowerCase();
-    return desc.includes(query) || cat.includes(query);
-  });
+  const totalSpent = useMemo(() => {
+    return filteredExpenses.reduce((sum, e) => sum + parseFloat(e.amount || '0'), 0);
+  }, [filteredExpenses]);
 
   const groupExpensesByDate = (list: any[]) => {
     const groups: { [key: string]: any[] } = {};
@@ -137,11 +142,52 @@ export default function HistoryScreen() {
 
   const groupedExpenses = groupExpensesByDate(filteredExpenses);
 
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#111111" />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.errorIcon}>⚠️</Text>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={fetchExpenses}>
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Light card container */}
       <View style={styles.mainCard}>
         <Text style={styles.cardHeaderTitle}>Transactions History</Text>
+
+        {/* Month Filters Row */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterRowContainer}
+          contentContainerStyle={styles.filterRow}
+        >
+          {MONTH_FILTERS.map((f) => (
+            <TouchableOpacity
+              key={f.value}
+              style={[styles.filterBtn, activeFilter === f.value && styles.filterBtnActive]}
+              onPress={() => setActiveFilter(f.value)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.filterText, activeFilter === f.value && styles.filterTextActive]}>
+                {f.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
 
         {/* Total Spent Box */}
         <View style={styles.totalBox}>
@@ -251,6 +297,33 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#111111',
     marginBottom: 20,
+  },
+  filterRowContainer: {
+    marginBottom: 8,
+  },
+  filterRow: {
+    flexDirection: 'row',
+  },
+  filterBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+    marginRight: 8,
+  },
+  filterBtnActive: {
+    backgroundColor: '#111111',
+    borderColor: '#111111',
+  },
+  filterText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#8E9AA6',
+  },
+  filterTextActive: {
+    color: '#ffffff',
   },
   totalBox: {
     backgroundColor: '#F8F9FA',

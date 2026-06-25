@@ -197,6 +197,13 @@ export const budgetAPI = {
     
     return mockResponse(summaryMap);
   },
+
+  deleteBudget: async (userId: string, category: string) => {
+    if (!USE_MOCK) return api.delete(`/api/budgets/user/${userId}/${category}`);
+    
+    mockBudgets = mockBudgets.filter(b => !(String(b.userId) === String(userId) && b.category === category));
+    return mockResponse({ success: true });
+  },
 };
 
 export const groupAPI = {
@@ -308,6 +315,23 @@ export const groupAPI = {
     });
     
     return mockResponse(balances);
+  },
+
+  settleUp: async (groupId: string, userId: string) => {
+    if (!USE_MOCK) return api.post(`/api/groups/${groupId}/settle`, { userId });
+    
+    const group = mockGroups.find(g => String(g.id) === String(groupId));
+    if (!group) return mockError("Group not found", 404);
+    
+    group.expenses = [];
+    return mockResponse({ success: true });
+  },
+
+  deleteGroup: async (groupId: string) => {
+    if (!USE_MOCK) return api.delete(`/api/groups/${groupId}`);
+    
+    mockGroups = mockGroups.filter(g => String(g.id) !== String(groupId));
+    return mockResponse({ success: true });
   },
 };
 
