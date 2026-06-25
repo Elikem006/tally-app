@@ -32,8 +32,8 @@ const getLineStyle = (x1: number, y1: number, x2: number, y2: number) => {
     position: 'absolute' as const,
     left: x1,
     top: y1,
-    width: distance,
-    height: 2.5,
+    width: distance + 0.6,
+    height: 3,
     backgroundColor: '#8B5CF6',
     transform: [{ rotate: `${angle}rad` }] as any,
     transformOrigin: '0% 50%' as any,
@@ -163,16 +163,40 @@ export default function HomeScreen() {
   const chartWidth = screenWidth - 88; // 20*2 screen horizontal padding + 24*2 card padding
   const chartHeight = 100;
   const paddingVertical = 15;
+  const chartInset = 16; // Safety margin to prevent dots and labels overflowing
+  const plotWidth = chartWidth - 2 * chartInset;
   const plotHeight = chartHeight - 2 * paddingVertical;
   const maxSpend = Math.max(...chartBars.map(b => b.spend), 0);
 
   const points = chartBars.map((bar, idx) => {
-    const x = (chartWidth / 6) * idx;
+    const x = chartInset + (plotWidth / 6) * idx;
     const y = maxSpend > 0 
       ? chartHeight - (paddingVertical + (bar.spend / maxSpend) * plotHeight)
       : chartHeight / 2;
     return { x, y, ...bar };
   });
+
+  // Generate smooth wave sub-segments using Cosine Interpolation
+  const curveSegments: { x1: number; y1: number; x2: number; y2: number }[] = [];
+  const steps = 12;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    for (let j = 0; j < steps; j++) {
+      const t1 = j / steps;
+      const t2 = (j + 1) / steps;
+      
+      const mu1 = (1 - Math.cos(t1 * Math.PI)) / 2;
+      const mu2 = (1 - Math.cos(t2 * Math.PI)) / 2;
+      
+      const x1 = p1.x + t1 * (p2.x - p1.x);
+      const x2 = p1.x + t2 * (p2.x - p1.x);
+      const y1 = p1.y + mu1 * (p2.y - p1.y);
+      const y2 = p1.y + mu2 * (p2.y - p1.y);
+      
+      curveSegments.push({ x1, y1, x2, y2 });
+    }
+  }
 
   if (loading) {
     return (
@@ -286,11 +310,9 @@ export default function HomeScreen() {
           <View style={[styles.gridLineHorizontal, { top: chartHeight / 2 }]} />
           <View style={[styles.gridLineHorizontal, { top: chartHeight - paddingVertical }]} />
 
-          {/* Connection Line Segments */}
-          {points.map((point, idx) => {
-            if (idx === points.length - 1) return null;
-            const nextPoint = points[idx + 1];
-            const lineStyle = getLineStyle(point.x, point.y, nextPoint.x, nextPoint.y);
+          {/* Connection Line Segments (Smooth Cosine Wave Curve) */}
+          {curveSegments.map((seg, idx) => {
+            const lineStyle = getLineStyle(seg.x1, seg.y1, seg.x2, seg.y2);
             return (
               <View
                 key={`line-${idx}`}
