@@ -111,10 +111,10 @@ export default function GroupDetailScreen() {
       fetchDetails();
       Alert.alert("Success", "Member added successfully!");
     } catch (error: any) {
-      Alert.alert(
-        "Error",
-        "Failed to add member. Make sure the user ID is correct.",
-      );
+      const message =
+        error.response?.data?.error ||
+        "Failed to add member. Make sure the user ID is correct.";
+      Alert.alert("Error", message);
     } finally {
       setAddingMember(false);
     }
