@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState } from 'react';
 import {
   View,
   Text,
@@ -10,15 +10,15 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
-} from "react-native";
-import { router } from "expo-router";
-import { authAPI } from "../../services/api";
-import { Feather, AntDesign, FontAwesome } from "@expo/vector-icons";
+} from 'react-native';
+import { router } from 'expo-router';
+import { authAPI } from '../../services/api';
+import { Feather, AntDesign, FontAwesome } from '@expo/vector-icons';
 
 export default function RegisterScreen() {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -28,12 +28,12 @@ export default function RegisterScreen() {
 
   async function handleRegister() {
     if (!name || !email || !password) {
-      Alert.alert("Error", "Please fill in all fields");
+      Alert.alert('Error', 'Please fill in all fields');
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert("Error", "Password must be at least 6 characters");
+      Alert.alert('Error', 'Password must be at least 6 characters');
       return;
     }
 
@@ -41,14 +41,14 @@ export default function RegisterScreen() {
     try {
       await authAPI.register(name, email, password);
       Alert.alert(
-        "Account Created!",
-        "Your account has been created successfully. Please log in.",
-        [{ text: "OK", onPress: () => router.replace("/(auth)/login") }]
+        'Account Created!',
+        'Your account has been created successfully. Please log in.',
+        [{ text: 'OK', onPress: () => router.replace('/(auth)/login') }]
       );
     } catch (error: any) {
       const message =
-        error.response?.data?.error || "Registration failed. Please try again.";
-      Alert.alert("Registration Failed", message);
+        error.response?.data?.error || 'Registration failed. Please try again.';
+      Alert.alert('Registration Failed', message);
     } finally {
       setLoading(false);
     }
@@ -57,10 +57,14 @@ export default function RegisterScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
+          <Text style={styles.brandTitle}>💰 Tally</Text>
+          <Text style={styles.title}>Create Account</Text>
+          <Text style={styles.subtitle}>Join Tally to start tracking your expenses</Text>
+
           <View style={styles.form}>
             {/* Full Name Field */}
             <Text style={styles.label}>Full Name</Text>
@@ -70,11 +74,11 @@ export default function RegisterScreen() {
                 nameFocused && styles.inputFocused,
               ]}
             >
-              <Feather name="user" size={20} color="#8890A0" style={styles.inputIcon} />
+              <Feather name="user" size={18} color="#8E9AA6" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Enter your Full Name"
-                placeholderTextColor="#8890A0"
+                placeholder="Enter your full name"
+                placeholderTextColor="#C8D2DC"
                 value={name}
                 onChangeText={setName}
                 autoCapitalize="words"
@@ -84,18 +88,18 @@ export default function RegisterScreen() {
             </View>
 
             {/* Email Field */}
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.label}>Email Address</Text>
             <View
               style={[
                 styles.inputContainer,
                 emailFocused && styles.inputFocused,
               ]}
             >
-              <Feather name="at-sign" size={20} color="#8890A0" style={styles.inputIcon} />
+              <Feather name="at-sign" size={18} color="#8E9AA6" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Enter your Email"
-                placeholderTextColor="#8890A0"
+                placeholder="Enter your email"
+                placeholderTextColor="#C8D2DC"
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
@@ -113,11 +117,11 @@ export default function RegisterScreen() {
                 passwordFocused && styles.inputFocused,
               ]}
             >
-              <Feather name="lock" size={20} color="#8890A0" style={styles.inputIcon} />
+              <Feather name="lock" size={18} color="#8E9AA6" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Enter your Password"
-                placeholderTextColor="#8890A0"
+                placeholder="Enter your password (min 6 chars)"
+                placeholderTextColor="#C8D2DC"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
@@ -130,9 +134,9 @@ export default function RegisterScreen() {
                 activeOpacity={0.7}
               >
                 <Feather
-                  name={showPassword ? "eye" : "eye-off"}
-                  size={20}
-                  color="#8890A0"
+                  name={showPassword ? 'eye' : 'eye-off'}
+                  size={18}
+                  color="#8E9AA6"
                 />
               </TouchableOpacity>
             </View>
@@ -142,10 +146,10 @@ export default function RegisterScreen() {
               style={[styles.button, loading && styles.buttonDisabled, { marginTop: 24 }]}
               onPress={handleRegister}
               disabled={loading}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
             >
               {loading ? (
-                <ActivityIndicator color="#000000" />
+                <ActivityIndicator color="#ffffff" />
               ) : (
                 <Text style={styles.buttonText}>Sign Up</Text>
               )}
@@ -154,31 +158,35 @@ export default function RegisterScreen() {
             {/* Sign In Link */}
             <View style={styles.linkContainer}>
               <Text style={styles.linkText}>Already have an account? </Text>
-              <TouchableOpacity onPress={() => router.push("/(auth)/login")}>
+              <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
                 <Text style={styles.linkBold}>Sign In</Text>
               </TouchableOpacity>
             </View>
 
             {/* Or With divider */}
-            <Text style={styles.dividerText}>Or With</Text>
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or sign up with</Text>
+              <View style={styles.dividerLine} />
+            </View>
 
             {/* Social Buttons */}
             <View style={styles.socialRow}>
               <TouchableOpacity
                 style={styles.socialButton}
                 activeOpacity={0.7}
-                onPress={() => Alert.alert("Google Login", "Integration coming soon!")}
+                onPress={() => Alert.alert('Google Login', 'Integration coming soon!')}
               >
-                <AntDesign name="google" size={18} color="#EA4335" />
+                <AntDesign name="google" size={16} color="#EA4335" />
                 <Text style={styles.socialButtonText}>Google</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={styles.socialButton}
                 activeOpacity={0.7}
-                onPress={() => Alert.alert("Apple Login", "Integration coming soon!")}
+                onPress={() => Alert.alert('Apple Login', 'Integration coming soon!')}
               >
-                <FontAwesome name="apple" size={18} color="#ffffff" />
+                <FontAwesome name="apple" size={16} color="#111111" />
                 <Text style={styles.socialButtonText}>Apple</Text>
               </TouchableOpacity>
             </View>
@@ -192,123 +200,156 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0F1117",
+    backgroundColor: '#F2F4F7', // Soft light gray backdrop
   },
   scrollContainer: {
     flexGrow: 1,
-    justifyContent: "center",
-    padding: 16,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 40,
   },
   card: {
-    backgroundColor: "#1A1F2E",
-    borderRadius: 24,
+    backgroundColor: '#ffffff', // Clean white card
+    borderRadius: 28,
     padding: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 5,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    elevation: 3,
     borderWidth: 1,
-    borderColor: "#ffffff10",
+    borderColor: '#EAEBEF',
+  },
+  brandTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111111',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#111111',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  subtitle: {
+    fontSize: 13,
+    color: '#8E9AA6',
+    textAlign: 'center',
+    marginBottom: 24,
   },
   form: {
     gap: 4,
   },
   label: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#8E9AA6',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
     marginBottom: 8,
     marginTop: 12,
   },
   inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1,
-    borderColor: "#ffffff15",
-    borderRadius: 14,
-    backgroundColor: "#0F1117",
-    paddingHorizontal: 14,
+    borderColor: '#EAEBEF',
+    borderRadius: 16,
+    backgroundColor: '#F8F9FA',
+    paddingHorizontal: 16,
     height: 56,
   },
   inputFocused: {
-    borderColor: "#00C896",
+    borderColor: '#111111', // Black border highlight
   },
   inputIcon: {
     marginRight: 10,
   },
   input: {
     flex: 1,
-    color: "#ffffff",
+    color: '#111111',
     fontSize: 15,
-    height: "100%",
+    height: '100%',
   },
   eyeIcon: {
     padding: 4,
   },
   button: {
-    backgroundColor: "#00C896",
-    borderRadius: 14,
+    backgroundColor: '#111111', // Black capsule button
+    borderRadius: 28,
     height: 56,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 2,
   },
   buttonDisabled: {
-    opacity: 0.7,
+    opacity: 0.6,
   },
   buttonText: {
-    color: "#000000",
+    color: '#ffffff',
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: 'bold',
   },
   linkContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginTop: 20,
-    marginBottom: 20,
+    marginBottom: 10,
   },
   linkText: {
     fontSize: 14,
-    color: "#8890A0",
-    fontWeight: "500",
+    color: '#8E9AA6',
+    fontWeight: '500',
   },
   linkBold: {
     fontSize: 14,
-    color: "#00C896",
-    fontWeight: "700",
+    color: '#111111',
+    fontWeight: 'bold',
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#EAEBEF',
   },
   dividerText: {
-    textAlign: "center",
-    fontSize: 14,
-    color: "#8890A0",
-    fontWeight: "500",
-    marginBottom: 20,
+    fontSize: 12,
+    color: '#8E9AA6',
+    paddingHorizontal: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
   },
   socialRow: {
-    flexDirection: "row",
+    flexDirection: 'row',
     gap: 12,
   },
   socialButton: {
     flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
-    borderColor: "#ffffff15",
-    borderRadius: 14,
+    borderColor: '#EAEBEF',
+    borderRadius: 28,
     height: 56,
-    backgroundColor: "#0F1117",
+    backgroundColor: '#ffffff',
     gap: 8,
   },
   socialButtonText: {
     fontSize: 14,
-    fontWeight: "600",
-    color: "#ffffff",
+    fontWeight: 'bold',
+    color: '#111111',
   },
 });
