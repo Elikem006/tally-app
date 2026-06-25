@@ -105,7 +105,11 @@ export default function BudgetScreen() {
         notificationsSentRef.current = true;
         for (const category in data) {
           if (data[category].isNearLimit || data[category].isOverBudget) {
-            await notifyBudgetWarning(category, data[category].percentage);
+            try {
+              await notifyBudgetWarning(category, data[category].percentage);
+            } catch (notifyErr) {
+              console.log('Error triggering budget warning notification:', notifyErr);
+            }
           }
         }
       }
@@ -321,8 +325,8 @@ export default function BudgetScreen() {
                         data.isOverBudget && styles.remainingOver
                       ]}>
                         {data.isOverBudget
-                          ? `GHS ${(parseFloat(data.spent) - parseFloat(data.limit)).toFixed(2)} over budget`
-                          : `GHS ${(parseFloat(data.limit) - parseFloat(data.spent)).toFixed(2)} remaining`}
+                          ? `GHS ${(parseFloat(data.spent || 0) - parseFloat(data.limit || 0)).toFixed(2)} over budget`
+                          : `GHS ${(parseFloat(data.limit || 0) - parseFloat(data.spent || 0)).toFixed(2)} remaining`}
                       </Text>
                     </View>
                   );
