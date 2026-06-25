@@ -46,7 +46,7 @@ export default function LoginScreen() {
       currentUser.token = token;
       currentUser.userId = String(userId);
       currentUser.userName = name;
-      currentUser.email = userEmail ?? '';
+      currentUser.email = userEmail ?? email;
       setLoading(false);
       router.replace('/(tabs)');
     } catch (error: any) {

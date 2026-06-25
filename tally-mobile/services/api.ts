@@ -100,7 +100,8 @@ export const authAPI = {
     return mockResponse({
       token: "mock-jwt-token-12345",
       userId: String(user.id),
-      name: user.name
+      name: user.name,
+      email: user.email
     });
   },
 };
