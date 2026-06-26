@@ -757,7 +757,7 @@ const styles = StyleSheet.create({
   },
   barFill: { 
     height: "100%", 
-    backgroundColor: "#111111", 
+    backgroundColor: "#8B5CF6", 
     borderRadius: 4 
   },
   breakdownAmount: { 
