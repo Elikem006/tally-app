@@ -10,7 +10,7 @@ import {
   ScrollView,
 } from "react-native";
 import { useFocusEffect, router } from "expo-router";
-import { expenseAPI, reportAPI } from "../../services/api";
+import { expenseAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
 
 function getMonthFilters() {
@@ -59,7 +59,7 @@ export default function HistoryScreen() {
   async function fetchExpenses() {
     try {
       const userId = getUserId();
-      const response = await reportAPI.getCombinedHistory(userId);
+      const response = await expenseAPI.getCombinedHistory(userId);
       setExpenses(response.data);
     } catch (error) {
       Alert.alert("Error", "Failed to load expenses");
@@ -70,7 +70,7 @@ export default function HistoryScreen() {
 
   async function handleLongPress(item: any) {
     if (item.type === "shared") {
-      Alert.alert("Shared Expense", "Shared expenses can only be removed from the group.");
+      Alert.alert("Shared Expense", "Shared expenses can only be deleted from the group screen.");
       return;
     }
     Alert.alert(
@@ -187,7 +187,7 @@ export default function HistoryScreen() {
                     </Text>
                     {isShared && (
                       <View style={styles.sharedBadge}>
-                        <Text style={styles.sharedBadgeText}>Group</Text>
+                        <Text style={styles.sharedBadgeText}>Shared</Text>
                       </View>
                     )}
                   </View>
@@ -337,16 +337,16 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   sharedBadge: {
-    backgroundColor: "#A78BFA20",
+    backgroundColor: "#00C89620",
     borderRadius: 4,
     paddingHorizontal: 6,
     paddingVertical: 1,
     borderWidth: 1,
-    borderColor: "#A78BFA60",
+    borderColor: "#00C89660",
   },
   sharedBadgeText: {
     fontSize: 10,
-    color: "#A78BFA",
+    color: "#00C896",
     fontWeight: "600",
   },
   expenseDescription: {
