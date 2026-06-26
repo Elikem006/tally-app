@@ -9,7 +9,7 @@ import {
   SafeAreaView,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
-import { budgetAPI } from "../../services/api";
+import { budgetAPI, expenseAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
 import { notifyBudgetWarning } from "../../services/notifications";
 
@@ -23,6 +23,7 @@ const CATEGORY_ICONS: { [key: string]: string } = {
 
 export default function BudgetOverviewScreen() {
   const [summary, setSummary] = useState<{ [key: string]: any }>({});
+  const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useFocusEffect(
@@ -33,12 +34,16 @@ export default function BudgetOverviewScreen() {
         setLoading(true);
         try {
           const userId = getUserId();
-          const response = await budgetAPI.getBudgetSummary(userId);
-          setSummary(response.data);
+          const [budgetResponse, reportResponse] = await Promise.all([
+            budgetAPI.getBudgetSummary(userId),
+            expenseAPI.getMonthlyReport(userId),
+          ]);
+          setSummary(budgetResponse.data);
+          setReport(reportResponse.data);
 
           if (!notificationsSent) {
             notificationsSent = true;
-            const data = response.data;
+            const data = budgetResponse.data;
             for (const category in data) {
               if (data[category].isNearLimit || data[category].isOverBudget) {
                 await notifyBudgetWarning(category, data[category].percentage);
@@ -102,6 +107,82 @@ export default function BudgetOverviewScreen() {
       <Text style={styles.subtitle}>
         Your spending this month vs your limits
       </Text>
+
+      {/* ── Budget Analysis ── */}
+      {report && (() => {
+        const currentTotal = parseFloat(report.currentMonth) || 0;
+        const pctChange = parseFloat(report.percentageChange) || 0;
+        const hasLastMonth = parseFloat(report.previousMonth) > 0;
+        const isUp = pctChange > 0;
+        const highCat = report.highestCategory;
+        const perf: any[] = report.budgetPerformance || [];
+        const goodCount = perf.filter((p: any) => p.status === "good").length;
+        const hasOver = perf.some((p: any) => p.status === "over");
+        const hasWarning = perf.some((p: any) => p.status === "warning");
+        const healthColor = hasOver ? "#E05C5C" : hasWarning ? "#F7A84F" : "#00C896";
+
+        return (
+          <>
+            {/* Monthly Summary */}
+            <View style={styles.insightCard}>
+              <Text style={styles.insightLabel}>Monthly Summary</Text>
+              <Text style={styles.insightAmount}>GHS {currentTotal.toFixed(2)}</Text>
+              {hasLastMonth ? (
+                <View style={styles.changeRow}>
+                  <Text style={[styles.changeArrow, { color: isUp ? "#E05C5C" : "#00C896" }]}>
+                    {isUp ? "↑" : "↓"}
+                  </Text>
+                  <Text style={[styles.changeText, { color: isUp ? "#E05C5C" : "#00C896" }]}>
+                    {Math.abs(pctChange).toFixed(1)}% {isUp ? "more" : "less"} than last month
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.firstMonth}>First month of tracking</Text>
+              )}
+            </View>
+
+            {/* Top Spending Category */}
+            {highCat && highCat.category && (
+              <View style={styles.insightCard}>
+                <Text style={styles.insightLabel}>Top Spending Category</Text>
+                <View style={styles.topCatRow}>
+                  <Text style={styles.topCatEmoji}>
+                    {CATEGORY_ICONS[highCat.category] || "📦"}
+                  </Text>
+                  <View>
+                    <Text style={styles.topCatName}>{highCat.category}</Text>
+                    <Text style={styles.topCatAmount}>
+                      GHS {parseFloat(highCat.amount).toFixed(2)}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.insightHint}>
+                  You spent the most on {highCat.category} this month
+                </Text>
+              </View>
+            )}
+
+            {/* Budget Health */}
+            {perf.length > 0 && (
+              <View style={styles.insightCard}>
+                <Text style={styles.insightLabel}>Budget Health</Text>
+                <Text style={[styles.healthScore, { color: healthColor }]}>
+                  {goodCount}/{perf.length} categories on track
+                </Text>
+                <Text style={styles.insightHint}>
+                  {hasOver
+                    ? "You've exceeded your budget in some categories"
+                    : hasWarning
+                    ? "Some categories are getting close to their limit"
+                    : "Great job — all budgets are under control!"}
+                </Text>
+              </View>
+            )}
+
+            <Text style={styles.sectionDivider}>Your Budgets</Text>
+          </>
+        );
+      })()}
 
       {Object.entries(summary).map(([category, data]: [string, any]) => {
         const percentage = Math.min(data.percentage, 100);
@@ -383,5 +464,83 @@ const styles = StyleSheet.create({
     color: "#00C896",
     fontSize: 15,
     fontWeight: "600",
+  },
+  insightCard: {
+    backgroundColor: "#1A1F2E",
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#ffffff10",
+  },
+  insightLabel: {
+    fontSize: 12,
+    color: "#8890A0",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  insightAmount: {
+    fontSize: 30,
+    fontWeight: "bold",
+    color: "#00C896",
+    marginBottom: 6,
+  },
+  changeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  changeArrow: {
+    fontSize: 15,
+    fontWeight: "bold",
+  },
+  changeText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  firstMonth: {
+    fontSize: 13,
+    color: "#8890A0",
+  },
+  topCatRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 8,
+  },
+  topCatEmoji: {
+    fontSize: 30,
+  },
+  topCatName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#ffffff",
+    marginBottom: 2,
+  },
+  topCatAmount: {
+    fontSize: 14,
+    color: "#00C896",
+    fontWeight: "600",
+  },
+  insightHint: {
+    fontSize: 12,
+    color: "#8890A0",
+    marginTop: 4,
+  },
+  healthScore: {
+    fontSize: 22,
+    fontWeight: "bold",
+    marginBottom: 6,
+  },
+  sectionDivider: {
+    fontSize: 13,
+    color: "#8890A0",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 12,
+    marginTop: 4,
   },
 });
