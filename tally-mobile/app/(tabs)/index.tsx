@@ -59,6 +59,9 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [profileImage, setProfileImage] = useState<string | null>(null);
 
+  // Chart timeline switcher state
+  const [chartTimeline, setChartTimeline] = useState<'day' | 'week' | 'month' | 'year'>('week');
+
   // Quick add state
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [quickAmount, setQuickAmount] = useState("");
@@ -198,53 +201,108 @@ export default function HomeScreen() {
     })
     .slice(0, 3);
 
-  // Calculate weekly chart data dynamically for current week (Monday - Sunday)
-  const getWeeklyData = () => {
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const dailySpend = [0, 0, 0, 0, 0, 0, 0];
-    
+  // Dynamic chart data calculation based on selected timeline
+  const getChartData = () => {
     const now = new Date();
-    const currentDay = now.getDay();
     
-    const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay;
-    const monday = new Date(now);
-    monday.setDate(now.getDate() + distanceToMonday);
-    monday.setHours(0, 0, 0, 0);
+    const parseLocalDate = (dateStr: string) => {
+      if (!dateStr) return new Date();
+      const parts = dateStr.split('-');
+      if (parts.length < 3) return new Date(dateStr);
+      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    };
 
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    sunday.setHours(23, 59, 59, 999);
+    const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const SHORT_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-    let weeklySum = 0;
-
-    expenses.forEach(e => {
-      if (!e.date) return;
-      const eDate = new Date(e.date);
-      if (eDate >= monday && eDate <= sunday) {
-        let dayIdx = eDate.getDay() - 1;
-        if (dayIdx === -1) dayIdx = 6; // Sunday
-        const amt = parseFloat(e.amount) || 0;
-        dailySpend[dayIdx] += amt;
-        weeklySum += amt;
+    if (chartTimeline === 'day') {
+      // Last 7 days
+      const chartBars = [];
+      let sum = 0;
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const dayLabel = SHORT_DAYS[d.getDay()];
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const dateKey = `${year}-${month}-${day}`;
+        
+        const daySpend = expenses
+          .filter(e => e.date === dateKey)
+          .reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+        
+        sum += daySpend;
+        chartBars.push({ day: dayLabel, spend: daySpend });
       }
-    });
+      return { chartBars, chartSum: sum };
+    }
 
-    const maxSpend = Math.max(...dailySpend, 0);
+    if (chartTimeline === 'week') {
+      // Last 4 weeks relative to today
+      const chartBars = [];
+      let sum = 0;
+      for (let i = 3; i >= 0; i--) {
+        const start = new Date(now);
+        start.setDate(now.getDate() - (i + 1) * 7 + 1);
+        start.setHours(0, 0, 0, 0);
+        
+        const end = new Date(now);
+        end.setDate(now.getDate() - i * 7);
+        end.setHours(23, 59, 59, 999);
 
-    const chartBars = days.map((day, idx) => {
-      const spend = dailySpend[idx];
-      const heightPercentage = maxSpend > 0 ? (spend / maxSpend) * 94 + 6 : 6;
-      return {
-        day,
-        spend,
-        heightPercentage
-      };
-    });
+        const weekSpend = expenses.filter(e => {
+          if (!e.date) return false;
+          const ed = parseLocalDate(e.date);
+          return ed >= start && ed <= end;
+        }).reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
 
-    return { chartBars, weeklySum };
+        sum += weekSpend;
+        chartBars.push({ day: `W${4 - i}`, spend: weekSpend });
+      }
+      return { chartBars, chartSum: sum };
+    }
+
+    if (chartTimeline === 'month') {
+      // Last 6 months
+      const chartBars = [];
+      let sum = 0;
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const label = SHORT_MONTHS[d.getMonth()];
+        const yr = d.getFullYear();
+        const mo = d.getMonth() + 1;
+
+        const monthSpend = expenses.filter(e => {
+          if (!e.date) return false;
+          const ed = parseLocalDate(e.date);
+          return ed.getFullYear() === yr && (ed.getMonth() + 1) === mo;
+        }).reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+
+        sum += monthSpend;
+        chartBars.push({ day: label, spend: monthSpend });
+      }
+      return { chartBars, chartSum: sum };
+    }
+
+    // Yearly: Last 3 years
+    const chartBars = [];
+    let sum = 0;
+    for (let i = 2; i >= 0; i--) {
+      const yr = now.getFullYear() - i;
+      const yearSpend = expenses.filter(e => {
+        if (!e.date) return false;
+        const ed = parseLocalDate(e.date);
+        return ed.getFullYear() === yr;
+      }).reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+
+      sum += yearSpend;
+      chartBars.push({ day: String(yr), spend: yearSpend });
+    }
+    return { chartBars, chartSum: sum };
   };
 
-  const { chartBars, weeklySum } = getWeeklyData();
+  const { chartBars, chartSum } = getChartData();
 
   const { width: screenWidth } = Dimensions.get('window');
   const chartWidth = screenWidth - 88; // 20*2 screen horizontal padding + 24*2 card padding
@@ -256,7 +314,9 @@ export default function HomeScreen() {
   const maxSpendVal = Math.max(...chartBars.map(b => b.spend), 0);
 
   const points = chartBars.map((bar, idx) => {
-    const x = chartInset + (plotWidth / 6) * idx;
+    const x = chartBars.length > 1
+      ? chartInset + (plotWidth / (chartBars.length - 1)) * idx
+      : chartInset + plotWidth / 2;
     const y = maxSpendVal > 0 
       ? chartHeight - (paddingVertical + (bar.spend / maxSpendVal) * plotHeight)
       : chartHeight / 2;
@@ -406,13 +466,35 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* Weekly Expenses Chart Card */}
+        {/* Spending Activity Chart Card */}
         <View style={styles.chartCard}>
           <View style={styles.chartHeader}>
-            <Text style={styles.chartTitle}>Weekly Expenses</Text>
-            <Text style={styles.chartTotal}>
-              GHS {weeklySum.toLocaleString()}
-            </Text>
+            <View>
+              <Text style={styles.chartTitle}>Spending Activity</Text>
+              <Text style={styles.chartTotal}>
+                GHS {chartSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Text>
+            </View>
+
+            {/* Timeline Filter Segmented Control */}
+            <View style={styles.timelineFilterMini}>
+              {(['day', 'week', 'month', 'year'] as const).map((filter) => {
+                const labelMap = { day: 'D', week: 'W', month: 'M', year: 'Y' };
+                const isActive = chartTimeline === filter;
+                return (
+                  <TouchableOpacity
+                    key={filter}
+                    style={[styles.timelineMiniBtn, isActive && styles.timelineMiniBtnActive]}
+                    onPress={() => setChartTimeline(filter)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.timelineMiniText, isActive && styles.timelineMiniTextActive]}>
+                      {labelMap[filter]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
 
           <View style={styles.chartContainer}>
@@ -447,11 +529,11 @@ export default function HomeScreen() {
             ))}
           </View>
 
-          {/* Separated Days of the Week Component */}
+          {/* Separated Timeline Labels */}
           <View style={styles.chartDaysContainer}>
             {points.map((point, idx) => (
               <View
-                key={`day-label-${idx}`}
+                key={`timeline-label-${idx}`}
                 style={[
                   styles.chartDayCol,
                   {
@@ -1359,5 +1441,33 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#ffffff",
     fontWeight: "bold",
+  },
+  // Timeline Mini Filter Selector
+  timelineFilterMini: {
+    flexDirection: 'row',
+    backgroundColor: '#F2F4F7',
+    borderRadius: 16,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+    alignSelf: 'center',
+  },
+  timelineMiniBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timelineMiniBtnActive: {
+    backgroundColor: '#111111',
+  },
+  timelineMiniText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#8E9AA6',
+  },
+  timelineMiniTextActive: {
+    color: '#ffffff',
   },
 });

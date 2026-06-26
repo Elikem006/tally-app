@@ -7,11 +7,12 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   SafeAreaView,
+  Dimensions,
 } from "react-native";
 import { router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { reportAPI } from "../services/api";
+import { reportAPI, expenseAPI } from "../services/api";
 import { getUserId } from "../services/storage";
 
 const CATEGORY_ICONS: { [key: string]: string } = {
@@ -27,11 +28,34 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December",
 ];
 
+// Helper to draw connection lines for spline curve
+const getLineStyle = (x1: number, y1: number, x2: number, y2: number) => {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  const angle = Math.atan2(dy, dx);
+  
+  return {
+    position: 'absolute' as const,
+    left: x1,
+    top: y1,
+    width: distance + 0.6,
+    height: 3,
+    backgroundColor: '#8B5CF6',
+    transform: [{ rotate: `${angle}rad` }] as any,
+    transformOrigin: ['0%', '50%', 0] as any,
+  };
+};
+
 export default function ReportScreen() {
   const insets = useSafeAreaInsets();
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Chart data states
+  const [expenses, setExpenses] = useState<any[]>([]);
+  const [chartTimeline, setChartTimeline] = useState<'day' | 'week' | 'month' | 'year'>('week');
 
   const now = new Date();
   const currentMonthName = MONTH_NAMES[now.getMonth()];
@@ -53,11 +77,122 @@ export default function ReportScreen() {
     fetchReportData();
   }, []);
 
+  useEffect(() => {
+    async function fetchExpensesData() {
+      try {
+        const res = await expenseAPI.getCombinedHistory(getUserId());
+        setExpenses(res.data || []);
+      } catch (e) {
+        console.log("Error fetching expenses for report:", e);
+      }
+    }
+    fetchExpensesData();
+  }, []);
+
   function statusColor(status: string) {
     if (status === "over") return "#FF3B30";
     if (status === "warning") return "#FF9500";
     return "#34C759";
   }
+
+  // Dynamic chart data calculation based on selected timeline
+  const getChartData = () => {
+    const parseLocalDate = (dateStr: string) => {
+      if (!dateStr) return new Date();
+      const parts = dateStr.split('-');
+      if (parts.length < 3) return new Date(dateStr);
+      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    };
+
+    const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const SHORT_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+    if (chartTimeline === 'day') {
+      // Last 7 days
+      const chartBars = [];
+      let sum = 0;
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const dayLabel = SHORT_DAYS[d.getDay()];
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const dateKey = `${year}-${month}-${day}`;
+        
+        const daySpend = expenses
+          .filter(e => e.date === dateKey)
+          .reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+        
+        sum += daySpend;
+        chartBars.push({ day: dayLabel, spend: daySpend });
+      }
+      return { chartBars, chartSum: sum };
+    }
+
+    if (chartTimeline === 'week') {
+      // Last 4 weeks relative to today
+      const chartBars = [];
+      let sum = 0;
+      for (let i = 3; i >= 0; i--) {
+        const start = new Date(now);
+        start.setDate(now.getDate() - (i + 1) * 7 + 1);
+        start.setHours(0, 0, 0, 0);
+        
+        const end = new Date(now);
+        end.setDate(now.getDate() - i * 7);
+        end.setHours(23, 59, 59, 999);
+
+        const weekSpend = expenses.filter(e => {
+          if (!e.date) return false;
+          const ed = parseLocalDate(e.date);
+          return ed >= start && ed <= end;
+        }).reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+
+        sum += weekSpend;
+        chartBars.push({ day: `W${4 - i}`, spend: weekSpend });
+      }
+      return { chartBars, chartSum: sum };
+    }
+
+    if (chartTimeline === 'month') {
+      // Last 6 months
+      const chartBars = [];
+      let sum = 0;
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const label = SHORT_MONTHS[d.getMonth()];
+        const yr = d.getFullYear();
+        const mo = d.getMonth() + 1;
+
+        const monthSpend = expenses.filter(e => {
+          if (!e.date) return false;
+          const ed = parseLocalDate(e.date);
+          return ed.getFullYear() === yr && (ed.getMonth() + 1) === mo;
+        }).reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+
+        sum += monthSpend;
+        chartBars.push({ day: label, spend: monthSpend });
+      }
+      return { chartBars, chartSum: sum };
+    }
+
+    // Yearly: Last 3 years
+    const chartBars = [];
+    let sum = 0;
+    for (let i = 2; i >= 0; i--) {
+      const yr = now.getFullYear() - i;
+      const yearSpend = expenses.filter(e => {
+        if (!e.date) return false;
+        const ed = parseLocalDate(e.date);
+        return ed.getFullYear() === yr;
+      }).reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+
+      sum += yearSpend;
+      chartBars.push({ day: String(yr), spend: yearSpend });
+    }
+    return { chartBars, chartSum: sum };
+  };
 
   if (loading) {
     return (
@@ -77,6 +212,48 @@ export default function ReportScreen() {
         </TouchableOpacity>
       </View>
     );
+  }
+
+  const { chartBars, chartSum } = getChartData();
+
+  const { width: screenWidth } = Dimensions.get('window');
+  const chartWidth = screenWidth - 80; // Padding horizontal 20*2 screen + 20*2 card
+  const chartHeight = 140;
+  const paddingVertical = 25;
+  const chartInset = 16;
+  const plotWidth = chartWidth - 2 * chartInset;
+  const plotHeight = chartHeight - 2 * paddingVertical;
+  const maxSpendVal = Math.max(...chartBars.map(b => b.spend), 0);
+
+  const points = chartBars.map((bar, idx) => {
+    const x = chartBars.length > 1
+      ? chartInset + (plotWidth / (chartBars.length - 1)) * idx
+      : chartInset + plotWidth / 2;
+    const y = maxSpendVal > 0 
+      ? chartHeight - (paddingVertical + (bar.spend / maxSpendVal) * plotHeight)
+      : chartHeight / 2;
+    return { x, y, ...bar };
+  });
+
+  const curveSegments: { x1: number; y1: number; x2: number; y2: number }[] = [];
+  const steps = 12;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    for (let j = 0; j < steps; j++) {
+      const t1 = j / steps;
+      const t2 = (j + 1) / steps;
+      
+      const mu1 = (1 - Math.cos(t1 * Math.PI)) / 2;
+      const mu2 = (1 - Math.cos(t2 * Math.PI)) / 2;
+      
+      const x1 = p1.x + t1 * (p2.x - p1.x);
+      const x2 = p1.x + t2 * (p2.x - p1.x);
+      const y1 = p1.y + mu1 * (p2.y - p1.y);
+      const y2 = p1.y + mu2 * (p2.y - p1.y);
+      
+      curveSegments.push({ x1, y1, x2, y2 });
+    }
   }
 
   const currentTotal = parseFloat(report.currentMonth) || 0;
@@ -105,6 +282,87 @@ export default function ReportScreen() {
 
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <Text style={styles.title}>{currentMonthName} {currentYear}</Text>
+
+        {/* Spending Activity Chart Card */}
+        <View style={styles.chartCard}>
+          <View style={styles.chartHeader}>
+            <View>
+              <Text style={styles.chartTitle}>Spending Activity</Text>
+              <Text style={styles.chartTotal}>
+                GHS {chartSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Text>
+            </View>
+
+            {/* Timeline Filter Segmented Control */}
+            <View style={styles.timelineFilterMini}>
+              {(['day', 'week', 'month', 'year'] as const).map((filter) => {
+                const labelMap = { day: 'D', week: 'W', month: 'M', year: 'Y' };
+                const isActive = chartTimeline === filter;
+                return (
+                  <TouchableOpacity
+                    key={filter}
+                    style={[styles.timelineMiniBtn, isActive && styles.timelineMiniBtnActive]}
+                    onPress={() => setChartTimeline(filter)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.timelineMiniText, isActive && styles.timelineMiniTextActive]}>
+                      {labelMap[filter]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.chartContainer}>
+            {/* Horizontal Grid Lines */}
+            <View style={[styles.gridLineHorizontal, { top: paddingVertical }]} />
+            <View style={[styles.gridLineHorizontal, { top: chartHeight / 2 }]} />
+            <View style={[styles.gridLineHorizontal, { top: chartHeight - paddingVertical }]} />
+
+            {/* Connection Line Segments (Smooth Cosine Wave Curve) */}
+            {curveSegments.map((seg, idx) => {
+              const lineStyle = getLineStyle(seg.x1, seg.y1, seg.x2, seg.y2);
+              return (
+                <View
+                  key={`line-${idx}`}
+                  style={lineStyle}
+                />
+              );
+            })}
+
+            {/* Data Points (Dots) */}
+            {points.map((point, idx) => (
+              <View
+                key={`dot-${idx}`}
+                style={[
+                  styles.chartDot,
+                  {
+                    left: point.x - 6,
+                    top: point.y - 6,
+                  }
+                ]}
+              />
+            ))}
+          </View>
+
+          {/* Separated Timeline Labels */}
+          <View style={styles.chartDaysContainer}>
+            {points.map((point, idx) => (
+              <View
+                key={`timeline-label-${idx}`}
+                style={[
+                  styles.chartDayCol,
+                  {
+                    left: point.x - 20,
+                  }
+                ]}
+              >
+                <Text style={styles.chartDayText}>{point.day}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
 
         {/* 1. Monthly Summary Card */}
         <View style={styles.card}>
@@ -525,5 +783,104 @@ const styles = StyleSheet.create({
     fontSize: 12, 
     color: "#8E9AA6",
     fontWeight: "500"
+  },
+
+  // Spending Curve Chart Styles
+  chartCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+    marginBottom: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.03,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  chartHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  chartTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#111111',
+  },
+  chartTotal: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#8E9AA6',
+    marginTop: 2,
+  },
+  chartContainer: {
+    position: 'relative',
+    height: 140,
+  },
+  chartDaysContainer: {
+    position: 'relative',
+    height: 20,
+    marginTop: 12,
+  },
+  chartDayCol: {
+    position: 'absolute',
+    width: 40,
+    alignItems: 'center',
+  },
+  gridLineHorizontal: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: '#F2F4F7',
+  },
+  chartDot: {
+    position: 'absolute',
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#ffffff',
+    borderWidth: 2.5,
+    borderColor: '#8B5CF6',
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  chartDayText: {
+    fontSize: 10,
+    color: '#8E9AA6',
+    fontWeight: '500',
+  },
+  timelineFilterMini: {
+    flexDirection: 'row',
+    backgroundColor: '#F2F4F7',
+    borderRadius: 16,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+    alignSelf: 'center',
+  },
+  timelineMiniBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timelineMiniBtnActive: {
+    backgroundColor: '#111111',
+  },
+  timelineMiniText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#8E9AA6',
+  },
+  timelineMiniTextActive: {
+    color: '#ffffff',
   },
 });
