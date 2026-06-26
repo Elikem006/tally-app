@@ -27,13 +27,32 @@ export default function AddScreen() {
   const [description, setDescription] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Food");
   const [loading, setLoading] = useState(false);
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
+
+  function handleAddTag() {
+    const raw = tagInput.trim();
+    if (!raw) return;
+    if (tags.length >= 5) {
+      Alert.alert("Limit reached", "You can add up to 5 tags.");
+      return;
+    }
+    const tag = raw.startsWith("#") ? raw : `#${raw}`;
+    if (!tags.includes(tag)) {
+      setTags([...tags, tag]);
+    }
+    setTagInput("");
+  }
+
+  function handleRemoveTag(tag: string) {
+    setTags(tags.filter((t) => t !== tag));
+  }
 
   async function handleAddExpense() {
     if (!amount) {
       Alert.alert("Error", "Please enter an amount");
       return;
     }
-
     if (isNaN(parseFloat(amount))) {
       Alert.alert("Error", "Please enter a valid amount");
       return;
@@ -43,17 +62,20 @@ export default function AddScreen() {
     try {
       const today = new Date().toISOString().split("T")[0];
       const userId = getUserId();
+      const fullDescription = [description, ...tags].filter(Boolean).join(" ");
       await expenseAPI.createExpense(
         userId,
         amount,
         selectedCategory,
-        description,
+        fullDescription,
         today,
       );
       Alert.alert("Success", "Expense added successfully!");
       setAmount("");
       setDescription("");
       setSelectedCategory("Food");
+      setTags([]);
+      setTagInput("");
     } catch (error: any) {
       const message = error.response?.data?.error || "Failed to add expense.";
       Alert.alert("Error", message);
@@ -110,6 +132,35 @@ export default function AddScreen() {
         multiline
         numberOfLines={3}
       />
+
+      <Text style={styles.label}>Tags (optional)</Text>
+      <View style={styles.tagInputRow}>
+        <TextInput
+          style={[styles.input, styles.tagInputField]}
+          placeholder="Add a tag e.g. #work #food"
+          placeholderTextColor="#8890A0"
+          value={tagInput}
+          onChangeText={setTagInput}
+          onSubmitEditing={handleAddTag}
+          returnKeyType="done"
+        />
+        <TouchableOpacity style={styles.tagAddButton} onPress={handleAddTag}>
+          <Text style={styles.tagAddText}>Add</Text>
+        </TouchableOpacity>
+      </View>
+
+      {tags.length > 0 && (
+        <View style={styles.tagsContainer}>
+          {tags.map((tag) => (
+            <View key={tag} style={styles.tagPill}>
+              <Text style={styles.tagText}>{tag}</Text>
+              <TouchableOpacity onPress={() => handleRemoveTag(tag)}>
+                <Text style={styles.tagRemove}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      )}
 
       <TouchableOpacity
         style={[styles.button, loading && styles.buttonDisabled]}
@@ -214,5 +265,55 @@ const styles = StyleSheet.create({
     color: "#000000",
     fontSize: 16,
     fontWeight: "bold",
+  },
+  // Tags
+  tagInputRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    marginBottom: 0,
+  },
+  tagInputField: {
+    flex: 1,
+    marginBottom: 0,
+  },
+  tagAddButton: {
+    backgroundColor: "#00C896",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 20,
+  },
+  tagAddText: {
+    color: "#000000",
+    fontWeight: "bold",
+    fontSize: 13,
+  },
+  tagsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 4,
+    marginBottom: 20,
+  },
+  tagPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#00C89620",
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: "#00C896",
+    gap: 4,
+  },
+  tagText: {
+    fontSize: 12,
+    color: "#00C896",
+    fontWeight: "500",
+  },
+  tagRemove: {
+    fontSize: 12,
+    color: "#00C896",
   },
 });

@@ -46,6 +46,17 @@ const CATEGORY_ICONS: { [key: string]: string } = {
 
 const MONTH_FILTERS = getMonthFilters();
 
+function parseTagsFromDescription(description: string | null | undefined): {
+  cleanDescription: string;
+  tags: string[];
+} {
+  if (!description) return { cleanDescription: "", tags: [] };
+  const words = description.split(" ");
+  const tags = words.filter((w) => w.startsWith("#"));
+  const cleanDescription = words.filter((w) => !w.startsWith("#")).join(" ").trim();
+  return { cleanDescription, tags };
+}
+
 export default function HistoryScreen() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -209,6 +220,7 @@ export default function HistoryScreen() {
         renderItem={({ item }) => {
           const isShared = item.type === "shared";
           const color = CATEGORY_COLORS[item.category] || "#8890A0";
+          const { cleanDescription, tags } = parseTagsFromDescription(item.description);
           return (
             <TouchableOpacity
               style={[styles.expenseCard, isShared && styles.sharedCard]}
@@ -220,10 +232,10 @@ export default function HistoryScreen() {
                     {CATEGORY_ICONS[item.category] || "📦"}
                   </Text>
                 </View>
-                <View>
+                <View style={{ flex: 1 }}>
                   <View style={styles.descRow}>
                     <Text style={styles.expenseDescription}>
-                      {item.description || item.category}
+                      {cleanDescription || item.category}
                     </Text>
                     {isShared && (
                       <View style={styles.sharedBadge}>
@@ -234,6 +246,15 @@ export default function HistoryScreen() {
                   <Text style={styles.expenseCategory}>
                     {item.category} • {item.date}
                   </Text>
+                  {tags.length > 0 && (
+                    <View style={styles.tagsContainer}>
+                      {tags.map((tag) => (
+                        <View key={tag} style={styles.tagPill}>
+                          <Text style={styles.tagText}>{tag}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
                 </View>
               </View>
               <Text style={[styles.expenseAmount, { color }]}>
@@ -407,6 +428,27 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#ffffff20",
     paddingBottom: 16,
+  },
+  tagsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 6,
+  },
+  tagPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#00C89620",
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: "#00C896",
+  },
+  tagText: {
+    fontSize: 11,
+    color: "#00C896",
+    fontWeight: "500",
   },
   searchContainer: {
     flexDirection: "row",
