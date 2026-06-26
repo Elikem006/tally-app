@@ -18,6 +18,7 @@ export default function GroupsScreen() {
   const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [groupSummaries, setGroupSummaries] = useState<{ [key: string]: { total: number; memberCount: number } }>({});
 
   useFocusEffect(
     useCallback(() => {
@@ -31,7 +32,27 @@ export default function GroupsScreen() {
     try {
       const userId = getUserId();
       const response = await groupAPI.getUserGroups(userId);
-      setGroups(response.data || []);
+      const groupsData = response.data || [];
+      setGroups(groupsData);
+      
+      // Fetch details for each group to get totals and member counts
+      for (const group of groupsData) {
+        try {
+          const detailRes = await groupAPI.getGroupDetails(String(group.id));
+          const details = detailRes.data;
+          const total = (details.expenses || []).reduce(
+            (sum: number, e: any) => sum + parseFloat(e.amount),
+            0,
+          );
+          const summary = { total, memberCount: (details.members || []).length };
+          setGroupSummaries((prev) => ({
+            ...prev,
+            [String(group.id)]: summary,
+          }));
+        } catch (e) {
+          console.log(`Error fetching details for group ${group.id}:`, e);
+        }
+      }
     } catch (err: any) {
       console.log('Error fetching groups:', err);
       setError('Failed to load groups. Please check your connection.');
@@ -97,9 +118,13 @@ export default function GroupsScreen() {
                   </View>
                   <View style={styles.groupInfo}>
                     <Text style={styles.groupName}>{item.name}</Text>
-                    <Text style={styles.groupSub}>
-                      {item.members ? item.members.length : 0} members • {item.expenses ? item.expenses.length : 0} expenses
-                    </Text>
+                    {groupSummaries[String(item.id)] ? (
+                      <Text style={styles.groupSub}>
+                        👥 {groupSummaries[String(item.id)].memberCount} members • GHS {groupSummaries[String(item.id)].total.toFixed(2)} total
+                      </Text>
+                    ) : (
+                      <Text style={styles.groupSub}>Loading details...</Text>
+                    )}
                   </View>
                 </View>
                 <Feather name="chevron-right" size={18} color="#8E9AA6" style={styles.arrow} />

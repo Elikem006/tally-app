@@ -12,7 +12,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Svg, Path, Circle } from 'react-native-svg';
+import { Svg, Path } from 'react-native-svg';
 import { expenseAPI, budgetAPI } from '../../services/api';
 import { getUserId } from '../../services/storage';
 
@@ -22,6 +22,7 @@ const CATEGORY_ICONS: { [key: string]: string } = {
   Entertainment: '🎮',
   Utilities: '💡',
   Other: '📦',
+  Shared: '👥',
 };
 
 // Helper for timezone-independent date parsing
@@ -52,6 +53,17 @@ const getGaugePath = (cx: number, cy: number, r: number, progress: number) => {
   return `M ${x1} ${y1} A ${r} ${r} 0 ${largeArcFlag} 1 ${x2} ${y2}`;
 };
 
+function parseTagsFromDescription(description: string | null | undefined): {
+  cleanDescription: string;
+  tags: string[];
+} {
+  if (!description) return { cleanDescription: "", tags: [] };
+  const words = description.split(" ");
+  const tags = words.filter((w) => w.startsWith("#"));
+  const cleanDescription = words.filter((w) => !w.startsWith("#")).join(" ").trim();
+  return { cleanDescription, tags };
+}
+
 export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
   const [expenses, setExpenses] = useState<any[]>([]);
@@ -76,10 +88,14 @@ export default function HistoryScreen() {
     try {
       const userId = getUserId();
       const [expensesRes, budgetsRes] = await Promise.all([
-        expenseAPI.getUserExpenses(userId),
+        expenseAPI.getCombinedHistory(userId),
         budgetAPI.getUserBudgets(userId),
       ]);
-      setExpenses(expensesRes.data || []);
+      
+      const sorted = [...(expensesRes.data || [])].sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+      setExpenses(sorted);
       setBudgets(budgetsRes.data || []);
     } catch (err: any) {
       console.log('Error fetching history data:', err);
@@ -89,7 +105,11 @@ export default function HistoryScreen() {
     }
   }
 
-  async function handleDelete(expenseId: string) {
+  async function handleDelete(item: any) {
+    if (item.isShared || item.type === 'shared') {
+      Alert.alert('Shared Expense', 'Shared expenses can only be deleted from the group screen.');
+      return;
+    }
     Alert.alert(
       'Delete Expense',
       'Are you sure you want to delete this expense?',
@@ -100,8 +120,8 @@ export default function HistoryScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await expenseAPI.deleteExpense(expenseId);
-              setExpenses(expenses.filter((e) => e.id !== expenseId));
+              await expenseAPI.deleteExpense(String(item.id));
+              setExpenses(expenses.filter((e) => e.id !== item.id));
             } catch (error) {
               Alert.alert('Error', 'Failed to delete expense');
             }
@@ -132,7 +152,7 @@ export default function HistoryScreen() {
       if (activeTimeFilter === 'today') {
         matchesTime = e.date === todayStr;
       } else if (activeTimeFilter === 'week') {
-        const currentDay = today.getDay(); // 0 is Sunday, 1 is Monday, etc.
+        const currentDay = today.getDay();
         const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay;
 
         const startOfWeek = new Date(today);
@@ -145,7 +165,7 @@ export default function HistoryScreen() {
 
         matchesTime = expenseDate >= startOfWeek && expenseDate <= endOfWeek;
       } else if (activeTimeFilter === 'month') {
-        const currentYearMonth = `${year}-${month}`; // YYYY-MM
+        const currentYearMonth = `${year}-${month}`;
         matchesTime = e.date.startsWith(currentYearMonth);
       } else if (activeTimeFilter === 'year') {
         const currentYear = year.toString();
@@ -153,10 +173,12 @@ export default function HistoryScreen() {
       }
 
       // 2. Search query filtering
-      const desc = (e.description || '').toLowerCase();
+      const { cleanDescription, tags } = parseTagsFromDescription(e.description);
+      const desc = (cleanDescription || '').toLowerCase();
       const cat = (e.category || '').toLowerCase();
+      const tagsStr = tags.join(' ').toLowerCase();
       const query = searchQuery.toLowerCase();
-      const matchesSearch = desc.includes(query) || cat.includes(query);
+      const matchesSearch = desc.includes(query) || cat.includes(query) || tagsStr.includes(query);
 
       return matchesTime && matchesSearch;
     });
@@ -169,7 +191,7 @@ export default function HistoryScreen() {
 
   // Dynamically scale budget based on selected time filter (for Total Spend comparison)
   const scaledBudget = useMemo(() => {
-    const baseBudget = totalBudget; // Strictly reflects user's budget settings! No hardcoded fallback.
+    const baseBudget = totalBudget;
     if (activeTimeFilter === 'today') {
       return parseFloat((baseBudget / 30).toFixed(2));
     }
@@ -179,7 +201,6 @@ export default function HistoryScreen() {
     if (activeTimeFilter === 'month') {
       return baseBudget;
     }
-    // year
     return baseBudget * 12;
   }, [totalBudget, activeTimeFilter]);
 
@@ -192,7 +213,7 @@ export default function HistoryScreen() {
     return scaledBudget > 0 ? Math.min(totalSpent / scaledBudget, 1.0) : 0;
   }, [totalSpent, scaledBudget]);
 
-  const balanceProgress = 1.0; // Solid progress for static Balance gauge
+  const balanceProgress = 1.0;
 
   const groupExpensesByDate = (list: any[]) => {
     const groups: { [key: string]: any[] } = {};
@@ -254,7 +275,7 @@ export default function HistoryScreen() {
     <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}>
       <Text style={styles.cardHeaderTitle}>Analytics & History</Text>
 
-      {/* 1. Time Filter Segmented Control (matches color scheme of the app) */}
+      {/* 1. Time Filter Segmented Control */}
       <View style={styles.timeFilterContainer}>
         {(['today', 'week', 'month', 'year'] as const).map((filter) => {
           const labelMap = { today: 'Today', week: 'This Week', month: 'This Month', year: 'This Year' };
@@ -274,7 +295,7 @@ export default function HistoryScreen() {
         })}
       </View>
 
-      {/* 2. Side-by-side Gauges: Total Spend and Balance (reflects total budget) */}
+      {/* 2. Side-by-side Gauges: Total Spend and Balance */}
       <View style={styles.gaugesRow}>
         {/* Total Spending Gauge */}
         <View style={styles.gaugeCard}>
@@ -299,7 +320,7 @@ export default function HistoryScreen() {
           <Text style={styles.gaugeValue}>GHS {totalSpent.toFixed(0)}</Text>
         </View>
 
-        {/* Balance Gauge (displays total budget set by user) */}
+        {/* Balance Gauge */}
         <View style={styles.gaugeCard}>
           <View style={styles.gaugeWrapper}>
             <Svg width={72} height={72} viewBox="0 0 72 72">
@@ -344,33 +365,58 @@ export default function HistoryScreen() {
       {groupedExpenses.map((group) => (
         <View key={group.date} style={styles.dateGroup}>
           <Text style={styles.dateHeader}>{group.date}</Text>
-          {group.items.map((item) => (
-            <View key={item.id} style={styles.expenseCard}>
-              <View style={styles.expenseLeft}>
-                <View style={styles.iconBox}>
-                  <Text style={styles.icon}>{CATEGORY_ICONS[item.category] || '📦'}</Text>
+          {group.items.map((item) => {
+            const isShared = item.isShared || item.type === "shared";
+            const { cleanDescription, tags } = parseTagsFromDescription(item.description);
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={[styles.expenseCard, isShared && styles.sharedCard]}
+                onLongPress={() => handleDelete(item)}
+                activeOpacity={0.9}
+              >
+                <View style={styles.expenseLeft}>
+                  <View style={styles.iconBox}>
+                    <Text style={styles.icon}>{CATEGORY_ICONS[isShared ? 'Shared' : item.category] || '📦'}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.descRow}>
+                      <Text style={styles.expenseDescription} numberOfLines={1}>
+                        {cleanDescription || item.category}
+                      </Text>
+                      {isShared && (
+                        <View style={styles.sharedBadge}>
+                          <Text style={styles.sharedBadgeText}>Shared</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.expenseCategory}>{item.category}</Text>
+                    {tags.length > 0 && (
+                      <View style={styles.tagsContainer}>
+                        {tags.map((tag) => (
+                          <View key={tag} style={styles.tagPill}>
+                            <Text style={styles.tagText}>{tag}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.expenseDescription} numberOfLines={1}>
-                    {item.description || item.category}
+                <View style={styles.expenseRight}>
+                  <Text style={styles.expenseAmount}>
+                    -GHS {parseFloat(item.amount || '0').toFixed(2)}
                   </Text>
-                  <Text style={styles.expenseCategory}>{item.category}</Text>
+                  <TouchableOpacity
+                    style={styles.deleteBtn}
+                    onPress={() => handleDelete(item)}
+                    activeOpacity={0.7}
+                  >
+                    <Feather name="trash-2" size={16} color="#FF3B30" />
+                  </TouchableOpacity>
                 </View>
-              </View>
-              <View style={styles.expenseRight}>
-                <Text style={styles.expenseAmount}>
-                  -GHS {parseFloat(item.amount || '0').toFixed(2)}
-                </Text>
-                <TouchableOpacity
-                  style={styles.deleteBtn}
-                  onPress={() => handleDelete(String(item.id))}
-                  activeOpacity={0.7}
-                >
-                  <Feather name="trash-2" size={16} color="#FF3B30" />
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))}
+              </TouchableOpacity>
+            );
+          })}
         </View>
       ))}
 
@@ -381,6 +427,8 @@ export default function HistoryScreen() {
           <Text style={styles.emptySubtext}>Try changing your filter settings or search query</Text>
         </View>
       )}
+
+      <Text style={styles.hint}>Tip: You can also long press a transaction to delete it</Text>
     </ScrollView>
   );
 }
@@ -558,6 +606,9 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 1,
   },
+  sharedCard: {
+    borderColor: '#8B5CF630',
+  },
   expenseLeft: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -574,6 +625,25 @@ const styles = StyleSheet.create({
   },
   icon: {
     fontSize: 18,
+  },
+  descRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 3,
+  },
+  sharedBadge: {
+    backgroundColor: "#8B5CF612",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderWidth: 1,
+    borderColor: "#8B5CF630",
+  },
+  sharedBadgeText: {
+    fontSize: 10,
+    color: "#8B5CF6",
+    fontWeight: "600",
   },
   expenseDescription: {
     fontSize: 14,
@@ -640,5 +710,33 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 15,
     fontWeight: 'bold',
+  },
+  tagsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 6,
+  },
+  tagPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F2F4F7",
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: "#EAEBEF",
+  },
+  tagText: {
+    fontSize: 11,
+    color: "#111111",
+    fontWeight: "500",
+  },
+  hint: {
+    textAlign: "center",
+    fontSize: 11,
+    color: "#8E9AA650",
+    paddingTop: 16,
+    paddingBottom: 16,
   },
 });

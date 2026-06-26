@@ -7,6 +7,7 @@ import user_service.model.Expense;
 import user_service.repository.BudgetRepository;
 import user_service.repository.ExpenseRepository;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,9 +54,16 @@ public class BudgetService {
         List<Budget> budgets = budgetRepository.findByUserId(userId);
         List<Expense> expenses = expenseRepository.findByUserIdOrderByDateDesc(userId);
 
+        // Only count spending for the current month
+        LocalDate now = LocalDate.now();
+        int currentYear  = now.getYear();
+        int currentMonth = now.getMonthValue();
+
         Map<String, BigDecimal> spent = new HashMap<>();
         for (Expense e : expenses) {
-            spent.merge(e.getCategory(), e.getAmount(), BigDecimal::add);
+            if (e.getDate().getYear() == currentYear && e.getDate().getMonthValue() == currentMonth) {
+                spent.merge(e.getCategory(), e.getAmount(), BigDecimal::add);
+            }
         }
 
         Map<String, Object> summary = new HashMap<>();

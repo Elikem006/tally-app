@@ -72,8 +72,28 @@ export default function TabLayout() {
           tabBarIcon: ({ focused }) => <TabIcon name="list" focused={focused} />,
         }}
       />
+      
+      {/* Hidden Screens accessible via navigation links in the app */}
       <Tabs.Screen
         name="profile"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="reminders"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="report"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="budget-overview"
         options={{
           href: null,
         }}

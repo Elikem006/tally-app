@@ -12,9 +12,9 @@ import {
   Platform,
   Dimensions,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { budgetAPI } from '../../services/api';
+import { budgetAPI, expenseAPI } from '../../services/api';
 import { getUserId } from '../../services/storage';
 import { notifyBudgetWarning } from '../../services/notifications';
 
@@ -37,6 +37,7 @@ export default function BudgetScreen() {
   
   // Data States
   const [summary, setSummary] = useState<{ [key: string]: any }>({});
+  const [report, setReport] = useState<any>(null);
   const [limits, setLimits] = useState<{ [key: string]: string }>({
     Food: '',
     Transport: '',
@@ -78,9 +79,13 @@ export default function BudgetScreen() {
     setError(null);
     try {
       const userId = getUserId();
-      const response = await budgetAPI.getBudgetSummary(userId);
+      const [response, reportResponse] = await Promise.all([
+        budgetAPI.getBudgetSummary(userId),
+        expenseAPI.getMonthlyReport(userId)
+      ]);
       const data = response.data || {};
       setSummary(data);
+      setReport(reportResponse.data || null);
 
       // Reconstruct Setup states from Summary data
       const newLimits: { [key: string]: string } = {};
@@ -268,6 +273,82 @@ export default function BudgetScreen() {
                 <Text style={styles.cardHeaderTitle}>Budget Overview</Text>
                 <Text style={styles.subtitle}>Your spending this month vs your limits</Text>
 
+                {/* ── Budget Analysis Insights ── */}
+                {report && (() => {
+                  const currentTotal = parseFloat(report.currentMonth) || 0;
+                  const pctChange = parseFloat(report.percentageChange) || 0;
+                  const hasLastMonth = parseFloat(report.previousMonth) > 0;
+                  const isUp = pctChange > 0;
+                  const highCat = report.highestCategory;
+                  const perf: any[] = report.budgetPerformance || [];
+                  const goodCount = perf.filter((p: any) => p.status === "good").length;
+                  const hasOver = perf.some((p: any) => p.status === "over");
+                  const hasWarning = perf.some((p: any) => p.status === "warning");
+                  const healthColor = hasOver ? "#FF3B30" : hasWarning ? "#FF9500" : "#34C759";
+
+                  return (
+                    <View style={styles.insightsBlock}>
+                      {/* Monthly Summary */}
+                      <View style={styles.insightCard}>
+                        <Text style={styles.insightLabel}>Monthly Summary</Text>
+                        <Text style={styles.insightAmount}>GHS {currentTotal.toFixed(2)}</Text>
+                        {hasLastMonth ? (
+                          <View style={styles.changeRow}>
+                            <Text style={[styles.changeArrow, { color: isUp ? "#FF3B30" : "#34C759" }]}>
+                              {isUp ? "↑" : "↓"}
+                            </Text>
+                            <Text style={[styles.changeText, { color: isUp ? "#FF3B30" : "#34C759" }]}>
+                              {Math.abs(pctChange).toFixed(1)}% {isUp ? "more" : "less"} than last month
+                            </Text>
+                          </View>
+                        ) : (
+                          <Text style={styles.firstMonth}>First month of tracking</Text>
+                        )}
+                      </View>
+
+                      {/* Top Category */}
+                      {highCat && highCat.category && (
+                        <View style={styles.insightCard}>
+                          <Text style={styles.insightLabel}>Top Spending Category</Text>
+                          <View style={styles.topCatRow}>
+                            <Text style={styles.topCatEmoji}>
+                              {CATEGORY_ICONS[highCat.category] || "📦"}
+                            </Text>
+                            <View>
+                              <Text style={styles.topCatName}>{highCat.category}</Text>
+                              <Text style={styles.topCatAmount}>
+                                GHS {parseFloat(highCat.amount).toFixed(2)}
+                              </Text>
+                            </View>
+                          </View>
+                          <Text style={styles.insightHint}>
+                            You spent the most on {highCat.category} this month.
+                          </Text>
+                        </View>
+                      )}
+
+                      {/* Budget Health */}
+                      {perf.length > 0 && (
+                        <View style={styles.insightCard}>
+                          <Text style={styles.insightLabel}>Budget Health</Text>
+                          <Text style={[styles.healthScore, { color: healthColor }]}>
+                            {goodCount}/{perf.length} categories on track
+                          </Text>
+                          <Text style={styles.insightHint}>
+                            {hasOver
+                              ? "You've exceeded your budget in some categories."
+                              : hasWarning
+                              ? "Some categories are getting close to their limit."
+                              : "Great job — all budgets are under control!"}
+                          </Text>
+                        </View>
+                      )}
+
+                      <Text style={styles.sectionDivider}>Your Budgets</Text>
+                    </View>
+                  );
+                })()}
+
                 {Object.entries(summary).map(([category, data]: [string, any]) => {
                   const percentage = Math.min(data.percentage || 0, 100);
                   const barColor = getBarColor(data.isOverBudget, data.isNearLimit);
@@ -331,6 +412,14 @@ export default function BudgetScreen() {
                     </View>
                   );
                 })}
+
+                <TouchableOpacity
+                  style={styles.reportButton}
+                  onPress={() => router.push("/(tabs)/report")}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.reportButtonText}>📈 View Monthly Report</Text>
+                </TouchableOpacity>
 
                 <TouchableOpacity
                   style={styles.editButton}
@@ -499,7 +588,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 13,
     color: '#8E9AA6',
-    marginBottom: 24,
+    marginBottom: 20,
     lineHeight: 18,
   },
   
@@ -610,7 +699,7 @@ const styles = StyleSheet.create({
   remaining: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#34A853',
+    color: '#34C759',
     marginTop: 2,
   },
   remainingOver: {
@@ -706,15 +795,15 @@ const styles = StyleSheet.create({
   },
   resetButton: {
     borderWidth: 1,
-    borderColor: '#E05C5C',
+    borderColor: '#FF3B30',
     borderRadius: 12,
     padding: 14,
     alignItems: 'center',
     marginTop: 8,
-    backgroundColor: '#E05C5C10',
+    backgroundColor: '#FF3B3010',
   },
   resetButtonText: {
-    color: '#E05C5C',
+    color: '#FF3B30',
     fontSize: 15,
     fontWeight: '600',
   },
@@ -816,5 +905,101 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 15,
     fontWeight: 'bold',
+  },
+
+  // Insights Styles
+  insightsBlock: {
+    marginBottom: 10,
+  },
+  insightCard: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+  },
+  insightLabel: {
+    fontSize: 11,
+    fontWeight: "bold",
+    color: "#8E9AA6",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  insightAmount: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#111111",
+  },
+  changeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  changeArrow: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginRight: 4,
+  },
+  changeText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  firstMonth: {
+    fontSize: 12,
+    color: "#8E9AA6",
+    marginTop: 8,
+    fontWeight: "500",
+  },
+  topCatRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 8,
+  },
+  topCatEmoji: {
+    fontSize: 28,
+  },
+  topCatName: {
+    fontSize: 15,
+    fontWeight: "bold",
+    color: "#111111",
+  },
+  topCatAmount: {
+    fontSize: 13,
+    color: "#8E9AA6",
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  insightHint: {
+    fontSize: 12,
+    color: "#8E9AA6",
+    marginTop: 8,
+    lineHeight: 16,
+  },
+  healthScore: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginTop: 6,
+  },
+  sectionDivider: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#111111",
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  reportButton: {
+    backgroundColor: "#111111",
+    borderRadius: 24,
+    padding: 16,
+    alignItems: "center",
+    marginTop: 16,
+  },
+  reportButtonText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "bold",
   },
 });

@@ -8,12 +8,15 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { groupAPI } from '../services/api';
 import { getUserId } from '../services/storage';
+import { notifyNewSharedExpense } from '../services/notifications';
 
 const USER_NAMES: { [key: string]: string } = {
   '1': 'Elikem',
@@ -92,8 +95,13 @@ export default function GroupDetailScreen() {
       setExpenseAmount('');
       setExpenseDescription('');
       setShowAddExpense(false);
-      fetchDetails();
+      await fetchDetails();
       Alert.alert('Success', 'Expense added and split equally!');
+      try {
+        await notifyNewSharedExpense(String(groupName), expenseAmount, "You");
+      } catch (notifyErr) {
+        console.log('Error sending split notification:', notifyErr);
+      }
     } catch (error) {
       Alert.alert('Error', 'Failed to add expense');
     } finally {
@@ -104,7 +112,7 @@ export default function GroupDetailScreen() {
   async function handleSettleUp(userId: number) {
     Alert.alert(
       'Settle Up',
-      `Are you sure you want to settle up User #${userId}?`,
+      `Are you sure you want to settle up ${getUserDisplayName(userId)}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -168,6 +176,20 @@ export default function GroupDetailScreen() {
     );
   }
 
+  function timeAgo(createdAt: string) {
+    if (!createdAt) return "";
+    const diffMs = Date.now() - new Date(createdAt).getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? "s" : ""} ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? "s" : ""} ago`;
+    const d = new Date(createdAt);
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -189,228 +211,270 @@ export default function GroupDetailScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}>
-      {/* Light card container */}
-      <View style={styles.mainCard}>
-        <Text style={styles.cardHeaderTitle}>{groupName}</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}>
+        {/* Light card container */}
+        <View style={styles.mainCard}>
+          <Text style={styles.cardHeaderTitle}>{groupName}</Text>
 
-        {/* Add Expense Form (if toggled open) */}
-        {showAddExpense && (
-          <View style={styles.addExpenseForm}>
-            <Text style={styles.formTitle}>Add Shared Expense</Text>
-            <TextInput
-              style={[
-                styles.input,
-                descFocused && styles.inputFocused
-              ]}
-              placeholder="Description (e.g. Dinner)"
-              placeholderTextColor="#8E9AA6"
-              value={expenseDescription}
-              onChangeText={setExpenseDescription}
-              onFocus={() => setDescFocused(true)}
-              onBlur={() => setDescFocused(false)}
-            />
-            <TextInput
-              style={[
-                styles.input,
-                amtFocused && styles.inputFocused
-              ]}
-              placeholder="Amount (GHS)"
-              placeholderTextColor="#8E9AA6"
-              value={expenseAmount}
-              onChangeText={setExpenseAmount}
-              onFocus={() => setAmtFocused(true)}
-              onBlur={() => setAmtFocused(false)}
-              keyboardType="decimal-pad"
-            />
-            <TouchableOpacity
-              style={[styles.button, addingExpense && styles.buttonDisabled]}
-              onPress={handleAddExpense}
-              disabled={addingExpense}
-              activeOpacity={0.85}
-            >
-              {addingExpense ? (
-                <ActivityIndicator color="#ffffff" />
-              ) : (
-                <Text style={styles.buttonText}>Add & Split Equally</Text>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setShowAddExpense(false)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {!showAddExpense && (
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => setShowAddExpense(true)}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.addButtonText}>+ Add Shared Expense</Text>
-          </TouchableOpacity>
-        )}
-
-        {/* Members Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Members</Text>
-          {details?.members?.map((member: any) => (
-            <View key={member.id} style={styles.memberRow}>
-              <View style={styles.memberAvatar}>
-                <Text style={styles.memberAvatarText}>
-                  {getUserDisplayName(member.userId).charAt(0).toUpperCase()}
-                </Text>
-              </View>
-              <Text style={[styles.memberText, { flex: 1 }]} numberOfLines={1}>
-                {getUserDisplayName(member.userId)}
-              </Text>
-            </View>
-          ))}
-        </View>
-
-        {/* Add Member Form / Button */}
-        {showAddMember ? (
-          <View style={styles.addExpenseForm}>
-            <Text style={styles.formTitle}>Add Member by User ID</Text>
-            <TextInput
-              style={[
-                styles.input,
-                memberInputFocused && styles.inputFocused
-              ]}
-              placeholder="Enter User ID (e.g. 2)"
-              placeholderTextColor="#8E9AA6"
-              value={memberUserId}
-              onChangeText={setMemberUserId}
-              onFocus={() => setMemberInputFocused(true)}
-              onBlur={() => setMemberInputFocused(false)}
-              keyboardType="numeric"
-            />
-            <TouchableOpacity
-              style={[styles.button, addingMember && styles.buttonDisabled]}
-              onPress={handleAddMember}
-              disabled={addingMember}
-              activeOpacity={0.85}
-            >
-              {addingMember ? (
-                <ActivityIndicator color="#ffffff" />
-              ) : (
-                <Text style={styles.buttonText}>Add Member</Text>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setShowAddMember(false)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => setShowAddMember(true)}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.addButtonText}>+ Add Member</Text>
-          </TouchableOpacity>
-        )}
-
-        {/* Balances Section */}
-        {balances.length > 0 && (
+          {/* Recent Activity Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Balances</Text>
-            {balances.map((b: any, index: number) => (
-              <View key={index} style={styles.balanceRow}>
-                <View style={{ flex: 1, marginRight: 12 }}>
-                  <Text style={styles.balanceText} numberOfLines={1}>
-                    {getUserDisplayName(b.userId)}
-                  </Text>
-                  <Text style={styles.balanceSub} numberOfLines={1}>
-                    {b.owes ? 'Owes money' : 'Is owed money'}
-                  </Text>
-                </View>
-                <View style={styles.balanceRight}>
-                  <View
-                    style={[
-                      styles.balanceBadge,
-                      {
-                        backgroundColor: b.owes ? '#FF3B3012' : '#34C75912',
-                        borderColor: b.owes ? '#FF3B30' : '#34C759',
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.balanceAmount,
-                        { color: b.owes ? '#FF3B30' : '#34C759' },
-                      ]}
-                    >
-                      {b.owes ? 'Owes' : 'Owed'} GHS {Math.abs(parseFloat(b.balance)).toFixed(2)}
+            <Text style={styles.sectionTitle}>Recent Activity</Text>
+            {(() => {
+              const expenses = details?.expenses || [];
+              if (expenses.length === 0) {
+                return <Text style={styles.emptyText}>No activity yet</Text>;
+              }
+              const sorted = [...expenses]
+                .sort((a, b) => {
+                  const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                  const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                  return tb - ta;
+                })
+                .slice(0, 5);
+
+              return sorted.map((expense: any) => (
+                <View key={expense.id} style={styles.activityItem}>
+                  <View style={styles.activityAvatar}>
+                    <Text style={styles.activityAvatarText}>
+                      {getUserDisplayName(expense.paidBy).charAt(0).toUpperCase()}
                     </Text>
                   </View>
-                  {b.owes && (
-                    <TouchableOpacity
-                      style={styles.settleButton}
-                      onPress={() => handleSettleUp(b.userId)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.settleButtonText}>Settle Up</Text>
-                    </TouchableOpacity>
-                  )}
+                  <View style={styles.activityContent}>
+                    <Text style={styles.activityText}>
+                      {getUserDisplayName(expense.paidBy)} paid GHS {parseFloat(expense.amount).toFixed(2)} for {expense.description}
+                    </Text>
+                    <Text style={styles.activityTime}>{timeAgo(expense.createdAt)}</Text>
+                  </View>
+                  <View style={styles.activityBadge}>
+                    <Text style={styles.activityBadgeText}>Shared</Text>
+                  </View>
                 </View>
+              ));
+            })()}
+          </View>
+
+          {/* Add Expense Form (if toggled open) */}
+          {showAddExpense && (
+            <View style={styles.addExpenseForm}>
+              <Text style={styles.formTitle}>Add Shared Expense</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  descFocused && styles.inputFocused
+                ]}
+                placeholder="Description (e.g. Dinner)"
+                placeholderTextColor="#8E9AA6"
+                value={expenseDescription}
+                onChangeText={setExpenseDescription}
+                onFocus={() => setDescFocused(true)}
+                onBlur={() => setDescFocused(false)}
+              />
+              <TextInput
+                style={[
+                  styles.input,
+                  amtFocused && styles.inputFocused
+                ]}
+                placeholder="Amount (GHS)"
+                placeholderTextColor="#8E9AA6"
+                value={expenseAmount}
+                onChangeText={setExpenseAmount}
+                onFocus={() => setAmtFocused(true)}
+                onBlur={() => setAmtFocused(false)}
+                keyboardType="decimal-pad"
+              />
+              <TouchableOpacity
+                style={[styles.button, addingExpense && styles.buttonDisabled]}
+                onPress={handleAddExpense}
+                disabled={addingExpense}
+                activeOpacity={0.85}
+              >
+                {addingExpense ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Text style={styles.buttonText}>Add & Split Equally</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setShowAddExpense(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {!showAddExpense && (
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => setShowAddExpense(true)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.addButtonText}>+ Add Shared Expense</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Members Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Members</Text>
+            {details?.members?.map((member: any) => (
+              <View key={member.id} style={styles.memberRow}>
+                <View style={styles.memberAvatar}>
+                  <Text style={styles.memberAvatarText}>
+                    {getUserDisplayName(member.userId).charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+                <Text style={[styles.memberText, { flex: 1 }]} numberOfLines={1}>
+                  {getUserDisplayName(member.userId)}
+                </Text>
               </View>
             ))}
           </View>
-        )}
 
-        {/* Shared Expenses Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Shared Expenses</Text>
-          {details?.expenses?.length === 0 ? (
-            <Text style={styles.emptyText}>No expenses yet</Text>
+          {/* Add Member Form / Button */}
+          {showAddMember ? (
+            <View style={styles.addExpenseForm}>
+              <Text style={styles.formTitle}>Add Member by User ID</Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  memberInputFocused && styles.inputFocused
+                ]}
+                placeholder="Enter User ID (e.g. 2)"
+                placeholderTextColor="#8E9AA6"
+                value={memberUserId}
+                onChangeText={setMemberUserId}
+                onFocus={() => setMemberInputFocused(true)}
+                onBlur={() => setMemberInputFocused(false)}
+                keyboardType="numeric"
+              />
+              <TouchableOpacity
+                style={[styles.button, addingMember && styles.buttonDisabled]}
+                onPress={handleAddMember}
+                disabled={addingMember}
+                activeOpacity={0.85}
+              >
+                {addingMember ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Text style={styles.buttonText}>Add Member</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setShowAddMember(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
-            details?.expenses?.map((expense: any) => (
-              <View key={expense.id} style={styles.expenseRow}>
-                <View style={[styles.expenseLeft, { flex: 1, marginRight: 12 }]}>
-                  <View style={styles.expenseIconCircle}>
-                    <Text style={styles.expenseIcon}>💸</Text>
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => setShowAddMember(true)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.addButtonText}>+ Add Member</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Balances Section */}
+          {balances.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Balances</Text>
+              {balances.map((b: any, index: number) => (
+                <View key={index} style={styles.balanceRow}>
+                  <View style={{ flex: 1, marginRight: 12 }}>
+                    <Text style={styles.balanceText} numberOfLines={1}>
+                      {getUserDisplayName(b.userId)}
+                    </Text>
+                    <Text style={styles.balanceSub} numberOfLines={1}>
+                      {b.owes ? 'Owes money' : 'Is owed money'}
+                    </Text>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.expenseName} numberOfLines={1}>
-                      {expense.description}
-                    </Text>
-                    <Text style={styles.expenseSub} numberOfLines={1}>
-                      Paid by {getUserDisplayName(expense.paidBy)} • Split equally
-                    </Text>
+                  <View style={styles.balanceRight}>
+                    <View
+                      style={[
+                        styles.balanceBadge,
+                        {
+                          backgroundColor: b.owes ? '#FF3B3012' : '#34C75912',
+                          borderColor: b.owes ? '#FF3B30' : '#34C759',
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.balanceAmount,
+                          { color: b.owes ? '#FF3B30' : '#34C759' },
+                        ]}
+                      >
+                        {b.owes ? 'Owes' : 'Owed'} GHS {Math.abs(parseFloat(b.balance)).toFixed(2)}
+                      </Text>
+                    </View>
+                    {b.owes && (
+                      <TouchableOpacity
+                        style={styles.settleButton}
+                        onPress={() => handleSettleUp(b.userId)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.settleButtonText}>Settle Up</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
-                <Text style={styles.expenseAmountText}>
-                  GHS {parseFloat(expense.amount).toFixed(2)}
-                </Text>
-              </View>
-            ))
+              ))}
+            </View>
           )}
+
+          {/* Shared Expenses Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Shared Expenses</Text>
+            {details?.expenses?.length === 0 ? (
+              <Text style={styles.emptyText}>No expenses yet</Text>
+            ) : (
+              details?.expenses?.map((expense: any) => (
+                <View key={expense.id} style={styles.expenseRow}>
+                  <View style={[styles.expenseLeft, { flex: 1, marginRight: 12 }]}>
+                    <View style={styles.expenseIconCircle}>
+                      <Text style={styles.expenseIcon}>💸</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.expenseName} numberOfLines={1}>
+                        {expense.description}
+                      </Text>
+                      <Text style={styles.expenseSub} numberOfLines={1}>
+                        Paid by {getUserDisplayName(expense.paidBy)} • Split equally
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.expenseAmountText}>
+                    GHS {parseFloat(expense.amount).toFixed(2)}
+                  </Text>
+                </View>
+              ))
+            )}
+          </View>
+
+          {/* Delete Group Button */}
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={handleDeleteGroup}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.deleteButtonText}>Delete Group</Text>
+          </TouchableOpacity>
+
+          {/* Back Button */}
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
+            <Text style={styles.backButtonText}>← Back to Groups</Text>
+          </TouchableOpacity>
         </View>
-
-        {/* Delete Group Button */}
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={handleDeleteGroup}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.deleteButtonText}>Delete Group</Text>
-        </TouchableOpacity>
-
-        {/* Back Button */}
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
-          <Text style={styles.backButtonText}>← Back to Groups</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -722,5 +786,59 @@ const styles = StyleSheet.create({
     color: '#FF3B30',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  // Recent Activity styles
+  activityItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+    gap: 12,
+  },
+  activityAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F8F9FA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+  },
+  activityAvatarText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#111111',
+  },
+  activityContent: {
+    flex: 1,
+  },
+  activityText: {
+    fontSize: 13,
+    color: '#111111',
+    fontWeight: '600',
+  },
+  activityTime: {
+    fontSize: 11,
+    color: '#8E9AA6',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  activityBadge: {
+    backgroundColor: '#8B5CF612',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: '#8B5CF630',
+  },
+  activityBadgeText: {
+    fontSize: 10,
+    color: '#8B5CF6',
+    fontWeight: '600',
   },
 });

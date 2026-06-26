@@ -9,6 +9,7 @@ import {
   ScrollView,
   Modal,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -16,6 +17,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { currentUser } from '../(auth)/login';
+import { expenseAPI } from '../../services/api';
+import { getUserId } from '../../services/storage';
+
+const CATEGORY_ICONS: { [key: string]: string } = {
+  Food: "🍔",
+  Transport: "🚗",
+  Entertainment: "🎮",
+  Utilities: "💡",
+  Other: "📦",
+};
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
@@ -23,8 +34,13 @@ export default function ProfileScreen() {
   const [showUrlModal, setShowUrlModal] = useState(false);
   const [inputUrl, setInputUrl] = useState('');
 
+  // Stats States
+  const [stats, setStats] = useState<any>(null);
+  const [loadingStats, setLoadingStats] = useState(true);
+
   useEffect(() => {
     loadProfileImage();
+    fetchStats();
   }, []);
 
   async function loadProfileImage() {
@@ -44,6 +60,41 @@ export default function ProfileScreen() {
       setProfileImage(uri);
     } catch (e) {
       console.log('Error saving profile image:', e);
+    }
+  }
+
+  async function fetchStats() {
+    try {
+      const userId = getUserId();
+      const [reportRes, expensesRes] = await Promise.all([
+        expenseAPI.getMonthlyReport(userId),
+        expenseAPI.getUserExpenses(userId),
+      ]);
+
+      const expenses: any[] = expensesRes.data || [];
+      const report = reportRes.data;
+
+      const totalExpenses = expenses.length;
+      const totalSpent = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+
+      // Most used category
+      const categoryCounts: { [key: string]: number } = {};
+      for (const e of expenses) {
+        categoryCounts[e.category] = (categoryCounts[e.category] || 0) + 1;
+      }
+      const mostUsedCategory = Object.entries(categoryCounts).sort(([, a], [, b]) => b - a)[0]?.[0] || null;
+
+      setStats({
+        totalExpenses,
+        totalSpent,
+        mostUsedCategory,
+        thisMonthSpent: parseFloat(report.currentMonth) || 0,
+        topCategory: report.highestCategory,
+      });
+    } catch (error) {
+      console.log("Error fetching stats:", error);
+    } finally {
+      setLoadingStats(false);
     }
   }
 
@@ -192,6 +243,73 @@ export default function ProfileScreen() {
           <Text style={styles.subtitle}>Tally Member</Text>
         </View>
 
+        {/* Stats section */}
+        <Text style={styles.label}>Your Stats</Text>
+        {loadingStats ? (
+          <ActivityIndicator size="small" color="#111111" style={{ marginVertical: 16 }} />
+        ) : stats ? (
+          <View style={{ marginBottom: 16 }}>
+            {/* 3-card stat row */}
+            <View style={styles.statsRow}>
+              <View style={styles.statCard}>
+                <Text style={styles.statNumber}>{stats.totalExpenses}</Text>
+                <Text style={styles.statLabel}>Total Trx</Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit>
+                  GHS {stats.totalSpent.toFixed(0)}
+                </Text>
+                <Text style={styles.statLabel}>Total Spent</Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit>
+                  GHS {stats.thisMonthSpent.toFixed(0)}
+                </Text>
+                <Text style={styles.statLabel}>This Month</Text>
+              </View>
+            </View>
+
+            {/* Top category card */}
+            {stats.topCategory?.category && (
+              <View style={styles.topCategoryCard}>
+                <Text style={{ fontSize: 28 }}>
+                  {CATEGORY_ICONS[stats.topCategory.category] || "📦"}
+                </Text>
+                <View>
+                  <Text style={styles.topCatName}>{stats.topCategory.category}</Text>
+                  <Text style={styles.topCatSub}>Your most spent category</Text>
+                </View>
+              </View>
+            )}
+          </View>
+        ) : null}
+
+        {/* Navigation Action Links */}
+        <Text style={styles.label}>Actions</Text>
+        <TouchableOpacity
+          style={styles.detailCapsule}
+          onPress={() => router.push('/(tabs)/reminders')}
+          activeOpacity={0.8}
+        >
+          <View style={styles.actionLeft}>
+            <Feather name="bell" size={16} color="#111111" style={{ marginRight: 8 }} />
+            <Text style={styles.actionText}>Bill Reminders</Text>
+          </View>
+          <Feather name="chevron-right" size={16} color="#8E9AA6" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.detailCapsule}
+          onPress={() => router.push('/(tabs)/report')}
+          activeOpacity={0.8}
+        >
+          <View style={styles.actionLeft}>
+            <Feather name="trending-up" size={16} color="#111111" style={{ marginRight: 8 }} />
+            <Text style={styles.actionText}>Financial Reports</Text>
+          </View>
+          <Feather name="chevron-right" size={16} color="#8E9AA6" />
+        </TouchableOpacity>
+
         {/* Profile Details Capsules */}
         <Text style={styles.label}>Profile Details</Text>
 
@@ -270,7 +388,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F2F4F7', // Soft light gray backdrop
+    backgroundColor: '#F2F4F7',
   },
   content: {
     paddingHorizontal: 20,
@@ -278,7 +396,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   mainCard: {
-    backgroundColor: '#ffffff', // White wrapper card
+    backgroundColor: '#ffffff',
     borderRadius: 28,
     padding: 24,
     shadowColor: '#000000',
@@ -364,7 +482,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 10,
-    marginTop: 8,
+    marginTop: 16,
   },
   detailCapsule: {
     flexDirection: 'row',
@@ -393,6 +511,66 @@ const styles = StyleSheet.create({
     color: '#111111',
     fontWeight: '700',
   },
+  // Stats styles
+  statsRow: {
+    flexDirection: "row",
+    gap: 8,
+    width: "100%",
+    marginBottom: 10,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: "#F8F9FA",
+    borderRadius: 20,
+    padding: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#EAEBEF",
+  },
+  statNumber: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#8B5CF6",
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: "#8E9AA6",
+    textAlign: "center",
+    fontWeight: "600",
+  },
+  topCategoryCard: {
+    width: "100%",
+    backgroundColor: "#F8F9FA",
+    borderRadius: 20,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "#EAEBEF",
+    marginBottom: 10,
+  },
+  topCatName: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#111111",
+    marginBottom: 2,
+  },
+  topCatSub: {
+    fontSize: 11,
+    color: "#8E9AA6",
+    fontWeight: "500",
+  },
+  actionLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  actionText: {
+    fontSize: 14,
+    color: "#111111",
+    fontWeight: "700",
+  },
   logoutButton: {
     backgroundColor: '#FF3B3012',
     borderWidth: 1,
@@ -409,7 +587,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 17, 26, 0.4)', // Soft overlay dims outer screens
+    backgroundColor: 'rgba(15, 17, 26, 0.4)',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,

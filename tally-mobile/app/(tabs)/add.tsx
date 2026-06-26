@@ -38,6 +38,11 @@ export default function AddScreen() {
   // Input focus status for outline treatments
   const [amountFocused, setAmountFocused] = useState(false);
   const [descFocused, setDescFocused] = useState(false);
+  const [tagFocused, setTagFocused] = useState(false);
+
+  // Tag list state
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
 
   useEffect(() => {
     loadData();
@@ -71,12 +76,29 @@ export default function AddScreen() {
     }
   }
 
+  function handleAddTag() {
+    const raw = tagInput.trim();
+    if (!raw) return;
+    if (tags.length >= 5) {
+      Alert.alert("Limit reached", "You can add up to 5 tags.");
+      return;
+    }
+    const tag = raw.startsWith("#") ? raw : `#${raw}`;
+    if (!tags.includes(tag)) {
+      setTags([...tags, tag]);
+    }
+    setTagInput("");
+  }
+
+  function handleRemoveTag(tag: string) {
+    setTags(tags.filter((t) => t !== tag));
+  }
+
   async function handleAddExpense() {
     if (!amount) {
       Alert.alert('Error', 'Please enter an amount');
       return;
     }
-
     if (isNaN(parseFloat(amount))) {
       Alert.alert('Error', 'Please enter a valid amount');
       return;
@@ -86,7 +108,8 @@ export default function AddScreen() {
     try {
       const today = new Date().toISOString().split('T')[0];
       const userId = getUserId();
-      await expenseAPI.createExpense(userId, amount, selectedCategory, description, today);
+      const fullDescription = [description.trim(), ...tags].filter(Boolean).join(" ");
+      await expenseAPI.createExpense(userId, amount, selectedCategory, fullDescription, today);
       Alert.alert('Success', 'Expense added successfully!');
       
       // Update spent values locally for responsive UI feedback
@@ -99,6 +122,8 @@ export default function AddScreen() {
       setAmount('');
       setDescription('');
       setSelectedCategory('Food');
+      setTags([]);
+      setTagInput("");
     } catch (error: any) {
       const message = error.response?.data?.error || 'Failed to add expense.';
       Alert.alert('Error', message);
@@ -176,6 +201,7 @@ export default function AddScreen() {
                 <Text style={styles.categoryAmountText}>
                   GHS {(spent[cat] || 0).toFixed(2)}
                 </Text>
+                <View style={[styles.circleRing, { borderColor: getRingColor(cat) }]} />
               </View>
             </TouchableOpacity>
           ))}
@@ -199,6 +225,41 @@ export default function AddScreen() {
           numberOfLines={3}
         />
 
+        {/* Tags Section */}
+        <Text style={styles.label}>Tags (optional)</Text>
+        <View style={styles.tagInputRow}>
+          <TextInput
+            style={[
+              styles.tagInputField,
+              tagFocused && styles.tagInputFieldFocused
+            ]}
+            placeholder="Add a tag e.g. #work #food"
+            placeholderTextColor="#8E9AA6"
+            value={tagInput}
+            onChangeText={setTagInput}
+            onFocus={() => setTagFocused(true)}
+            onBlur={() => setTagFocused(false)}
+            onSubmitEditing={handleAddTag}
+            returnKeyType="done"
+          />
+          <TouchableOpacity style={styles.tagAddButton} onPress={handleAddTag}>
+            <Text style={styles.tagAddText}>Add</Text>
+          </TouchableOpacity>
+        </View>
+
+        {tags.length > 0 && (
+          <View style={styles.tagsContainer}>
+            {tags.map((tag) => (
+              <View key={tag} style={styles.tagPill}>
+                <Text style={styles.tagText}>{tag}</Text>
+                <TouchableOpacity onPress={() => handleRemoveTag(tag)}>
+                  <Text style={styles.tagRemove}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
+
         {/* Black capsule action button */}
         <TouchableOpacity
           style={[styles.button, loading && styles.buttonDisabled]}
@@ -220,7 +281,7 @@ export default function AddScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F2F4F7', // Soft light gray backdrop from mockup
+    backgroundColor: '#F2F4F7', // Soft light gray backdrop
   },
   centered: {
     flex: 1,
@@ -234,7 +295,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   mainCard: {
-    backgroundColor: '#ffffff', // Card wrapper from mockup
+    backgroundColor: '#ffffff', // Card wrapper
     borderRadius: 28,
     padding: 24,
     shadowColor: '#000000',
@@ -348,7 +409,7 @@ const styles = StyleSheet.create({
     borderColor: '#EAEBEF',
     color: '#111111',
     fontSize: 15,
-    marginBottom: 24,
+    marginBottom: 16,
   },
   descriptionBoxFocused: {
     borderColor: '#111111',
@@ -379,23 +440,64 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  paginationDots: {
+  // Tags styles
+  tagInputRow: {
     flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  tagInputField: {
+    flex: 1,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+    color: '#111111',
+    fontSize: 15,
+  },
+  tagInputFieldFocused: {
+    borderColor: '#111111',
+  },
+  tagAddButton: {
+    backgroundColor: '#111111',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    height: 56,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
+  },
+  tagAddText: {
+    color: '#ffffff',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 20,
+  },
+  tagPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F2F4F7',
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
     gap: 6,
   },
-  dotActive: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#111111',
+  tagText: {
+    fontSize: 13,
+    color: '#111111',
+    fontWeight: '500',
   },
-  dotInactive: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#C8D2DC',
+  tagRemove: {
+    fontSize: 12,
+    color: '#8E9AA6',
+    fontWeight: 'bold',
   },
 });

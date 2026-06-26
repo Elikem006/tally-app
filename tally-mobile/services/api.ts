@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const BASE_URL = "http://172.20.10.2:8082";
+const BASE_URL = "http://172.20.10.3:8082"; // Using the latest BASE_URL from origin/main
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -66,6 +66,12 @@ let mockGroups: MockGroup[] = [
       { id: 2, description: "Groceries", amount: "90.00", paidBy: "2" }
     ]
   }
+];
+
+let mockReminders = [
+  { id: 1, userId: "1", title: "Rent payment", amount: "1200.00", dueDate: getRelativeDateStr(-5), isRecurring: "true", recurrenceType: "MONTHLY", paid: false },
+  { id: 2, userId: "1", title: "Electricity Bill", amount: "150.00", dueDate: getRelativeDateStr(3), isRecurring: "false", recurrenceType: "", paid: false },
+  { id: 3, userId: "1", title: "Water Bill", amount: "45.00", dueDate: getRelativeDateStr(10), isRecurring: "false", recurrenceType: "", paid: true }
 ];
 
 let nextId = 100;
@@ -152,6 +158,99 @@ export const expenseAPI = {
     mockExpenses = mockExpenses.filter(e => String(e.id) !== String(expenseId));
     return mockResponse({ success: true });
   },
+
+  getMonthlyReport: async (userId: string, month?: number, year?: number) => {
+    if (!USE_MOCK) {
+      const params: Record<string, number> = {};
+      if (month !== undefined) params.month = month;
+      if (year !== undefined) params.year = year;
+      return api.get(`/api/expenses/user/${userId}/report`, { params });
+    }
+    
+    const targetMonth = month !== undefined ? month : new Date().getMonth() + 1;
+    const targetYear = year !== undefined ? year : new Date().getFullYear();
+    
+    const userExpenses = mockExpenses.filter(e => {
+      if (String(e.userId) !== String(userId)) return false;
+      const d = new Date(e.date);
+      return d.getMonth() + 1 === targetMonth && d.getFullYear() === targetYear;
+    });
+    
+    const prevMonth = targetMonth === 1 ? 12 : targetMonth - 1;
+    const prevYear = targetMonth === 1 ? targetYear - 1 : targetYear;
+    const prevExpenses = mockExpenses.filter(e => {
+      if (String(e.userId) !== String(userId)) return false;
+      const d = new Date(e.date);
+      return d.getMonth() + 1 === prevMonth && d.getFullYear() === prevYear;
+    });
+    
+    const currentTotal = userExpenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+    const previousTotal = prevExpenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+    const percentageChange = previousTotal > 0 ? ((currentTotal - previousTotal) / previousTotal) * 100 : 0;
+    
+    const categoryBreakdown: { [key: string]: number } = {};
+    userExpenses.forEach(e => {
+      categoryBreakdown[e.category] = (categoryBreakdown[e.category] || 0) + parseFloat(e.amount);
+    });
+    
+    let highestCategory = { category: "", amount: "0.00" };
+    Object.entries(categoryBreakdown).forEach(([cat, amt]) => {
+      if (amt > parseFloat(highestCategory.amount)) {
+        highestCategory = { category: cat, amount: amt.toFixed(2) };
+      }
+    });
+    
+    const userBudgets = mockBudgets.filter(b => String(b.userId) === String(userId));
+    const budgetPerformance = userBudgets.map(b => {
+      const spent = categoryBreakdown[b.category] || 0;
+      const limit = parseFloat(b.monthlyLimit);
+      const percentage = limit > 0 ? (spent / limit) * 100 : 0;
+      const isOverBudget = limit > 0 && spent > limit;
+      const isNearLimit = limit > 0 && !isOverBudget && percentage >= 80;
+      return {
+        category: b.category,
+        spent: spent.toFixed(2),
+        limit: limit.toFixed(2),
+        percentage,
+        status: isOverBudget ? "over" : (isNearLimit ? "warning" : "good")
+      };
+    });
+    
+    return mockResponse({
+      currentMonth: currentTotal.toFixed(2),
+      previousMonth: previousTotal.toFixed(2),
+      percentageChange,
+      categoryBreakdown,
+      highestCategory: highestCategory.category ? highestCategory : null,
+      budgetPerformance
+    });
+  },
+
+  getCombinedHistory: async (userId: string) => {
+    if (!USE_MOCK) return api.get(`/api/expenses/user/${userId}/history`);
+    
+    const personal = mockExpenses.filter(e => String(e.userId) === String(userId));
+    const shared: any[] = [];
+    mockGroups.forEach(g => {
+      if (g.members.some(m => String(m.userId) === String(userId))) {
+        g.expenses.forEach(e => {
+          shared.push({
+            id: `g-${e.id}`,
+            userId,
+            amount: e.amount,
+            category: "Other",
+            description: `[${g.name}] ${e.description}`,
+            date: getRelativeDateStr(1),
+            isShared: true,
+            groupName: g.name
+          });
+        });
+      }
+    });
+    
+    const combined = [...personal, ...shared].sort((a, b) => b.date.localeCompare(a.date));
+    return mockResponse(combined);
+  },
 };
 
 export const budgetAPI = {
@@ -216,6 +315,15 @@ export const budgetAPI = {
     mockBudgets = mockBudgets.filter(b => !(String(b.userId) === String(userId) && b.category === category));
     return mockResponse({ success: true });
   },
+};
+
+export const reportAPI = {
+  getMonthlyReport: async (userId: string, month?: number, year?: number) => {
+    return expenseAPI.getMonthlyReport(userId, month, year);
+  },
+  getCombinedHistory: async (userId: string) => {
+    return expenseAPI.getCombinedHistory(userId);
+  }
 };
 
 export const groupAPI = {
@@ -343,6 +451,67 @@ export const groupAPI = {
     if (!USE_MOCK) return api.delete(`/api/groups/${groupId}`);
     
     mockGroups = mockGroups.filter(g => String(g.id) !== String(groupId));
+    return mockResponse({ success: true });
+  },
+};
+
+export const remindersAPI = {
+  createReminder: async (
+    userId: string,
+    title: string,
+    amount: string,
+    dueDate: string,
+    isRecurring: boolean,
+    recurrenceType: string,
+  ) => {
+    if (!USE_MOCK) {
+      return api.post("/api/reminders", {
+        userId,
+        title,
+        amount,
+        dueDate,
+        isRecurring: String(isRecurring),
+        recurrenceType,
+      });
+    }
+    const newReminder = {
+      id: ++nextId,
+      userId,
+      title,
+      amount,
+      dueDate,
+      isRecurring: String(isRecurring),
+      recurrenceType,
+      paid: false,
+    };
+    mockReminders.push(newReminder);
+    return mockResponse(newReminder);
+  },
+
+  getUserReminders: async (userId: string) => {
+    if (!USE_MOCK) return api.get(`/api/reminders/user/${userId}`);
+    const filtered = mockReminders.filter(r => String(r.userId) === String(userId));
+    return mockResponse(filtered);
+  },
+
+  getUpcomingReminders: async (userId: string) => {
+    if (!USE_MOCK) return api.get(`/api/reminders/user/${userId}/upcoming`);
+    const filtered = mockReminders.filter(r => String(r.userId) === String(userId) && !r.paid);
+    return mockResponse(filtered);
+  },
+
+  markAsPaid: async (reminderId: string) => {
+    if (!USE_MOCK) return api.put(`/api/reminders/${reminderId}/paid`, {});
+    const r = mockReminders.find(rem => String(rem.id) === String(reminderId));
+    if (r) {
+      r.paid = true;
+    }
+    return mockResponse({ success: true });
+  },
+
+  deleteReminder: async (reminderId: string) => {
+    if (!USE_MOCK) return api.delete(`/api/reminders/${reminderId}`);
+    mockReminders = mockReminders.filter(rem => String(rem.id) !== String(reminderId));
     return mockResponse({ success: true });
   },
 };

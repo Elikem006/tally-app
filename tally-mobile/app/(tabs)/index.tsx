@@ -8,12 +8,18 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
+  Modal,
+  TextInput,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { expenseAPI, budgetAPI } from '../../services/api';
+import { expenseAPI, remindersAPI, budgetAPI } from '../../services/api';
 import { getUserId, getUserName } from '../../services/storage';
+import { Feather } from '@expo/vector-icons';
 
 const CATEGORY_ICONS: { [key: string]: string } = {
   Food: '🍔',
@@ -41,14 +47,24 @@ const getLineStyle = (x1: number, y1: number, x2: number, y2: number) => {
   };
 };
 
+const CATEGORIES = ["Food", "Transport", "Entertainment", "Utilities", "Other"];
+
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [expenses, setExpenses] = useState<any[]>([]);
   const [budgets, setBudgets] = useState<any[]>([]);
+  const [upcomingReminders, setUpcomingReminders] = useState<any[]>([]);
+  const [budgetAlerts, setBudgetAlerts] = useState<{ category: string; isOverBudget: boolean; isNearLimit: boolean; percentage: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [profileImage, setProfileImage] = useState<string | null>(null);
+
+  // Quick add state
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [quickAmount, setQuickAmount] = useState("");
+  const [quickCategory, setQuickCategory] = useState("Food");
+  const [quickDescription, setQuickDescription] = useState("");
+  const [savingExpense, setSavingExpense] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -88,9 +104,72 @@ export default function HomeScreen() {
     } finally {
       setLoading(false);
     }
+
+    // Fetch upcoming reminders independently — failure won't break the home screen
+    try {
+      const remindersResponse = await remindersAPI.getUpcomingReminders(getUserId());
+      setUpcomingReminders(remindersResponse.data || []);
+    } catch (error) {
+      console.log("Error fetching reminders:", error);
+    }
+
+    // Fetch budget alerts independently
+    try {
+      const userId = getUserId();
+      const budgetRes = await budgetAPI.getBudgetSummary(userId);
+      const summary = budgetRes.data;
+      const alerts = Object.entries(summary)
+        .filter(([, data]: any) => data.isOverBudget || data.isNearLimit)
+        .map(([category, data]: any) => ({
+          category,
+          isOverBudget: data.isOverBudget,
+          isNearLimit: data.isNearLimit,
+          percentage: data.percentage,
+        }));
+      setBudgetAlerts(alerts);
+    } catch (error) {
+      console.log("Error fetching budget alerts:", error);
+    }
   }
 
-  // 1. Calculate Dynamic Spending & Budget sums
+  async function handleQuickAdd() {
+    if (!quickAmount.trim()) {
+      Alert.alert("Missing amount", "Please enter an amount.");
+      return;
+    }
+    const parsed = parseFloat(quickAmount);
+    if (isNaN(parsed) || parsed <= 0) {
+      Alert.alert("Invalid amount", "Please enter a valid amount greater than 0.");
+      return;
+    }
+
+    setSavingExpense(true);
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      await expenseAPI.createExpense(
+        getUserId(),
+        quickAmount.trim(),
+        quickCategory,
+        quickDescription.trim(),
+        today,
+      );
+      // Reset form
+      setQuickAmount("");
+      setQuickCategory("Food");
+      setQuickDescription("");
+      setShowQuickAdd(false);
+      // Refresh data
+      await fetchData();
+      Alert.alert("✅ Added", `GHS ${parsed.toFixed(2)} in ${quickCategory} recorded.`);
+    } catch (error) {
+      Alert.alert("Error", "Could not save expense. Please try again.");
+      console.log("Quick add error:", error);
+    } finally {
+      setSavingExpense(false);
+    }
+  }
+
+  // Calculate Dynamic Spending & Budget sums
   const totalSpent = expenses.reduce((sum, e) => sum + parseFloat(e.amount || '0'), 0);
   const totalBudget = budgets.reduce((sum, b) => sum + parseFloat(b.monthlyLimit || '0'), 0);
   const remaining = totalBudget - totalSpent;
@@ -101,25 +180,32 @@ export default function HomeScreen() {
   const integerPart = parseFloat(parts[0]).toLocaleString();
   const decimalPart = parts[1];
 
-  // 2. Group expenses dynamically by Category
+  // Group expenses dynamically by Category
   const categoryTotals = expenses.reduce((acc: { [key: string]: number }, e) => {
     const category = e.category || 'Other';
     acc[category] = (acc[category] || 0) + parseFloat(e.amount || '0');
     return acc;
   }, {});
 
-  // 3. Slice recent 3 expenses
-  const recentExpenses = expenses.slice(0, 3);
+  // Sort and slice recent 3 expenses
+  const recentExpenses = [...expenses]
+    .sort((a, b) => {
+      const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
+      if (dateDiff !== 0) return dateDiff;
+      const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bCreated - aCreated;
+    })
+    .slice(0, 3);
 
-  // 4. Calculate weekly chart data dynamically for current week (Monday - Sunday)
+  // Calculate weekly chart data dynamically for current week (Monday - Sunday)
   const getWeeklyData = () => {
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const dailySpend = [0, 0, 0, 0, 0, 0, 0];
     
     const now = new Date();
-    const currentDay = now.getDay(); // 0 is Sunday, 1 is Monday, etc.
+    const currentDay = now.getDay();
     
-    // Align current week starting Monday
     const distanceToMonday = currentDay === 0 ? -6 : 1 - currentDay;
     const monday = new Date(now);
     monday.setDate(now.getDate() + distanceToMonday);
@@ -147,7 +233,6 @@ export default function HomeScreen() {
 
     const chartBars = days.map((day, idx) => {
       const spend = dailySpend[idx];
-      // Height defaults to 6% minimum so it renders a small dot rather than vanishing when 0
       const heightPercentage = maxSpend > 0 ? (spend / maxSpend) * 94 + 6 : 6;
       return {
         day,
@@ -165,20 +250,19 @@ export default function HomeScreen() {
   const chartWidth = screenWidth - 88; // 20*2 screen horizontal padding + 24*2 card padding
   const chartHeight = 140;
   const paddingVertical = 25;
-  const chartInset = 16; // Safety margin to prevent dots and labels overflowing
+  const chartInset = 16;
   const plotWidth = chartWidth - 2 * chartInset;
   const plotHeight = chartHeight - 2 * paddingVertical;
-  const maxSpend = Math.max(...chartBars.map(b => b.spend), 0);
+  const maxSpendVal = Math.max(...chartBars.map(b => b.spend), 0);
 
   const points = chartBars.map((bar, idx) => {
     const x = chartInset + (plotWidth / 6) * idx;
-    const y = maxSpend > 0 
-      ? chartHeight - (paddingVertical + (bar.spend / maxSpend) * plotHeight)
+    const y = maxSpendVal > 0 
+      ? chartHeight - (paddingVertical + (bar.spend / maxSpendVal) * plotHeight)
       : chartHeight / 2;
     return { x, y, ...bar };
   });
 
-  // Generate smooth wave sub-segments using Cosine Interpolation
   const curveSegments: { x1: number; y1: number; x2: number; y2: number }[] = [];
   const steps = 12;
   for (let i = 0; i < points.length - 1; i++) {
@@ -221,213 +305,398 @@ export default function HomeScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}>
-      {/* Header Row */}
-      <View style={styles.headerRow}>
-        <View>
-          <Text style={styles.welcomeText}>Welcome back 👋</Text>
-          <Text style={styles.greetingText}>Good day, {getUserName()}</Text>
+    <View style={styles.wrapper}>
+      <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}>
+        {/* Header Row */}
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.welcomeText}>Welcome back 👋</Text>
+            <Text style={styles.greetingText}>Good day, {getUserName()}</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.avatarButton}
+            onPress={() => router.push('/(tabs)/profile')}
+            activeOpacity={0.8}
+          >
+            {profileImage ? (
+              <Image source={{ uri: profileImage }} style={styles.avatarImage} />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Text style={styles.avatarText}>
+                  {getUserName().charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          style={styles.avatarButton}
-          onPress={() => router.push('/(tabs)/profile')}
-          activeOpacity={0.8}
-        >
-          {profileImage ? (
-            <Image source={{ uri: profileImage }} style={styles.avatarImage} />
-          ) : (
-            <View style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarText}>
-                {getUserName().charAt(0).toUpperCase()}
+
+        {/* Budget Alerts */}
+        {budgetAlerts.length > 0 && (
+          <View style={styles.alertsSection}>
+            {budgetAlerts.map((alert) => (
+              <View
+                key={alert.category}
+                style={[
+                  styles.alertCard,
+                  alert.isOverBudget ? styles.alertCardOver : styles.alertCardNear,
+                ]}
+              >
+                <Text style={styles.alertIcon}>{alert.isOverBudget ? "🚨" : "⚠️"}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.alertTitle, alert.isOverBudget ? styles.alertTitleOver : styles.alertTitleNear]}>
+                    {alert.isOverBudget ? "Over budget" : "Near limit"} — {alert.category}
+                  </Text>
+                  <Text style={styles.alertSub}>
+                    {alert.percentage.toFixed(0)}% of your {alert.category} budget used
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Expenses Overview Card */}
+        <View style={styles.expensesCard}>
+          <View style={styles.radialCircle1} />
+          <View style={styles.radialCircle2} />
+          <View style={styles.radialCircle3} />
+
+          <View style={styles.expensesCardHeader}>
+            <Text style={styles.expensesCardLabel}>your Expenses</Text>
+          </View>
+
+          <View style={styles.amountRow}>
+            <Text style={styles.currencySymbol}>GHS </Text>
+            <Text style={styles.amountInteger}>{integerPart}</Text>
+            <Text style={styles.amountFraction}>.{decimalPart}</Text>
+          </View>
+
+          <View style={styles.trendRow}>
+            <View style={styles.trendBadge}>
+              <Text style={styles.trendText}>
+                {expenses.length} transaction{expenses.length !== 1 ? 's' : ''}
               </Text>
             </View>
+          </View>
+
+          {totalBudget > 0 && (
+            <>
+              <View style={styles.progressContainer}>
+                <View style={styles.progressBg}>
+                  <View
+                    style={[
+                      styles.progressBar,
+                      {
+                        width: `${Math.min((totalSpent / totalBudget) * 100, 100)}%` as any,
+                      },
+                    ]}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.budgetStatsRow}>
+                <Text style={styles.budgetValue}>Budget: GHS {totalBudget.toLocaleString()}</Text>
+                <Text style={styles.remainingValue}>
+                  {remaining >= 0
+                    ? `Remaining: GHS ${remaining.toLocaleString()}`
+                    : `Overspent: GHS ${Math.abs(remaining).toLocaleString()}`}
+                </Text>
+              </View>
+            </>
           )}
-        </TouchableOpacity>
-      </View>
-
-      {/* Expenses Overview Card */}
-      <View style={styles.expensesCard}>
-        {/* Concentric Circle Background Pattern (faint and subtle in light theme) */}
-        <View style={styles.radialCircle1} />
-        <View style={styles.radialCircle2} />
-        <View style={styles.radialCircle3} />
-
-        <View style={styles.expensesCardHeader}>
-          <Text style={styles.expensesCardLabel}>your Expenses</Text>
         </View>
 
-        <View style={styles.amountRow}>
-          <Text style={styles.currencySymbol}>GHS </Text>
-          <Text style={styles.amountInteger}>{integerPart}</Text>
-          <Text style={styles.amountFraction}>.{decimalPart}</Text>
-        </View>
-
-        <View style={styles.trendRow}>
-          <View style={styles.trendBadge}>
-            <Text style={styles.trendText}>
-              {expenses.length} transaction{expenses.length !== 1 ? 's' : ''}
+        {/* Weekly Expenses Chart Card */}
+        <View style={styles.chartCard}>
+          <View style={styles.chartHeader}>
+            <Text style={styles.chartTitle}>Weekly Expenses</Text>
+            <Text style={styles.chartTotal}>
+              GHS {weeklySum.toLocaleString()}
             </Text>
           </View>
-        </View>
 
-        {totalBudget > 0 && (
-          <>
-            <View style={styles.progressContainer}>
-              <View style={styles.progressBg}>
+          <View style={styles.chartContainer}>
+            {/* Horizontal Grid Lines */}
+            <View style={[styles.gridLineHorizontal, { top: paddingVertical }]} />
+            <View style={[styles.gridLineHorizontal, { top: chartHeight / 2 }]} />
+            <View style={[styles.gridLineHorizontal, { top: chartHeight - paddingVertical }]} />
+
+            {/* Connection Line Segments (Smooth Cosine Wave Curve) */}
+            {curveSegments.map((seg, idx) => {
+              const lineStyle = getLineStyle(seg.x1, seg.y1, seg.x2, seg.y2);
+              return (
                 <View
-                  style={[
-                    styles.progressBar,
-                    {
-                      width: `${Math.min((totalSpent / totalBudget) * 100, 100)}%` as any,
-                    },
-                  ]}
+                  key={`line-${idx}`}
+                  style={lineStyle}
                 />
-              </View>
-            </View>
+              );
+            })}
 
-            <View style={styles.budgetStatsRow}>
-              <Text style={styles.budgetValue}>Budget: GHS {totalBudget.toLocaleString()}</Text>
-              <Text style={styles.remainingValue}>
-                {remaining >= 0
-                  ? `Remaining: GHS ${remaining.toLocaleString()}`
-                  : `Overspent: GHS ${Math.abs(remaining).toLocaleString()}`}
-              </Text>
-            </View>
-          </>
-        )}
-      </View>
-
-      {/* Weekly Expenses Chart Card */}
-      <View style={styles.chartCard}>
-        <View style={styles.chartHeader}>
-          <Text style={styles.chartTitle}>Weekly Expenses</Text>
-          <Text style={styles.chartTotal}>
-            GHS {weeklySum.toLocaleString()}
-          </Text>
-        </View>
-
-        <View style={styles.chartContainer}>
-          {/* Horizontal Grid Lines */}
-          <View style={[styles.gridLineHorizontal, { top: paddingVertical }]} />
-          <View style={[styles.gridLineHorizontal, { top: chartHeight / 2 }]} />
-          <View style={[styles.gridLineHorizontal, { top: chartHeight - paddingVertical }]} />
-
-          {/* Connection Line Segments (Smooth Cosine Wave Curve) */}
-          {curveSegments.map((seg, idx) => {
-            const lineStyle = getLineStyle(seg.x1, seg.y1, seg.x2, seg.y2);
-            return (
+            {/* Data Points (Dots) */}
+            {points.map((point, idx) => (
               <View
-                key={`line-${idx}`}
-                style={lineStyle}
+                key={`dot-${idx}`}
+                style={[
+                  styles.chartDot,
+                  {
+                    left: point.x - 6,
+                    top: point.y - 6,
+                  }
+                ]}
               />
-            );
-          })}
+            ))}
+          </View>
 
-          {/* Data Points (Dots) */}
-          {points.map((point, idx) => (
-            <View
-              key={`dot-${idx}`}
-              style={[
-                styles.chartDot,
-                {
-                  left: point.x - 6,
-                  top: point.y - 6,
-                }
-              ]}
-            />
-          ))}
+          {/* Separated Days of the Week Component */}
+          <View style={styles.chartDaysContainer}>
+            {points.map((point, idx) => (
+              <View
+                key={`day-label-${idx}`}
+                style={[
+                  styles.chartDayCol,
+                  {
+                    left: point.x - 20,
+                  }
+                ]}
+              >
+                <Text style={styles.chartDayText}>{point.day}</Text>
+              </View>
+            ))}
+          </View>
         </View>
 
-        {/* Separated Days of the Week Component */}
-        <View style={styles.chartDaysContainer}>
-          {points.map((point, idx) => (
-            <View
-              key={`day-label-${idx}`}
-              style={[
-                styles.chartDayCol,
-                {
-                  left: point.x - 20,
-                }
-              ]}
-            >
-              <Text style={styles.chartDayText}>{point.day}</Text>
-            </View>
-          ))}
-        </View>
-      </View>
-
-      {/* By Category Section */}
-      {Object.keys(categoryTotals).length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>By Category</Text>
-          {Object.entries(categoryTotals).map(([category, total]: any) => {
-            const percentage = totalSpent > 0 ? (total / totalSpent) * 100 : 0;
-            return (
-              <View key={category} style={styles.categoryRow}>
-                <View style={styles.categoryInfoLeft}>
-                  <View style={styles.categoryIconCircle}>
-                    <Text style={styles.categoryIcon}>{CATEGORY_ICONS[category] || '📦'}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.categoryName}>{category}</Text>
-                    <View style={styles.categoryProgressBarBg}>
-                      <View style={[styles.categoryProgressBarFill, { width: `${percentage}%` }]} />
+        {/* By Category Section */}
+        {Object.keys(categoryTotals).length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>By Category</Text>
+            {Object.entries(categoryTotals).map(([category, total]: any) => {
+              const percentage = totalSpent > 0 ? (total / totalSpent) * 100 : 0;
+              return (
+                <View key={category} style={styles.categoryRow}>
+                  <View style={styles.categoryInfoLeft}>
+                    <View style={styles.categoryIconCircle}>
+                      <Text style={styles.categoryIcon}>{CATEGORY_ICONS[category] || '📦'}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.categoryName}>{category}</Text>
+                      <View style={styles.categoryProgressBarBg}>
+                        <View style={[styles.categoryProgressBarFill, { width: `${percentage}%` }]} />
+                      </View>
                     </View>
                   </View>
+                  <View style={styles.categoryInfoRight}>
+                    <Text style={styles.categoryAmount}>GHS {total.toFixed(2)}</Text>
+                    <Text style={styles.categoryPercentText}>{percentage.toFixed(0)}%</Text>
+                  </View>
                 </View>
-                <View style={styles.categoryInfoRight}>
-                  <Text style={styles.categoryAmount}>GHS {total.toFixed(2)}</Text>
-                  <Text style={styles.categoryPercentText}>{percentage.toFixed(0)}%</Text>
-                </View>
-              </View>
-            );
-          })}
-        </View>
-      )}
-
-      {/* Recent Expenses Section */}
-      {recentExpenses.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recent Expenses</Text>
-          {recentExpenses.map((expense) => (
-            <View key={expense.id} style={styles.expenseRow}>
-              <View style={[styles.expenseLeft, { flex: 1, marginRight: 12 }]}>
-                <View style={styles.expenseIconCircle}>
-                  <Text style={styles.expenseIcon}>{CATEGORY_ICONS[expense.category] || '📦'}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.expenseName} numberOfLines={1}>
-                    {expense.description || expense.category}
-                  </Text>
-                  <Text style={styles.expenseDate}>{expense.date}</Text>
-                </View>
-              </View>
-              <Text style={styles.expenseAmount}>
-                -GHS {parseFloat(expense.amount).toFixed(2)}
-              </Text>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {/* Empty State Fallback */}
-      {expenses.length === 0 && (
-        <View style={styles.emptyState}>
-          <View style={styles.emptyIconCircle}>
-            <Text style={styles.emptyIcon}>💰</Text>
+              );
+            })}
           </View>
-          <Text style={styles.emptyText}>No expenses yet</Text>
-          <Text style={styles.emptySubtext}>Tap the Add tab to record your first expense</Text>
-        </View>
-      )}
-    </ScrollView>
+        )}
+
+        {/* Recent Expenses Section */}
+        {recentExpenses.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Recent Expenses</Text>
+            {recentExpenses.map((expense) => (
+              <View key={expense.id} style={styles.expenseRow}>
+                <View style={[styles.expenseLeft, { flex: 1, marginRight: 12 }]}>
+                  <View style={styles.expenseIconCircle}>
+                    <Text style={styles.expenseIcon}>{CATEGORY_ICONS[expense.category] || '📦'}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.expenseName} numberOfLines={1}>
+                      {expense.description || expense.category}
+                    </Text>
+                    <Text style={styles.expenseDate}>{expense.date}</Text>
+                  </View>
+                </View>
+                <Text style={styles.expenseAmount}>
+                  -GHS {parseFloat(expense.amount).toFixed(2)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Upcoming Bills Section */}
+        {upcomingReminders.length > 0 && (() => {
+          const today = new Date().toISOString().split("T")[0];
+          const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0];
+          return (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Upcoming Bills 🔔</Text>
+              {upcomingReminders.map((reminder) => {
+                const isUrgent = reminder.dueDate === today || reminder.dueDate === tomorrow;
+                return (
+                  <View
+                    key={reminder.id}
+                    style={[styles.reminderCard, isUrgent && styles.reminderCardUrgent]}
+                  >
+                    <View style={styles.reminderIcon}>
+                      <Text style={{ fontSize: 18 }}>🔔</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.reminderTitle}>{reminder.title}</Text>
+                      {reminder.dueDate && (
+                        <Text style={styles.reminderDate}>Due: {reminder.dueDate}</Text>
+                      )}
+                    </View>
+                    {reminder.isPaid || reminder.paid ? (
+                      <View style={styles.paidBadge}>
+                        <Text style={styles.paidBadgeText}>Paid</Text>
+                      </View>
+                    ) : reminder.amount != null ? (
+                      <Text style={styles.reminderAmount}>
+                        GHS {parseFloat(reminder.amount).toFixed(2)}
+                      </Text>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          );
+        })()}
+
+        {/* Empty State Fallback */}
+        {expenses.length === 0 && (
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIconCircle}>
+              <Text style={styles.emptyIcon}>💰</Text>
+            </View>
+            <Text style={styles.emptyText}>No expenses yet</Text>
+            <Text style={styles.emptySubtext}>Start tracking your spending by adding your first expense</Text>
+            <TouchableOpacity
+              style={styles.emptyButton}
+              onPress={() => router.push("/(tabs)/add")}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.emptyButtonText}>Add Your First Expense</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Bottom padding so FAB or Tab doesn't cover last item */}
+        <View style={{ height: 80 }} />
+      </ScrollView>
+
+      {/* Floating "+" button */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setShowQuickAdd(true)}
+        activeOpacity={0.85}
+      >
+        <Text style={styles.fabText}>+</Text>
+      </TouchableOpacity>
+
+      {/* Quick Add Modal */}
+      <Modal
+        visible={showQuickAdd}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowQuickAdd(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowQuickAdd(false)}
+          />
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Quick Add Expense</Text>
+
+            {/* Amount */}
+            <TextInput
+              style={styles.amountInput}
+              value={quickAmount}
+              onChangeText={setQuickAmount}
+              placeholder="0.00"
+              placeholderTextColor="#8E9AA640"
+              keyboardType="decimal-pad"
+              autoFocus
+            />
+
+            {/* Category selector */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.categoryScroll}
+              contentContainerStyle={styles.categoryScrollContent}
+            >
+              {CATEGORIES.map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[
+                    styles.categoryChip,
+                    quickCategory === cat && styles.categoryChipActive,
+                  ]}
+                  onPress={() => setQuickCategory(cat)}
+                >
+                  <Text style={styles.categoryChipIcon}>{CATEGORY_ICONS[cat]}</Text>
+                  <Text style={[
+                    styles.categoryChipText,
+                    quickCategory === cat && styles.categoryChipTextActive,
+                  ]}>
+                    {cat}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            {/* Description */}
+            <TextInput
+              style={styles.descriptionInput}
+              value={quickDescription}
+              onChangeText={setQuickDescription}
+              placeholder="Description (optional)"
+              placeholderTextColor="#8E9AA680"
+            />
+
+            {/* Buttons */}
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => {
+                  setShowQuickAdd(false);
+                  setQuickAmount("");
+                  setQuickCategory("Food");
+                  setQuickDescription("");
+                }}
+              >
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.addBtn, savingExpense && { opacity: 0.7 }]}
+                onPress={handleQuickAdd}
+                disabled={savingExpense}
+              >
+                {savingExpense ? (
+                  <ActivityIndicator color="#ffffff" size="small" />
+                ) : (
+                  <Text style={styles.addBtnText}>Add Expense</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    flex: 1,
+    backgroundColor: '#F2F4F7',
+    position: 'relative'
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F2F4F7', // Soft light gray backdrop
+    backgroundColor: '#F2F4F7',
   },
   centered: {
     flex: 1,
@@ -460,7 +729,7 @@ const styles = StyleSheet.create({
     color: '#111111',
   },
   expensesCard: {
-    backgroundColor: '#ffffff', // Card wrapper (white background)
+    backgroundColor: '#ffffff',
     borderRadius: 28,
     padding: 24,
     borderWidth: 1,
@@ -576,7 +845,7 @@ const styles = StyleSheet.create({
   progressBar: {
     height: '100%',
     borderRadius: 4,
-    backgroundColor: '#8B5CF6', // Purple/Violet progress
+    backgroundColor: '#8B5CF6',
   },
   budgetStatsRow: {
     flexDirection: 'row',
@@ -594,7 +863,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   chartCard: {
-    backgroundColor: '#ffffff', // Card wrapper (white background)
+    backgroundColor: '#ffffff',
     borderRadius: 28,
     padding: 24,
     borderWidth: 1,
@@ -783,7 +1052,7 @@ const styles = StyleSheet.create({
   expenseAmount: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#FF3B30', // soft red for transaction spends
+    color: '#FF3B30',
   },
   emptyState: {
     alignItems: 'center',
@@ -812,6 +1081,18 @@ const styles = StyleSheet.create({
     color: '#8E9AA6',
     textAlign: 'center',
     paddingHorizontal: 24,
+    marginBottom: 16,
+  },
+  emptyButton: {
+    backgroundColor: '#111111',
+    borderRadius: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  emptyButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   errorIcon: {
     fontSize: 48,
@@ -860,5 +1141,223 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#111111',
+  },
+  // Upcoming reminders styles
+  reminderCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 20,
+    padding: 14,
+    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#EAEBEF",
+  },
+  reminderCardUrgent: {
+    borderColor: "#FF9500",
+  },
+  reminderIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#FFF5EB",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  reminderTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#111111",
+  },
+  reminderDate: {
+    fontSize: 12,
+    color: "#8E9AA6",
+    marginTop: 2,
+  },
+  reminderAmount: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#111111",
+  },
+  paidBadge: {
+    backgroundColor: "#F2F4F7",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  paidBadgeText: {
+    fontSize: 12,
+    color: "#8E9AA6",
+    fontWeight: "600",
+  },
+  // Alert Section styles
+  alertsSection: {
+    marginBottom: 16,
+    gap: 8,
+  },
+  alertCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    gap: 10,
+  },
+  alertCardOver: {
+    backgroundColor: "#FFEBEB",
+    borderColor: "#FF3B30",
+  },
+  alertCardNear: {
+    backgroundColor: "#FFF5EB",
+    borderColor: "#FF9500",
+  },
+  alertIcon: {
+    fontSize: 20,
+  },
+  alertTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  alertTitleOver: {
+    color: "#FF3B30",
+  },
+  alertTitleNear: {
+    color: "#FF9500",
+  },
+  alertSub: {
+    fontSize: 12,
+    color: "#8E9AA6",
+  },
+  // FAB
+  fab: {
+    position: "absolute",
+    bottom: 24,
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#111111",
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 5,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    zIndex: 99,
+  },
+  fabText: {
+    fontSize: 28,
+    color: "#ffffff",
+    fontWeight: "bold",
+    lineHeight: 32,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+  modalCard: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 24,
+    paddingBottom: 40,
+    borderWidth: 1,
+    borderColor: "#EAEBEF",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#111111",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  amountInput: {
+    fontSize: 40,
+    fontWeight: "bold",
+    color: "#111111",
+    textAlign: "center",
+    paddingVertical: 12,
+    marginBottom: 20,
+    borderBottomWidth: 1.5,
+    borderBottomColor: "#EAEBEF",
+  },
+  categoryScroll: {
+    marginBottom: 20,
+  },
+  categoryScrollContent: {
+    gap: 8,
+    paddingHorizontal: 2,
+  },
+  categoryChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    backgroundColor: "#F8F9FA",
+    borderWidth: 1,
+    borderColor: "#EAEBEF",
+  },
+  categoryChipActive: {
+    backgroundColor: "#111111",
+    borderColor: "#111111",
+  },
+  categoryChipIcon: { fontSize: 16 },
+  categoryChipText: {
+    fontSize: 13,
+    color: "#8E9AA6",
+    fontWeight: "500",
+  },
+  categoryChipTextActive: {
+    color: "#ffffff",
+    fontWeight: "700",
+  },
+  descriptionInput: {
+    backgroundColor: "#F8F9FA",
+    borderRadius: 16,
+    padding: 16,
+    fontSize: 14,
+    color: "#111111",
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: "#EAEBEF",
+  },
+  modalButtons: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "#EAEBEF",
+    alignItems: "center",
+  },
+  cancelBtnText: {
+    fontSize: 15,
+    color: "#8E9AA6",
+    fontWeight: "600",
+  },
+  addBtn: {
+    flex: 2,
+    paddingVertical: 14,
+    borderRadius: 24,
+    backgroundColor: "#111111",
+    alignItems: "center",
+  },
+  addBtnText: {
+    fontSize: 15,
+    color: "#ffffff",
+    fontWeight: "bold",
   },
 });
