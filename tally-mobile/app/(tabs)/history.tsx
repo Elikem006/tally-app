@@ -62,7 +62,10 @@ export default function HistoryScreen() {
     try {
       const userId = getUserId();
       const response = await expenseAPI.getCombinedHistory(userId);
-      setExpenses(response.data);
+      const sorted = [...response.data].sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+      setExpenses(sorted);
     } catch (error) {
       Alert.alert("Error", "Failed to load expenses");
     } finally {
