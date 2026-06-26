@@ -96,7 +96,7 @@ export default function HomeScreen() {
     try {
       const userId = getUserId();
       const [expensesRes, budgetsRes] = await Promise.all([
-        expenseAPI.getUserExpenses(userId),
+        expenseAPI.getCombinedHistory(userId),
         budgetAPI.getUserBudgets(userId)
       ]);
       setExpenses(expensesRes.data || []);
@@ -580,24 +580,36 @@ export default function HomeScreen() {
         {recentExpenses.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Recent Expenses</Text>
-            {recentExpenses.map((expense) => (
-              <View key={expense.id} style={styles.expenseRow}>
-                <View style={[styles.expenseLeft, { flex: 1, marginRight: 12 }]}>
-                  <View style={styles.expenseIconCircle}>
-                    <Text style={styles.expenseIcon}>{CATEGORY_ICONS[expense.category] || '📦'}</Text>
+            {recentExpenses.map((expense) => {
+              const isShared = expense.isShared || false;
+              return (
+                <View key={expense.id} style={styles.expenseRow}>
+                  <View style={[styles.expenseLeft, { flex: 1, marginRight: 12 }]}>
+                    <View style={styles.expenseIconCircle}>
+                      <Text style={styles.expenseIcon}>
+                        {CATEGORY_ICONS[isShared ? 'Other' : expense.category] || '📦'}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={styles.descRow}>
+                        <Text style={styles.expenseName} numberOfLines={1}>
+                          {expense.description || expense.category}
+                        </Text>
+                        {isShared && (
+                          <View style={styles.sharedBadge}>
+                            <Text style={styles.sharedBadgeText}>Shared</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.expenseDate}>{expense.date}</Text>
+                    </View>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.expenseName} numberOfLines={1}>
-                      {expense.description || expense.category}
-                    </Text>
-                    <Text style={styles.expenseDate}>{expense.date}</Text>
-                  </View>
+                  <Text style={styles.expenseAmount}>
+                    -GHS {parseFloat(expense.amount).toFixed(2)}
+                  </Text>
                 </View>
-                <Text style={styles.expenseAmount}>
-                  -GHS {parseFloat(expense.amount).toFixed(2)}
-                </Text>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
 
@@ -1469,5 +1481,24 @@ const styles = StyleSheet.create({
   },
   timelineMiniTextActive: {
     color: '#ffffff',
+  },
+  descRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 3,
+  },
+  sharedBadge: {
+    backgroundColor: "#8B5CF612",
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderWidth: 1,
+    borderColor: "#8B5CF630",
+  },
+  sharedBadgeText: {
+    fontSize: 10,
+    color: "#8B5CF6",
+    fontWeight: "600",
   },
 });
