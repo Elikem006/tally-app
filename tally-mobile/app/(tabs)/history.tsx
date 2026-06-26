@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
+  TextInput,
 } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import { expenseAPI } from "../../services/api";
@@ -49,6 +50,7 @@ export default function HistoryScreen() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useFocusEffect(
     useCallback(() => {
@@ -94,10 +96,20 @@ export default function HistoryScreen() {
     );
   }
 
-  const filteredExpenses = useMemo(() => {
+  const monthFilteredExpenses = useMemo(() => {
     if (activeFilter === "all") return expenses;
     return expenses.filter((e) => e.date && e.date.startsWith(activeFilter));
   }, [expenses, activeFilter]);
+
+  const filteredExpenses = useMemo(() => {
+    if (searchQuery === "") return monthFilteredExpenses;
+    const q = searchQuery.toLowerCase();
+    return monthFilteredExpenses.filter(
+      (e) =>
+        (e.description && e.description.toLowerCase().includes(q)) ||
+        e.category.toLowerCase().includes(q),
+    );
+  }, [monthFilteredExpenses, searchQuery]);
 
   const totalSpent = filteredExpenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
 
@@ -129,11 +141,6 @@ export default function HistoryScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.totalCard}>
-        <Text style={styles.totalLabel}>Total Spent</Text>
-        <Text style={styles.totalAmount}>GHS {totalSpent.toFixed(2)}</Text>
-      </View>
-
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -152,7 +159,37 @@ export default function HistoryScreen() {
         ))}
       </ScrollView>
 
-      {filteredExpenses.length === 0 && (
+      {/* Search bar */}
+      <View style={styles.searchContainer}>
+        <Text style={styles.searchIcon}>🔍</Text>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search expenses..."
+          placeholderTextColor="#8890A0"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        {searchQuery !== "" && (
+          <TouchableOpacity onPress={() => setSearchQuery("")}>
+            <Text style={styles.clearBtn}>✕</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <View style={styles.totalCard}>
+        <Text style={styles.totalLabel}>Total Spent</Text>
+        <Text style={styles.totalAmount}>GHS {totalSpent.toFixed(2)}</Text>
+      </View>
+
+      {filteredExpenses.length === 0 && searchQuery !== "" && (
+        <View style={styles.filteredEmpty}>
+          <Text style={[styles.emptySubtext, { textAlign: "center" }]}>
+            No expenses match your search
+          </Text>
+        </View>
+      )}
+
+      {filteredExpenses.length === 0 && searchQuery === "" && monthFilteredExpenses.length === 0 && (
         <View style={styles.filteredEmpty}>
           <Text style={styles.emptyIcon}>🔍</Text>
           <Text style={styles.emptyText}>No expenses this month</Text>
@@ -367,5 +404,31 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#ffffff20",
     paddingBottom: 16,
+  },
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1A1F2E",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#ffffff15",
+  },
+  searchIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    color: "#ffffff",
+    fontSize: 14,
+    paddingVertical: 12,
+  },
+  clearBtn: {
+    fontSize: 16,
+    color: "#8890A0",
+    padding: 4,
   },
 });
