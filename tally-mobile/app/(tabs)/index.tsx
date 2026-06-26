@@ -373,21 +373,31 @@ export default function HomeScreen() {
             <Text style={styles.welcomeText}>Welcome back 👋</Text>
             <Text style={styles.greetingText}>Good day, {getUserName()}</Text>
           </View>
-          <TouchableOpacity
-            style={styles.avatarButton}
-            onPress={() => router.push('/(tabs)/profile')}
-            activeOpacity={0.8}
-          >
-            {profileImage ? (
-              <Image source={{ uri: profileImage }} style={styles.avatarImage} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarText}>
-                  {getUserName().charAt(0).toUpperCase()}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          <View style={styles.headerRightActions}>
+            <TouchableOpacity
+              style={styles.headerActionButton}
+              onPress={() => router.push('/(tabs)/reminders')}
+              activeOpacity={0.8}
+            >
+              <Feather name="bell" size={20} color="#111111" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.avatarButton}
+              onPress={() => router.push('/(tabs)/profile')}
+              activeOpacity={0.8}
+            >
+              {profileImage ? (
+                <Image source={{ uri: profileImage }} style={styles.avatarImage} />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <Text style={styles.avatarText}>
+                    {getUserName().charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Budget Alerts */}
@@ -1209,6 +1219,21 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 15,
     fontWeight: 'bold',
+  },
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerActionButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: '#EAEBEF',
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   avatarButton: {
     width: 44,
