@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
+  TextInput,
 } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import { expenseAPI } from "../../services/api";
@@ -31,6 +32,7 @@ const CATEGORY_COLORS: { [key: string]: string } = {
   Entertainment: "#F7A84F",
   Utilities: "#E05C5C",
   Other: "#8890A0",
+  Shared: "#A78BFA",
 };
 
 const CATEGORY_ICONS: { [key: string]: string } = {
@@ -39,14 +41,27 @@ const CATEGORY_ICONS: { [key: string]: string } = {
   Entertainment: "🎮",
   Utilities: "💡",
   Other: "📦",
+  Shared: "👥",
 };
 
 const MONTH_FILTERS = getMonthFilters();
+
+function parseTagsFromDescription(description: string | null | undefined): {
+  cleanDescription: string;
+  tags: string[];
+} {
+  if (!description) return { cleanDescription: "", tags: [] };
+  const words = description.split(" ");
+  const tags = words.filter((w) => w.startsWith("#"));
+  const cleanDescription = words.filter((w) => !w.startsWith("#")).join(" ").trim();
+  return { cleanDescription, tags };
+}
 
 export default function HistoryScreen() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useFocusEffect(
     useCallback(() => {
@@ -57,8 +72,11 @@ export default function HistoryScreen() {
   async function fetchExpenses() {
     try {
       const userId = getUserId();
-      const response = await expenseAPI.getUserExpenses(userId);
-      setExpenses(response.data);
+      const response = await expenseAPI.getCombinedHistory(userId);
+      const sorted = [...response.data].sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+      setExpenses(sorted);
     } catch (error) {
       Alert.alert("Error", "Failed to load expenses");
     } finally {
@@ -66,7 +84,11 @@ export default function HistoryScreen() {
     }
   }
 
-  async function handleDelete(expenseId: string) {
+  async function handleLongPress(item: any) {
+    if (item.type === "shared") {
+      Alert.alert("Shared Expense", "Shared expenses can only be deleted from the group screen.");
+      return;
+    }
     Alert.alert(
       "Delete Expense",
       "Are you sure you want to delete this expense?",
@@ -77,8 +99,8 @@ export default function HistoryScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              await expenseAPI.deleteExpense(expenseId);
-              setExpenses(expenses.filter((e) => e.id !== expenseId));
+              await expenseAPI.deleteExpense(String(item.id));
+              setExpenses(expenses.filter((e) => e.id !== item.id));
             } catch (error) {
               Alert.alert("Error", "Failed to delete expense");
             }
@@ -88,10 +110,20 @@ export default function HistoryScreen() {
     );
   }
 
-  const filteredExpenses = useMemo(() => {
+  const monthFilteredExpenses = useMemo(() => {
     if (activeFilter === "all") return expenses;
     return expenses.filter((e) => e.date && e.date.startsWith(activeFilter));
   }, [expenses, activeFilter]);
+
+  const filteredExpenses = useMemo(() => {
+    if (searchQuery === "") return monthFilteredExpenses;
+    const q = searchQuery.toLowerCase();
+    return monthFilteredExpenses.filter(
+      (e) =>
+        (e.description && e.description.toLowerCase().includes(q)) ||
+        e.category.toLowerCase().includes(q),
+    );
+  }, [monthFilteredExpenses, searchQuery]);
 
   const totalSpent = filteredExpenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
 
@@ -123,11 +155,6 @@ export default function HistoryScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.totalCard}>
-        <Text style={styles.totalLabel}>Total Spent</Text>
-        <Text style={styles.totalAmount}>GHS {totalSpent.toFixed(2)}</Text>
-      </View>
-
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -146,7 +173,37 @@ export default function HistoryScreen() {
         ))}
       </ScrollView>
 
-      {filteredExpenses.length === 0 && (
+      {/* Search bar */}
+      <View style={styles.searchContainer}>
+        <Text style={styles.searchIcon}>🔍</Text>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search expenses..."
+          placeholderTextColor="#8890A0"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        {searchQuery !== "" && (
+          <TouchableOpacity onPress={() => setSearchQuery("")}>
+            <Text style={styles.clearBtn}>✕</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <View style={styles.totalCard}>
+        <Text style={styles.totalLabel}>Total Spent</Text>
+        <Text style={styles.totalAmount}>GHS {totalSpent.toFixed(2)}</Text>
+      </View>
+
+      {filteredExpenses.length === 0 && searchQuery !== "" && (
+        <View style={styles.filteredEmpty}>
+          <Text style={[styles.emptySubtext, { textAlign: "center" }]}>
+            No expenses match your search
+          </Text>
+        </View>
+      )}
+
+      {filteredExpenses.length === 0 && searchQuery === "" && monthFilteredExpenses.length === 0 && (
         <View style={styles.filteredEmpty}>
           <Text style={styles.emptyIcon}>🔍</Text>
           <Text style={styles.emptyText}>No expenses this month</Text>
@@ -160,41 +217,52 @@ export default function HistoryScreen() {
         data={filteredExpenses}
         keyExtractor={(item) => String(item.id)}
         contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.expenseCard}
-            onLongPress={() => handleDelete(String(item.id))}
-          >
-            <View style={styles.expenseLeft}>
-              <View
-                style={[
-                  styles.iconBox,
-                  { backgroundColor: CATEGORY_COLORS[item.category] + "20" },
-                ]}
-              >
-                <Text style={styles.icon}>
-                  {CATEGORY_ICONS[item.category] || "📦"}
-                </Text>
-              </View>
-              <View>
-                <Text style={styles.expenseDescription}>
-                  {item.description || item.category}
-                </Text>
-                <Text style={styles.expenseCategory}>
-                  {item.category} • {item.date}
-                </Text>
-              </View>
-            </View>
-            <Text
-              style={[
-                styles.expenseAmount,
-                { color: CATEGORY_COLORS[item.category] },
-              ]}
+        renderItem={({ item }) => {
+          const isShared = item.type === "shared";
+          const color = CATEGORY_COLORS[item.category] || "#8890A0";
+          const { cleanDescription, tags } = parseTagsFromDescription(item.description);
+          return (
+            <TouchableOpacity
+              style={[styles.expenseCard, isShared && styles.sharedCard]}
+              onLongPress={() => handleLongPress(item)}
             >
-              GHS {parseFloat(item.amount).toFixed(2)}
-            </Text>
-          </TouchableOpacity>
-        )}
+              <View style={styles.expenseLeft}>
+                <View style={[styles.iconBox, { backgroundColor: color + "20" }]}>
+                  <Text style={styles.icon}>
+                    {CATEGORY_ICONS[item.category] || "📦"}
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.descRow}>
+                    <Text style={styles.expenseDescription}>
+                      {cleanDescription || item.category}
+                    </Text>
+                    {isShared && (
+                      <View style={styles.sharedBadge}>
+                        <Text style={styles.sharedBadgeText}>Shared</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.expenseCategory}>
+                    {item.category} • {item.date}
+                  </Text>
+                  {tags.length > 0 && (
+                    <View style={styles.tagsContainer}>
+                      {tags.map((tag) => (
+                        <View key={tag} style={styles.tagPill}>
+                          <Text style={styles.tagText}>{tag}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              </View>
+              <Text style={[styles.expenseAmount, { color }]}>
+                GHS {parseFloat(item.amount).toFixed(2)}
+              </Text>
+            </TouchableOpacity>
+          );
+        }}
       />
       <Text style={styles.hint}>Long press an expense to delete it</Text>
     </View>
@@ -320,11 +388,32 @@ const styles = StyleSheet.create({
   icon: {
     fontSize: 20,
   },
+  sharedCard: {
+    borderColor: "#A78BFA30",
+  },
+  descRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 3,
+  },
+  sharedBadge: {
+    backgroundColor: "#00C89620",
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderWidth: 1,
+    borderColor: "#00C89660",
+  },
+  sharedBadgeText: {
+    fontSize: 10,
+    color: "#00C896",
+    fontWeight: "600",
+  },
   expenseDescription: {
     fontSize: 14,
     fontWeight: "600",
     color: "#ffffff",
-    marginBottom: 3,
   },
   expenseCategory: {
     fontSize: 12,
@@ -339,5 +428,52 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#ffffff20",
     paddingBottom: 16,
+  },
+  tagsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 6,
+  },
+  tagPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#00C89620",
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: "#00C896",
+  },
+  tagText: {
+    fontSize: 11,
+    color: "#00C896",
+    fontWeight: "500",
+  },
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1A1F2E",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#ffffff15",
+  },
+  searchIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    color: "#ffffff",
+    fontSize: 14,
+    paddingVertical: 12,
+  },
+  clearBtn: {
+    fontSize: 16,
+    color: "#8890A0",
+    padding: 4,
   },
 });

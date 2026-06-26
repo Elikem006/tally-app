@@ -15,6 +15,7 @@ import { getUserId } from "../../services/storage";
 export default function GroupsScreen() {
   const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [groupSummaries, setGroupSummaries] = useState<{ [key: number]: { total: number; memberCount: number } }>({});
 
   useFocusEffect(
     useCallback(() => {
@@ -27,6 +28,26 @@ export default function GroupsScreen() {
       const userId = getUserId();
       const response = await groupAPI.getUserGroups(userId);
       setGroups(response.data);
+
+      // Fetch details for each group to get totals and member counts
+      for (const group of response.data) {
+        try {
+          const detailRes = await groupAPI.getGroupDetails(String(group.id));
+          const details = detailRes.data;
+          const total = (details.expenses || []).reduce(
+            (sum: number, e: any) => sum + parseFloat(e.amount),
+            0,
+          );
+          const summary = { total, memberCount: (details.members || []).length };
+          console.log(`Group ${group.id} summary:`, summary);
+          setGroupSummaries((prev) => ({
+            ...prev,
+            [String(group.id)]: summary,
+          }));
+        } catch {
+          // silently skip — card will show "Loading..."
+        }
+      }
     } catch (error) {
       console.log("Error fetching groups:", error);
     } finally {
@@ -64,6 +85,7 @@ export default function GroupsScreen() {
             data={groups}
             keyExtractor={(item) => String(item.id)}
             contentContainerStyle={styles.list}
+            extraData={groupSummaries}
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.groupCard}
@@ -80,7 +102,18 @@ export default function GroupsScreen() {
                 </View>
                 <View style={styles.groupInfo}>
                   <Text style={styles.groupName}>{item.name}</Text>
-                  <Text style={styles.groupSub}>Tap to view details</Text>
+                  {groupSummaries[String(item.id)] ? (
+                    <View style={styles.groupMeta}>
+                      <Text style={styles.groupMetaText}>
+                        👥 {groupSummaries[String(item.id)].memberCount} members
+                      </Text>
+                      <Text style={styles.groupMetaAmount}>
+                        GHS {groupSummaries[String(item.id)].total.toFixed(2)} total
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.groupSub}>Loading...</Text>
+                  )}
                 </View>
                 <Text style={styles.arrow}>›</Text>
               </TouchableOpacity>
@@ -166,6 +199,20 @@ const styles = StyleSheet.create({
   groupSub: {
     fontSize: 12,
     color: "#8890A0",
+  },
+  groupMeta: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 4,
+  },
+  groupMetaText: {
+    fontSize: 12,
+    color: "#8890A0",
+  },
+  groupMetaAmount: {
+    fontSize: 12,
+    color: "#00C896",
+    fontWeight: "600",
   },
   arrow: {
     fontSize: 22,

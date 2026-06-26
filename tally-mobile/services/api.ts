@@ -32,6 +32,16 @@ export const expenseAPI = {
 
   deleteExpense: (expenseId: string) =>
     api.delete(`/api/expenses/${expenseId}`),
+
+  getMonthlyReport: (userId: string, month?: number, year?: number) => {
+    const params: Record<string, number> = {};
+    if (month !== undefined) params.month = month;
+    if (year !== undefined) params.year = year;
+    return api.get(`/api/expenses/user/${userId}/report`, { params });
+  },
+
+  getCombinedHistory: (userId: string) =>
+    api.get(`/api/expenses/user/${userId}/history`),
 };
 
 export const budgetAPI = {
@@ -45,6 +55,14 @@ export const budgetAPI = {
 
   deleteBudget: (userId: string, category: string) =>
     api.delete(`/api/budgets/user/${userId}/${category}`),
+};
+
+export const reportAPI = {
+  getMonthlyReport: (userId: string) =>
+    api.get(`/api/expenses/user/${userId}/report`),
+
+  getCombinedHistory: (userId: string) =>
+    api.get(`/api/expenses/user/${userId}/history`),
 };
 
 export const groupAPI = {
@@ -76,6 +94,37 @@ export const groupAPI = {
     api.post(`/api/groups/${groupId}/settle`, { userId }),
 
   deleteGroup: (groupId: string) => api.delete(`/api/groups/${groupId}`),
+};
+
+export const remindersAPI = {
+  createReminder: (
+    userId: string,
+    title: string,
+    amount: string,
+    dueDate: string,
+    isRecurring: boolean,
+    recurrenceType: string,
+  ) =>
+    api.post("/api/reminders", {
+      userId,
+      title,
+      amount,
+      dueDate,
+      isRecurring: String(isRecurring),
+      recurrenceType,
+    }),
+
+  getUserReminders: (userId: string) =>
+    api.get(`/api/reminders/user/${userId}`),
+
+  getUpcomingReminders: (userId: string) =>
+    api.get(`/api/reminders/user/${userId}/upcoming`),
+
+  markAsPaid: (reminderId: string) =>
+    api.put(`/api/reminders/${reminderId}/paid`, {}),
+
+  deleteReminder: (reminderId: string) =>
+    api.delete(`/api/reminders/${reminderId}`),
 };
 
 export default api;

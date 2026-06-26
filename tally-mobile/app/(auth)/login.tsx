@@ -44,7 +44,13 @@ export default function LoginScreen() {
       router.replace("/(tabs)");
     } catch (error: any) {
       setLoading(false);
-      Alert.alert("Login Failed", String(error));
+      const message =
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        (error.message === "Network Error"
+          ? "Cannot reach server. Check that the backend is running and the IP in api.ts is correct."
+          : error.message || "Something went wrong");
+      Alert.alert("Login Failed", message);
     }
   }
   return (
