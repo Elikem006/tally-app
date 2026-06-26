@@ -731,7 +731,7 @@ const styles = StyleSheet.create({
     flexDirection: "row", 
     alignItems: "center", 
     gap: 10, 
-    width: 120 
+    width: 110 
   },
   breakdownEmoji: { 
     fontSize: 16 
@@ -743,15 +743,17 @@ const styles = StyleSheet.create({
   },
   breakdownRight: { 
     flex: 1, 
-    marginLeft: 10, 
-    gap: 4 
+    flexDirection: "row",
+    alignItems: "center",
+    marginLeft: 10,
   },
   barTrack: {
+    flex: 1,
     height: 8,
     backgroundColor: "#F2F4F7",
     borderRadius: 4,
     overflow: "hidden",
-    marginBottom: 2,
+    marginRight: 10,
   },
   barFill: { 
     height: "100%", 
@@ -759,10 +761,11 @@ const styles = StyleSheet.create({
     borderRadius: 4 
   },
   breakdownAmount: { 
-    fontSize: 12, 
-    color: "#8E9AA6", 
-    fontWeight: "600",
-    textAlign: "right" 
+    fontSize: 13, 
+    color: "#111111", 
+    fontWeight: "bold",
+    textAlign: "right",
+    minWidth: 70,
   },
   perfRow: { 
     marginBottom: 18 
