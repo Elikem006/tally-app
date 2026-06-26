@@ -85,9 +85,11 @@ public class ExpenseController {
     }
 
     @GetMapping("/user/{userId}/report")
-    public ResponseEntity<?> getMonthlyReport(@PathVariable Long userId) {
+    public ResponseEntity<?> getMonthlyReport(@PathVariable Long userId,
+                                              @RequestParam(required = false) Integer month,
+                                              @RequestParam(required = false) Integer year) {
         try {
-            Map<String, Object> report = expenseService.getMonthlyReport(userId);
+            Map<String, Object> report = expenseService.getMonthlyReport(userId, month, year);
             return ResponseEntity.ok(report);
         } catch (Exception e) {
             return ResponseEntity.badRequest()

@@ -33,8 +33,12 @@ export const expenseAPI = {
   deleteExpense: (expenseId: string) =>
     api.delete(`/api/expenses/${expenseId}`),
 
-  getMonthlyReport: (userId: string) =>
-    api.get(`/api/expenses/user/${userId}/report`),
+  getMonthlyReport: (userId: string, month?: number, year?: number) => {
+    const params: Record<string, number> = {};
+    if (month !== undefined) params.month = month;
+    if (year !== undefined) params.year = year;
+    return api.get(`/api/expenses/user/${userId}/report`, { params });
+  },
 
   getCombinedHistory: (userId: string) =>
     api.get(`/api/expenses/user/${userId}/history`),

@@ -54,14 +54,15 @@ public class ExpenseService {
         expenseRepository.deleteById(expenseId);
     }
 
-    public Map<String, Object> getMonthlyReport(Long userId) {
+    public Map<String, Object> getMonthlyReport(Long userId, Integer month, Integer year) {
         List<Expense> allExpenses = expenseRepository.findByUserIdOrderByDateDesc(userId);
 
         LocalDate now = LocalDate.now();
-        int currentYear = now.getYear();
-        int currentMonth = now.getMonthValue();
-        int prevYear = now.minusMonths(1).getYear();
-        int prevMonth = now.minusMonths(1).getMonthValue();
+        int currentYear  = (year  != null) ? year  : now.getYear();
+        int currentMonth = (month != null) ? month : now.getMonthValue();
+        LocalDate anchor = LocalDate.of(currentYear, currentMonth, 1);
+        int prevYear  = anchor.minusMonths(1).getYear();
+        int prevMonth = anchor.minusMonths(1).getMonthValue();
 
         // Filter expenses by month
         List<Expense> currentMonthExpenses = allExpenses.stream()

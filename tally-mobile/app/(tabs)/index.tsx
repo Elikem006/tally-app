@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { useFocusEffect, router } from "expo-router";
-import { expenseAPI, remindersAPI } from "../../services/api";
+import { expenseAPI, remindersAPI, budgetAPI } from "../../services/api";
 import { getUserId, getUserName } from "../../services/storage";
 
 const CATEGORY_ICONS: { [key: string]: string } = {
@@ -22,6 +22,7 @@ const CATEGORY_ICONS: { [key: string]: string } = {
 export default function HomeScreen() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [upcomingReminders, setUpcomingReminders] = useState<any[]>([]);
+  const [budgetAlerts, setBudgetAlerts] = useState<{ category: string; isOverBudget: boolean; isNearLimit: boolean; percentage: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState("");
 
@@ -51,6 +52,26 @@ export default function HomeScreen() {
     } catch (error) {
       console.log("Error fetching reminders:", error);
     }
+
+    // Fetch budget alerts independently
+    try {
+      const userId = getUserId();
+      console.log("Fetching budget summary for userId:", userId);
+      const budgetRes = await budgetAPI.getBudgetSummary(userId);
+      const summary = budgetRes.data;
+      const alerts = Object.entries(summary)
+        .filter(([, data]: any) => data.isOverBudget || data.isNearLimit)
+        .map(([category, data]: any) => ({
+          category,
+          isOverBudget: data.isOverBudget,
+          isNearLimit: data.isNearLimit,
+          percentage: data.percentage,
+        }));
+      console.log("Budget alerts:", alerts);
+      setBudgetAlerts(alerts);
+    } catch (error) {
+      console.log("Error fetching budget alerts:", error);
+    }
   }
 
   const totalSpent = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
@@ -70,6 +91,31 @@ export default function HomeScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {/* Budget Alerts */}
+      {budgetAlerts.length > 0 && (
+        <View style={styles.alertsSection}>
+          {budgetAlerts.map((alert) => (
+            <View
+              key={alert.category}
+              style={[
+                styles.alertCard,
+                alert.isOverBudget ? styles.alertCardOver : styles.alertCardNear,
+              ]}
+            >
+              <Text style={styles.alertIcon}>{alert.isOverBudget ? "🚨" : "⚠️"}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.alertTitle, { color: alert.isOverBudget ? "#E05C5C" : "#F7A84F" }]}>
+                  {alert.isOverBudget ? "Over budget" : "Near limit"} — {alert.category}
+                </Text>
+                <Text style={styles.alertSub}>
+                  {alert.percentage.toFixed(0)}% of your {alert.category} budget used
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
       <Text style={styles.greeting}>Good day, {userName} 👋</Text>
       <Text style={styles.subtitle}>Here's your spending summary</Text>
       <View style={styles.totalCard}>
@@ -305,5 +351,37 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#8890A0",
     fontWeight: "600",
+  },
+  alertsSection: {
+    marginBottom: 16,
+    gap: 8,
+  },
+  alertCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    gap: 10,
+  },
+  alertCardOver: {
+    backgroundColor: "#E05C5C15",
+    borderColor: "#E05C5C",
+  },
+  alertCardNear: {
+    backgroundColor: "#F7A84F15",
+    borderColor: "#F7A84F",
+  },
+  alertIcon: {
+    fontSize: 20,
+  },
+  alertTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  alertSub: {
+    fontSize: 12,
+    color: "#8890A0",
   },
 });
