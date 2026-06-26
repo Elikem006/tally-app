@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { useFocusEffect, router } from "expo-router";
-import { expenseAPI } from "../../services/api";
+import { expenseAPI, remindersAPI } from "../../services/api";
 import { getUserId, getUserName } from "../../services/storage";
 
 const CATEGORY_ICONS: { [key: string]: string } = {
@@ -21,6 +21,7 @@ const CATEGORY_ICONS: { [key: string]: string } = {
 
 export default function HomeScreen() {
   const [expenses, setExpenses] = useState<any[]>([]);
+  const [upcomingReminders, setUpcomingReminders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState("");
 
@@ -41,6 +42,14 @@ export default function HomeScreen() {
       console.log("Error fetching expenses:", error);
     } finally {
       setLoading(false);
+    }
+
+    // Fetch upcoming reminders independently — failure won't break the home screen
+    try {
+      const remindersResponse = await remindersAPI.getUpcomingReminders(getUserId());
+      setUpcomingReminders(remindersResponse.data);
+    } catch (error) {
+      console.log("Error fetching reminders:", error);
     }
   }
 
@@ -100,6 +109,44 @@ export default function HomeScreen() {
           ))}
         </View>
       )}
+      {upcomingReminders.length > 0 && (() => {
+        const today = new Date().toISOString().split("T")[0];
+        const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0];
+        return (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Upcoming Bills 🔔</Text>
+            {upcomingReminders.map((reminder) => {
+              const isUrgent = reminder.dueDate === today || reminder.dueDate === tomorrow;
+              return (
+                <View
+                  key={reminder.id}
+                  style={[styles.reminderCard, isUrgent && styles.reminderCardUrgent]}
+                >
+                  <View style={styles.reminderIcon}>
+                    <Text style={{ fontSize: 18 }}>🔔</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.reminderTitle}>{reminder.title}</Text>
+                    {reminder.dueDate && (
+                      <Text style={styles.reminderDate}>Due: {reminder.dueDate}</Text>
+                    )}
+                  </View>
+                  {reminder.isPaid ? (
+                    <View style={styles.paidBadge}>
+                      <Text style={styles.paidBadgeText}>Paid</Text>
+                    </View>
+                  ) : reminder.amount != null ? (
+                    <Text style={styles.reminderAmount}>
+                      GHS {parseFloat(reminder.amount).toFixed(2)}
+                    </Text>
+                  ) : null}
+                </View>
+              );
+            })}
+          </View>
+        );
+      })()}
+
       {expenses.length === 0 && (
         <View style={styles.emptyState}>
           <Text style={styles.emptyIcon}>💰</Text>
@@ -210,5 +257,53 @@ const styles = StyleSheet.create({
     color: "#000000",
     fontSize: 15,
     fontWeight: "bold",
+  },
+  reminderCard: {
+    backgroundColor: "#1A1F2E",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#ffffff10",
+  },
+  reminderCardUrgent: {
+    borderColor: "#F7A84F",
+  },
+  reminderIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#00C89620",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  reminderTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#ffffff",
+  },
+  reminderDate: {
+    fontSize: 12,
+    color: "#8890A0",
+    marginTop: 2,
+  },
+  reminderAmount: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#00C896",
+  },
+  paidBadge: {
+    backgroundColor: "#ffffff10",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  paidBadgeText: {
+    fontSize: 12,
+    color: "#8890A0",
+    fontWeight: "600",
   },
 });
