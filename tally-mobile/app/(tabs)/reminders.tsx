@@ -8,13 +8,47 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
-  ScrollView,
-  Modal,
 } from "react-native";
+import { Feather } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { remindersAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
 
+// Helper to check urgency (overdue or due within 2 days)
+const getUrgentStatus = (dueDateStr: string, isPaid: boolean): { urgent: boolean; label: string; color: string } | null => {
+  if (isPaid) return null;
+  if (!dueDateStr) return null;
+  try {
+    const parts = dueDateStr.split("-");
+    if (parts.length < 3) return null;
+    const dueYear = parseInt(parts[0]);
+    const dueMonth = parseInt(parts[1]) - 1;
+    const dueDay = parseInt(parts[2]);
+
+    const dueDateObj = new Date(dueYear, dueMonth, dueDay);
+    dueDateObj.setHours(0, 0, 0, 0);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const diffTime = dueDateObj.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      return { urgent: true, label: "Overdue", color: "#FF3B30" };
+    } else if (diffDays === 0) {
+      return { urgent: true, label: "Due Today", color: "#FF9500" };
+    } else if (diffDays <= 2) {
+      return { urgent: true, label: `Due in ${diffDays}d`, color: "#FF9500" };
+    }
+  } catch (e) {
+    // silent catch
+  }
+  return null;
+};
+
 export default function RemindersScreen() {
+  const insets = useSafeAreaInsets();
   const [reminders, setReminders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -33,7 +67,7 @@ export default function RemindersScreen() {
       setLoading(true);
       const userId = getUserId();
       const response = await remindersAPI.getUserReminders(userId);
-      setReminders(response.data);
+      setReminders(response.data || []);
     } catch (error) {
       Alert.alert("Error", "Failed to load reminders");
     } finally {
@@ -48,6 +82,12 @@ export default function RemindersScreen() {
     }
     if (!dueDate.trim()) {
       Alert.alert("Validation", "Due date is required (YYYY-MM-DD)");
+      return;
+    }
+    // Simple check for YYYY-MM-DD format
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(dueDate.trim())) {
+      Alert.alert("Validation", "Please enter due date in YYYY-MM-DD format");
       return;
     }
 
@@ -87,7 +127,7 @@ export default function RemindersScreen() {
   }
 
   async function handleDelete(reminderId: string) {
-    Alert.alert("Delete Reminder", "Are you sure?", [
+    Alert.alert("Delete Reminder", "Are you sure you want to delete this reminder?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
@@ -107,21 +147,22 @@ export default function RemindersScreen() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#00C896" />
+        <ActivityIndicator size="large" color="#111111" />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, 20) }]}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Bill Reminders</Text>
         <TouchableOpacity
           style={styles.addBtn}
           onPress={() => setShowAddForm(!showAddForm)}
+          activeOpacity={0.8}
         >
-          <Text style={styles.addBtnText}>{showAddForm ? "✕" : "+"}</Text>
+          <Feather name={showAddForm ? "x" : "plus"} size={20} color="#ffffff" />
         </TouchableOpacity>
       </View>
 
@@ -132,16 +173,16 @@ export default function RemindersScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="e.g. Rent, Electricity"
-            placeholderTextColor="#8890A0"
+            placeholder="Bill Title (e.g. Rent, Electricity)"
+            placeholderTextColor="#8E9AA6"
             value={title}
             onChangeText={setTitle}
           />
 
           <TextInput
             style={styles.input}
-            placeholder="Amount (optional)"
-            placeholderTextColor="#8890A0"
+            placeholder="Amount GHS (optional)"
+            placeholderTextColor="#8E9AA6"
             keyboardType="numeric"
             value={amount}
             onChangeText={setAmount}
@@ -149,21 +190,22 @@ export default function RemindersScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="Due date YYYY-MM-DD"
-            placeholderTextColor="#8890A0"
+            placeholder="Due Date (YYYY-MM-DD)"
+            placeholderTextColor="#8E9AA6"
             value={dueDate}
             onChangeText={setDueDate}
           />
 
           {/* Recurring toggle */}
           <View style={styles.toggleRow}>
-            <Text style={styles.toggleLabel}>Recurring?</Text>
+            <Text style={styles.toggleLabel}>Is this a monthly recurring bill?</Text>
             <TouchableOpacity
-              style={[styles.toggle, isRecurring && styles.toggleActive]}
+              style={[styles.toggleBtn, isRecurring && styles.toggleBtnActive]}
               onPress={() => setIsRecurring(!isRecurring)}
+              activeOpacity={0.8}
             >
-              <Text style={[styles.toggleText, isRecurring && styles.toggleTextActive]}>
-                {isRecurring ? "Monthly ✓" : "Off"}
+              <Text style={[styles.toggleBtnText, isRecurring && styles.toggleBtnTextActive]}>
+                {isRecurring ? "Monthly ✓" : "Once"}
               </Text>
             </TouchableOpacity>
           </View>
@@ -172,6 +214,7 @@ export default function RemindersScreen() {
             style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
             onPress={handleAddReminder}
             disabled={saving}
+            activeOpacity={0.8}
           >
             <Text style={styles.saveBtnText}>
               {saving ? "Saving…" : "Save Reminder"}
@@ -187,6 +230,7 @@ export default function RemindersScreen() {
               setDueDate("");
               setIsRecurring(false);
             }}
+            activeOpacity={0.8}
           >
             <Text style={styles.cancelBtnText}>Cancel</Text>
           </TouchableOpacity>
@@ -207,52 +251,85 @@ export default function RemindersScreen() {
           data={reminders}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.list}
-          renderItem={({ item }) => (
-            <View style={[styles.card, item.isPaid && styles.cardPaid]}>
-              <View style={styles.cardBody}>
-                {/* Left: info */}
-                <View style={styles.cardInfo}>
-                  <Text style={styles.reminderTitle}>{item.title}</Text>
-                  {item.dueDate && (
-                    <Text style={styles.reminderDue}>Due: {item.dueDate}</Text>
-                  )}
-                  {item.amount != null && (
-                    <Text style={styles.reminderAmount}>
-                      GHS {parseFloat(item.amount).toFixed(2)}
-                    </Text>
-                  )}
-                  {item.isRecurring && (
-                    <Text style={styles.recurringTag}>
-                      🔁 {item.recurrenceType || "Recurring"}
-                    </Text>
-                  )}
-                </View>
+          renderItem={({ item }) => {
+            const isPaid = item.isPaid || item.paid || false;
+            const urgentStatus = getUrgentStatus(item.dueDate, isPaid);
 
-                {/* Right: actions */}
-                <View style={styles.cardActions}>
-                  <TouchableOpacity
-                    style={styles.deleteBtn}
-                    onPress={() => handleDelete(String(item.id))}
-                  >
-                    <Text style={styles.deleteBtnText}>✕</Text>
-                  </TouchableOpacity>
+            return (
+              <View style={[styles.card, isPaid && styles.cardPaid]}>
+                <View style={styles.cardBody}>
+                  {/* Left Icon */}
+                  <View style={[styles.iconBox, isPaid && styles.iconBoxPaid]}>
+                    <Feather 
+                      name={isPaid ? "check-circle" : "file-text"} 
+                      size={20} 
+                      color={isPaid ? "#34C759" : "#111111"} 
+                    />
+                  </View>
 
-                  {item.isPaid ? (
-                    <View style={styles.paidBadge}>
-                      <Text style={styles.paidBadgeText}>Paid</Text>
+                  {/* Info details */}
+                  <View style={styles.cardInfo}>
+                    <View style={styles.titleRow}>
+                      <Text style={styles.reminderTitle} numberOfLines={1}>
+                        {item.title}
+                      </Text>
+                      {urgentStatus?.urgent && (
+                        <View style={[styles.urgentBadge, { backgroundColor: urgentStatus.color + "12", borderColor: urgentStatus.color + "30" }]}>
+                          <Text style={[styles.urgentBadgeText, { color: urgentStatus.color }]}>
+                            ⚠️ {urgentStatus.label}
+                          </Text>
+                        </View>
+                      )}
                     </View>
-                  ) : (
+
+                    <View style={styles.metaRow}>
+                      {item.dueDate && (
+                        <Text style={styles.reminderDue}>
+                          Due: {item.dueDate}
+                        </Text>
+                      )}
+                      {item.isRecurring && (
+                        <Text style={styles.recurringTag}>
+                          • {item.recurrenceType || "Recurring"}
+                        </Text>
+                      )}
+                    </View>
+
+                    {item.amount != null && item.amount !== "" && (
+                      <Text style={styles.reminderAmount}>
+                        GHS {parseFloat(item.amount).toFixed(2)}
+                      </Text>
+                    )}
+                  </View>
+
+                  {/* Actions (Paid Badge / Mark Paid button, Delete button) */}
+                  <View style={styles.cardActions}>
                     <TouchableOpacity
-                      style={styles.markPaidBtn}
-                      onPress={() => handleMarkPaid(String(item.id))}
+                      style={styles.deleteBtn}
+                      onPress={() => handleDelete(String(item.id))}
+                      activeOpacity={0.7}
                     >
-                      <Text style={styles.markPaidText}>Mark Paid</Text>
+                      <Feather name="trash-2" size={16} color="#FF3B30" />
                     </TouchableOpacity>
-                  )}
+
+                    {isPaid ? (
+                      <View style={styles.paidBadge}>
+                        <Text style={styles.paidBadgeText}>✓ Paid</Text>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.markPaidBtn}
+                        onPress={() => handleMarkPaid(String(item.id))}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.markPaidText}>Mark Paid</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
               </View>
-            </View>
-          )}
+            );
+          }}
         />
       )}
     </View>
@@ -262,11 +339,11 @@ export default function RemindersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0F1117",
+    backgroundColor: "#F2F4F7",
   },
   centered: {
     flex: 1,
-    backgroundColor: "#0F1117",
+    backgroundColor: "#F2F4F7",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -274,156 +351,208 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 20,
-    paddingBottom: 12,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 16,
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: "bold",
-    color: "#ffffff",
+    color: "#111111",
   },
   addBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#00C896",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#111111",
     alignItems: "center",
     justifyContent: "center",
-  },
-  addBtnText: {
-    color: "#000000",
-    fontSize: 20,
-    fontWeight: "bold",
-    lineHeight: 24,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
   },
   formCard: {
-    backgroundColor: "#1A1F2E",
-    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    borderRadius: 24,
     marginHorizontal: 16,
     marginBottom: 16,
-    padding: 18,
+    padding: 20,
     borderWidth: 1,
-    borderColor: "#00C89630",
+    borderColor: "#EAEBEF",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 2,
   },
   formTitle: {
-    color: "#ffffff",
+    color: "#111111",
     fontSize: 16,
-    fontWeight: "700",
-    marginBottom: 14,
+    fontWeight: "bold",
+    marginBottom: 16,
   },
   input: {
-    backgroundColor: "#0F1117",
-    borderRadius: 10,
-    paddingHorizontal: 14,
+    backgroundColor: "#F8F9FA",
+    borderRadius: 16,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    color: "#ffffff",
+    color: "#111111",
     fontSize: 14,
-    marginBottom: 10,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#ffffff15",
+    borderColor: "#EAEBEF",
   },
   toggleRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 14,
+    marginBottom: 20,
   },
   toggleLabel: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  toggle: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: "#0F1117",
-    borderWidth: 1,
-    borderColor: "#ffffff20",
-  },
-  toggleActive: {
-    backgroundColor: "#00C89620",
-    borderColor: "#00C896",
-  },
-  toggleText: {
-    color: "#8890A0",
+    color: "#8E9AA6",
     fontSize: 13,
     fontWeight: "600",
   },
-  toggleTextActive: {
-    color: "#00C896",
+  toggleBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#F2F4F7",
+    borderWidth: 1,
+    borderColor: "#EAEBEF",
+  },
+  toggleBtnActive: {
+    backgroundColor: "#111111",
+    borderColor: "#111111",
+  },
+  toggleBtnText: {
+    color: "#8E9AA6",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  toggleBtnTextActive: {
+    color: "#ffffff",
   },
   saveBtn: {
-    backgroundColor: "#00C896",
-    borderRadius: 12,
-    paddingVertical: 13,
+    backgroundColor: "#111111",
+    borderRadius: 24,
+    paddingVertical: 14,
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 10,
   },
   saveBtnDisabled: {
     opacity: 0.5,
   },
   saveBtnText: {
-    color: "#000000",
+    color: "#ffffff",
     fontWeight: "bold",
     fontSize: 15,
   },
   cancelBtn: {
-    borderRadius: 12,
+    borderRadius: 24,
     paddingVertical: 12,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#ffffff20",
+    borderColor: "#EAEBEF",
   },
   cancelBtnText: {
-    color: "#8890A0",
+    color: "#8E9AA6",
     fontSize: 14,
     fontWeight: "600",
   },
   list: {
-    padding: 16,
-    paddingTop: 4,
+    paddingHorizontal: 16,
+    paddingBottom: 40,
   },
   card: {
-    backgroundColor: "#1A1F2E",
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 10,
+    backgroundColor: "#ffffff",
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#ffffff10",
+    borderColor: "#EAEBEF",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 10,
+    elevation: 2,
   },
   cardPaid: {
-    opacity: 0.6,
-    borderColor: "#00C89630",
+    opacity: 0.65,
+    backgroundColor: "#F8F9FA",
+    borderColor: "#EAEBEF",
   },
   cardBody: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+  },
+  iconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#F8F9FA",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#EAEBEF",
+    marginRight: 12,
+  },
+  iconBoxPaid: {
+    backgroundColor: "#34C75912",
+    borderColor: "#34C75930",
   },
   cardInfo: {
     flex: 1,
-    gap: 4,
+    justifyContent: "center",
   },
-  reminderTitle: {
-    color: "#ffffff",
-    fontSize: 15,
-    fontWeight: "700",
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
     marginBottom: 2,
   },
-  reminderDue: {
-    color: "#8890A0",
-    fontSize: 13,
+  reminderTitle: {
+    color: "#111111",
+    fontSize: 15,
+    fontWeight: "bold",
+    maxWidth: "60%",
   },
-  reminderAmount: {
-    color: "#00C896",
-    fontSize: 14,
-    fontWeight: "600",
+  urgentBadge: {
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  urgentBadgeText: {
+    fontSize: 10,
+    fontWeight: "bold",
+  },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 4,
+  },
+  reminderDue: {
+    color: "#8E9AA6",
+    fontSize: 12,
+    fontWeight: "500",
   },
   recurringTag: {
-    color: "#8890A0",
-    fontSize: 12,
-    marginTop: 2,
+    color: "#8E9AA6",
+    fontSize: 11,
+    fontWeight: "500",
+  },
+  reminderAmount: {
+    color: "#111111",
+    fontSize: 15,
+    fontWeight: "bold",
   },
   cardActions: {
     alignItems: "flex-end",
@@ -431,49 +560,45 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   deleteBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#E05C5C20",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#FF3B3012",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#E05C5C60",
-  },
-  deleteBtnText: {
-    color: "#E05C5C",
-    fontSize: 12,
-    fontWeight: "bold",
+    borderColor: "#FF3B3030",
   },
   markPaidBtn: {
-    backgroundColor: "#00C89620",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: "#00C896",
+    backgroundColor: "#111111",
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
   markPaidText: {
-    color: "#00C896",
-    fontSize: 12,
-    fontWeight: "700",
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "bold",
   },
   paidBadge: {
-    backgroundColor: "#ffffff10",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    backgroundColor: "#34C75912",
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: "#34C75930",
   },
   paidBadgeText: {
-    color: "#8890A0",
-    fontSize: 12,
-    fontWeight: "600",
+    color: "#34C759",
+    fontSize: 11,
+    fontWeight: "bold",
   },
   emptyState: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 32,
+    paddingBottom: 80,
   },
   emptyIcon: {
     fontSize: 48,
@@ -482,12 +607,12 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#ffffff",
+    color: "#111111",
     marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 14,
-    color: "#8890A0",
+    color: "#8E9AA6",
     textAlign: "center",
   },
 });
