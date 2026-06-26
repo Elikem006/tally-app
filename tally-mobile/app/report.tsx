@@ -6,15 +6,13 @@ import {
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
-  Dimensions,
   SafeAreaView,
 } from "react-native";
 import { router } from "expo-router";
-import { LineChart } from "react-native-chart-kit";
-import { reportAPI, expenseAPI } from "../services/api";
+import { Feather } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { reportAPI } from "../services/api";
 import { getUserId } from "../services/storage";
-
-const SCREEN_WIDTH = Dimensions.get("window").width;
 
 const CATEGORY_ICONS: { [key: string]: string } = {
   Food: "🍔",
@@ -25,82 +23,46 @@ const CATEGORY_ICONS: { [key: string]: string } = {
 };
 
 const MONTH_NAMES = [
-  "January","February","March","April","May","June",
-  "July","August","September","October","November","December",
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
 ];
 
-function buildDailyData(expenses: any[], year: number, month: number) {
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const today = new Date().getDate();
-  const dayCount = Math.min(daysInMonth, today);
-
-  // Sum per day (1-indexed)
-  const dailyTotals: number[] = Array(dayCount).fill(0);
-  for (const e of expenses) {
-    const d = new Date(e.date);
-    if (d.getFullYear() === year && d.getMonth() + 1 === month) {
-      const day = d.getDate();
-      if (day >= 1 && day <= dayCount) {
-        dailyTotals[day - 1] += parseFloat(e.amount) || 0;
-      }
-    }
-  }
-
-  // Build labels: show day number only every ~5 days to avoid crowding
-  const labels: string[] = dailyTotals.map((_, i) => {
-    const day = i + 1;
-    if (day === 1 || day % 5 === 0 || day === dayCount) return String(day);
-    return "";
-  });
-
-  return { dailyTotals, labels, dayCount };
-}
-
 export default function ReportScreen() {
+  const insets = useSafeAreaInsets();
   const [report, setReport] = useState<any>(null);
-  const [dailyTotals, setDailyTotals] = useState<number[]>([]);
-  const [chartLabels, setChartLabels] = useState<string[]>([]);
-  const [selectedPoint, setSelectedPoint] = useState<{ day: number; amount: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const now = new Date();
   const currentMonthName = MONTH_NAMES[now.getMonth()];
   const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth() + 1;
   const prevMonthName = MONTH_NAMES[(now.getMonth() + 11) % 12];
 
   useEffect(() => {
-    async function fetchAll() {
+    async function fetchReportData() {
       try {
         const userId = getUserId();
-        const [reportRes, expensesRes] = await Promise.all([
-          reportAPI.getMonthlyReport(userId),
-          expenseAPI.getUserExpenses(userId),
-        ]);
+        const reportRes = await reportAPI.getMonthlyReport(userId);
         setReport(reportRes.data);
-
-        const { dailyTotals: dt, labels } = buildDailyData(
-          expensesRes.data,
-          currentYear,
-          currentMonth,
-        );
-        // Chart needs at least 2 data points
-        setDailyTotals(dt.length >= 2 ? dt : [0, 0]);
-        setChartLabels(labels.length >= 2 ? labels : ["1", String(now.getDate())]);
       } catch (e: any) {
         setError("Failed to load report.");
       } finally {
         setLoading(false);
       }
     }
-    fetchAll();
+    fetchReportData();
   }, []);
+
+  function statusColor(status: string) {
+    if (status === "over") return "#FF3B30";
+    if (status === "warning") return "#FF9500";
+    return "#34C759";
+  }
 
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#00C896" />
+        <ActivityIndicator size="large" color="#111111" />
       </View>
     );
   }
@@ -108,6 +70,7 @@ export default function ReportScreen() {
   if (error || !report) {
     return (
       <View style={styles.centered}>
+        <Feather name="alert-circle" size={48} color="#FF3B30" style={{ marginBottom: 16 }} />
         <Text style={styles.errorText}>{error || "No data available."}</Text>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Text style={styles.backBtnText}>Go Back</Text>
@@ -128,20 +91,12 @@ export default function ReportScreen() {
   const maxCategoryAmount = Math.max(...Object.values(categoryBreakdown), 1);
   const budgetPerformance: any[] = report.budgetPerformance || [];
 
-  function statusColor(status: string) {
-    if (status === "over") return "#E05C5C";
-    if (status === "warning") return "#F7A84F";
-    return "#00C896";
-  }
-
-  const hasSpending = dailyTotals.some((v) => v > 0);
-
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Fixed nav bar — always reachable */}
+      {/* Header NavBar */}
       <View style={styles.navBar}>
-        <TouchableOpacity style={styles.backRow} onPress={() => router.back()}>
-          <Text style={styles.backArrow}>←</Text>
+        <TouchableOpacity style={styles.backRow} onPress={() => router.back()} activeOpacity={0.7}>
+          <Feather name="chevron-left" size={24} color="#111111" />
           <Text style={styles.backLabel}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.navTitle}>Monthly Report</Text>
@@ -149,292 +104,426 @@ export default function ReportScreen() {
       </View>
 
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>{currentMonthName} {currentYear}</Text>
+        <Text style={styles.title}>{currentMonthName} {currentYear}</Text>
 
-      {/* ── Spending chart ── */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Daily Spending</Text>
-        <Text style={styles.bigAmount}>GHS {currentTotal.toFixed(2)}</Text>
-        <Text style={styles.spentLabel}>spent this month</Text>
+        {/* 1. Monthly Summary Card */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Monthly Summary</Text>
+          <Text style={styles.bigAmount}>GHS {currentTotal.toFixed(2)}</Text>
+          <Text style={styles.spentLabel}>spent this month</Text>
 
-        {selectedPoint && (
-          <View style={styles.tooltip}>
-            <Text style={styles.tooltipAmount}>GHS {selectedPoint.amount.toFixed(2)}</Text>
-            <Text style={styles.tooltipDate}>
-              {currentMonthName.slice(0, 3)} {selectedPoint.day}, {currentYear}
-            </Text>
-          </View>
-        )}
-
-        {hasSpending ? (
-          <LineChart
-            data={{ labels: chartLabels, datasets: [{ data: dailyTotals }] }}
-            width={SCREEN_WIDTH - 56}
-            height={180}
-            onDataPointClick={({ index, value }) =>
-              setSelectedPoint({ day: index + 1, amount: value })
-            }
-            chartConfig={{
-              backgroundColor: "#1A1F2E",
-              backgroundGradientFrom: "#1A1F2E",
-              backgroundGradientTo: "#1A1F2E",
-              decimalPlaces: 0,
-              color: (opacity = 1) => `rgba(0, 200, 150, ${opacity})`,
-              labelColor: () => "#8890A0",
-              propsForDots: {
-                r: "4",
-                strokeWidth: "2",
-                stroke: "#00C896",
-              },
-              propsForBackgroundLines: {
-                stroke: "#ffffff10",
-              },
-            }}
-            bezier
-            style={styles.chart}
-            withInnerLines
-            withOuterLines={false}
-            withShadow={false}
-          />
-        ) : (
-          <View style={styles.noChartData}>
-            <Text style={styles.noChartText}>No spending recorded yet this month</Text>
-          </View>
-        )}
-
-        {/* Month comparison row */}
-        <View style={styles.comparisonRow}>
-          <View style={styles.comparisonCol}>
-            <Text style={styles.compLabel}>{currentMonthName}</Text>
-            <Text style={styles.compValue}>GHS {currentTotal.toFixed(2)}</Text>
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.comparisonCol}>
-            <Text style={styles.compLabel}>{prevMonthName}</Text>
-            <Text style={styles.compValue}>GHS {previousTotal.toFixed(2)}</Text>
-          </View>
-        </View>
-
-        {previousTotal > 0 ? (
-          <View style={[styles.changeBadge, { backgroundColor: isUp ? "#E05C5C20" : "#00C89620" }]}>
-            <Text style={[styles.changeText, { color: isUp ? "#E05C5C" : "#00C896" }]}>
-              {isUp ? "▲" : "▼"} {Math.abs(pctChange).toFixed(1)}% vs last month
-            </Text>
-          </View>
-        ) : (
-          <View style={[styles.changeBadge, { backgroundColor: "#ffffff10" }]}>
-            <Text style={[styles.changeText, { color: "#8890A0" }]}>No data for {prevMonthName}</Text>
-          </View>
-        )}
-      </View>
-
-      {/* ── Highest category ── */}
-      {report.highestCategory?.category && (
-        <View style={[styles.card, styles.highlightCard]}>
-          <Text style={styles.cardTitle}>Top Spending Category</Text>
-          <View style={styles.highlightRow}>
-            <Text style={styles.highlightEmoji}>
-              {CATEGORY_ICONS[report.highestCategory.category] || "📦"}
-            </Text>
-            <View>
-              <Text style={styles.highlightCategory}>{report.highestCategory.category}</Text>
-              <Text style={styles.highlightAmount}>
-                GHS {parseFloat(report.highestCategory.amount).toFixed(2)}
-              </Text>
+          <View style={styles.comparisonRow}>
+            <View style={styles.comparisonCol}>
+              <Text style={styles.compLabel}>{currentMonthName.slice(0, 3)}</Text>
+              <Text style={styles.compValue}>GHS {currentTotal.toFixed(0)}</Text>
+            </View>
+            <View style={styles.divider} />
+            <View style={styles.comparisonCol}>
+              <Text style={styles.compLabel}>{prevMonthName.slice(0, 3)}</Text>
+              <Text style={styles.compValue}>GHS {previousTotal.toFixed(0)}</Text>
             </View>
           </View>
-        </View>
-      )}
 
-      {/* ── Category breakdown ── */}
-      {Object.keys(categoryBreakdown).length > 0 && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Category Breakdown</Text>
-          {Object.entries(categoryBreakdown)
-            .sort(([, a], [, b]) => b - a)
-            .map(([cat, amount]) => {
-              const barWidth = (amount / maxCategoryAmount) * 100;
-              return (
-                <View key={cat} style={styles.breakdownRow}>
-                  <View style={styles.breakdownLeft}>
-                    <Text style={styles.breakdownEmoji}>{CATEGORY_ICONS[cat] || "📦"}</Text>
-                    <Text style={styles.breakdownCat}>{cat}</Text>
-                  </View>
-                  <View style={styles.breakdownRight}>
-                    <View style={styles.barTrack}>
-                      <View style={[styles.barFill, { width: `${barWidth}%` as any }]} />
+          {previousTotal > 0 ? (
+            <View style={[
+              styles.changeBadge, 
+              { backgroundColor: isUp ? "#FF3B3012" : "#34C75912" }
+            ]}>
+              <Text style={[
+                styles.changeText, 
+                { color: isUp ? "#FF3B30" : "#34C759" }
+              ]}>
+                {isUp ? "▲" : "▼"} {Math.abs(pctChange).toFixed(1)}% {isUp ? "more" : "less"} than last month
+              </Text>
+            </View>
+          ) : (
+            <View style={[styles.changeBadge, { backgroundColor: "#F2F4F7" }]}>
+              <Text style={[styles.changeText, { color: "#8E9AA6" }]}>
+                No baseline data for {prevMonthName}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* 2. Top Category Card */}
+        {report.highestCategory?.category && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Top Spending Category</Text>
+            <View style={styles.highlightRow}>
+              <View style={styles.iconBox}>
+                <Text style={styles.highlightEmoji}>
+                  {CATEGORY_ICONS[report.highestCategory.category] || "📦"}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.highlightCategory}>{report.highestCategory.category}</Text>
+                <Text style={styles.highlightAmount}>
+                  GHS {parseFloat(report.highestCategory.amount).toFixed(2)}
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* 3. Category Breakdown */}
+        {Object.keys(categoryBreakdown).length > 0 && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Category Breakdown</Text>
+            {Object.entries(categoryBreakdown)
+              .sort(([, a], [, b]) => b - a)
+              .map(([cat, amount]) => {
+                const barWidth = (amount / maxCategoryAmount) * 100;
+                return (
+                  <View key={cat} style={styles.breakdownRow}>
+                    <View style={styles.breakdownLeft}>
+                      <View style={styles.iconBoxSmall}>
+                        <Text style={styles.breakdownEmoji}>{CATEGORY_ICONS[cat] || "📦"}</Text>
+                      </View>
+                      <Text style={styles.breakdownCat} numberOfLines={1}>{cat}</Text>
                     </View>
-                    <Text style={styles.breakdownAmount}>GHS {amount.toFixed(2)}</Text>
+                    <View style={styles.breakdownRight}>
+                      <View style={styles.barTrack}>
+                        <View style={[styles.barFill, { width: `${barWidth}%` }]} />
+                      </View>
+                      <Text style={styles.breakdownAmount}>GHS {amount.toFixed(2)}</Text>
+                    </View>
+                  </View>
+                );
+              })}
+          </View>
+        )}
+
+        {/* 4. Budget Performance */}
+        {budgetPerformance.length > 0 && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Budget Performance</Text>
+            {budgetPerformance.map((item: any) => {
+              const pct = Math.min(item.percentage, 100);
+              const color = statusColor(item.status);
+              return (
+                <View key={item.category} style={styles.perfRow}>
+                  <View style={styles.perfHeader}>
+                    <View style={styles.perfLeft}>
+                      <View style={styles.iconBoxSmall}>
+                        <Text style={styles.perfEmoji}>{CATEGORY_ICONS[item.category] || "📦"}</Text>
+                      </View>
+                      <Text style={styles.perfCat}>{item.category}</Text>
+                    </View>
+                    <View style={[
+                      styles.statusBadge, 
+                      { backgroundColor: color + "12", borderColor: color + "30" }
+                    ]}>
+                      <Text style={[styles.statusText, { color }]}>
+                        {item.status === "over" ? "Over" : item.status === "warning" ? "Near limit" : "On track"}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.perfBarRow}>
+                    <View style={styles.barTrack}>
+                      <View style={[styles.barFill, { width: `${pct}%`, backgroundColor: color }]} />
+                    </View>
+                    <Text style={[styles.perfPct, { color }]}>{pct.toFixed(0)}%</Text>
+                  </View>
+                  <View style={styles.perfAmounts}>
+                    <Text style={styles.perfSpent}>GHS {parseFloat(item.spent).toFixed(0)} spent</Text>
+                    <Text style={styles.perfLimit}>limit: GHS {parseFloat(item.limit).toFixed(0)}</Text>
                   </View>
                 </View>
               );
             })}
-        </View>
-      )}
+          </View>
+        )}
 
-      {/* ── Budget performance ── */}
-      {budgetPerformance.length > 0 && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Budget Performance</Text>
-          {budgetPerformance.map((item: any) => {
-            const pct = Math.min(item.percentage, 100);
-            const color = statusColor(item.status);
-            return (
-              <View key={item.category} style={styles.perfRow}>
-                <View style={styles.perfHeader}>
-                  <View style={styles.perfLeft}>
-                    <Text style={styles.perfEmoji}>{CATEGORY_ICONS[item.category] || "📦"}</Text>
-                    <Text style={styles.perfCat}>{item.category}</Text>
-                  </View>
-                  <View style={[styles.statusBadge, { backgroundColor: color + "20", borderColor: color }]}>
-                    <Text style={[styles.statusText, { color }]}>
-                      {item.status === "over" ? "Over!" : item.status === "warning" ? "Near limit" : "Good"}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.barTrack}>
-                  <View style={[styles.barFill, { width: `${pct}%` as any, backgroundColor: color }]} />
-                </View>
-                <View style={styles.perfAmounts}>
-                  <Text style={styles.perfSpent}>GHS {parseFloat(item.spent).toFixed(2)} spent</Text>
-                  <Text style={styles.perfLimit}>of GHS {parseFloat(item.limit).toFixed(2)}</Text>
-                </View>
-              </View>
-            );
-          })}
-        </View>
-      )}
-
-      <View style={{ height: 24 }} />
+        <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#0F1117" },
+  safeArea: { 
+    flex: 1, 
+    backgroundColor: "#F2F4F7" 
+  },
   navBar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingVertical: 14,
+    backgroundColor: "#ffffff",
     borderBottomWidth: 1,
-    borderBottomColor: "#ffffff10",
+    borderBottomColor: "#EAEBEF",
   },
-  navTitle: { color: "#ffffff", fontSize: 17, fontWeight: "700" },
-  navSpacer: { width: 60 },
-  container: { flex: 1, backgroundColor: "#0F1117" },
-  content: { padding: 20 },
+  backRow: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    gap: 4 
+  },
+  backLabel: { 
+    color: "#111111", 
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  navTitle: { 
+    color: "#111111", 
+    fontSize: 16, 
+    fontWeight: "bold" 
+  },
+  navSpacer: { 
+    width: 60 
+  },
+  container: { 
+    flex: 1, 
+    backgroundColor: "#F2F4F7" 
+  },
+  content: { 
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 40,
+  },
   centered: {
     flex: 1,
-    backgroundColor: "#0F1117",
+    backgroundColor: "#F2F4F7",
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
   },
-  errorText: { color: "#E05C5C", fontSize: 15, marginBottom: 16 },
+  errorText: { 
+    color: "#FF3B30", 
+    fontSize: 15, 
+    fontWeight: "600",
+    marginBottom: 20,
+    textAlign: "center",
+  },
   backBtn: {
-    backgroundColor: "#00C896",
-    borderRadius: 12,
+    backgroundColor: "#111111",
+    borderRadius: 16,
     paddingVertical: 12,
     paddingHorizontal: 24,
   },
-  backBtnText: { color: "#000", fontWeight: "bold", fontSize: 15 },
-  backRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 20 },
-  backArrow: { color: "#00C896", fontSize: 20 },
-  backLabel: { color: "#00C896", fontSize: 15 },
-  title: { fontSize: 26, fontWeight: "bold", color: "#ffffff", marginBottom: 4 },
-  subtitle: { fontSize: 14, color: "#8890A0", marginBottom: 20 },
-  card: {
-    backgroundColor: "#1A1F2E",
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: "#ffffff10",
+  backBtnText: { 
+    color: "#ffffff", 
+    fontWeight: "bold", 
+    fontSize: 15 
   },
-  highlightCard: { borderColor: "#00C89630" },
+  title: { 
+    fontSize: 24, 
+    fontWeight: "bold", 
+    color: "#111111", 
+    marginBottom: 20,
+    paddingLeft: 4,
+  },
+  // Premium cards
+  card: {
+    backgroundColor: "#ffffff",
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#EAEBEF",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 10,
+    elevation: 2,
+  },
   cardTitle: {
-    fontSize: 13,
-    color: "#8890A0",
-    fontWeight: "600",
+    fontSize: 11,
+    color: "#8E9AA6",
+    fontWeight: "bold",
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  bigAmount: { fontSize: 34, fontWeight: "bold", color: "#ffffff", marginBottom: 2 },
-  spentLabel: { fontSize: 13, color: "#8890A0", marginBottom: 12 },
-  tooltip: {
-    backgroundColor: "#0F1117",
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    alignSelf: "flex-start",
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: "#00C89640",
+  bigAmount: { 
+    fontSize: 32, 
+    fontWeight: "bold", 
+    color: "#111111", 
+    marginBottom: 2 
   },
-  tooltipAmount: { fontSize: 15, fontWeight: "bold", color: "#00C896" },
-  tooltipDate: { fontSize: 12, color: "#8890A0", marginTop: 2 },
-  chart: { marginLeft: -10, borderRadius: 12, marginBottom: 16 },
-  noChartData: {
-    height: 120,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
+  spentLabel: { 
+    fontSize: 13, 
+    color: "#8E9AA6", 
+    fontWeight: "500",
+    marginBottom: 16 
   },
-  noChartText: { color: "#8890A0", fontSize: 14 },
   comparisonRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 14,
+    marginBottom: 16,
     borderTopWidth: 1,
-    borderTopColor: "#ffffff10",
-    paddingTop: 14,
+    borderTopColor: "#EAEBEF",
+    paddingTop: 16,
   },
-  comparisonCol: { flex: 1, alignItems: "center" },
-  divider: { width: 1, height: 36, backgroundColor: "#ffffff15" },
-  compLabel: { fontSize: 12, color: "#8890A0", marginBottom: 4 },
-  compValue: { fontSize: 16, fontWeight: "600", color: "#ffffff" },
-  changeBadge: { borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, alignItems: "center" },
-  changeText: { fontSize: 14, fontWeight: "600" },
-  highlightRow: { flexDirection: "row", alignItems: "center", gap: 14 },
-  highlightEmoji: { fontSize: 40 },
-  highlightCategory: { fontSize: 20, fontWeight: "bold", color: "#ffffff", marginBottom: 4 },
-  highlightAmount: { fontSize: 16, color: "#00C896", fontWeight: "600" },
+  comparisonCol: { 
+    flex: 1, 
+    alignItems: "center" 
+  },
+  divider: { 
+    width: 1, 
+    height: 32, 
+    backgroundColor: "#EAEBEF" 
+  },
+  compLabel: { 
+    fontSize: 11, 
+    color: "#8E9AA6", 
+    fontWeight: "600",
+    marginBottom: 4 
+  },
+  compValue: { 
+    fontSize: 15, 
+    fontWeight: "bold", 
+    color: "#111111" 
+  },
+  changeBadge: { 
+    borderRadius: 16, 
+    paddingVertical: 8, 
+    paddingHorizontal: 16, 
+    alignItems: "center" 
+  },
+  changeText: { 
+    fontSize: 13, 
+    fontWeight: "700" 
+  },
+  highlightRow: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    gap: 16 
+  },
+  iconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#F8F9FA",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#EAEBEF",
+  },
+  iconBoxSmall: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F8F9FA",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#EAEBEF",
+  },
+  highlightEmoji: { 
+    fontSize: 24 
+  },
+  highlightCategory: { 
+    fontSize: 16, 
+    fontWeight: "bold", 
+    color: "#111111", 
+    marginBottom: 4 
+  },
+  highlightAmount: { 
+    fontSize: 15, 
+    color: "#8E9AA6", 
+    fontWeight: "600" 
+  },
   breakdownRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
+    marginBottom: 14,
   },
-  breakdownLeft: { flexDirection: "row", alignItems: "center", gap: 8, width: 110 },
-  breakdownEmoji: { fontSize: 18 },
-  breakdownCat: { fontSize: 14, color: "#ffffff", fontWeight: "500" },
-  breakdownRight: { flex: 1, marginLeft: 10, gap: 4 },
+  breakdownLeft: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    gap: 10, 
+    width: 120 
+  },
+  breakdownEmoji: { 
+    fontSize: 16 
+  },
+  breakdownCat: { 
+    fontSize: 14, 
+    color: "#111111", 
+    fontWeight: "600" 
+  },
+  breakdownRight: { 
+    flex: 1, 
+    marginLeft: 10, 
+    gap: 4 
+  },
   barTrack: {
     height: 8,
-    backgroundColor: "#ffffff15",
+    backgroundColor: "#F2F4F7",
     borderRadius: 4,
     overflow: "hidden",
     marginBottom: 2,
   },
-  barFill: { height: "100%", backgroundColor: "#00C896", borderRadius: 4 },
-  breakdownAmount: { fontSize: 12, color: "#8890A0", textAlign: "right" },
-  perfRow: { marginBottom: 16 },
+  barFill: { 
+    height: "100%", 
+    backgroundColor: "#111111", 
+    borderRadius: 4 
+  },
+  breakdownAmount: { 
+    fontSize: 12, 
+    color: "#8E9AA6", 
+    fontWeight: "600",
+    textAlign: "right" 
+  },
+  perfRow: { 
+    marginBottom: 18 
+  },
   perfHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 10,
   },
-  perfLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
-  perfEmoji: { fontSize: 20 },
-  perfCat: { fontSize: 15, fontWeight: "600", color: "#ffffff" },
-  statusBadge: { borderRadius: 6, paddingHorizontal: 10, paddingVertical: 3, borderWidth: 1 },
-  statusText: { fontSize: 12, fontWeight: "bold" },
-  perfAmounts: { flexDirection: "row", justifyContent: "space-between", marginTop: 6 },
-  perfSpent: { fontSize: 13, color: "#ffffff", fontWeight: "500" },
-  perfLimit: { fontSize: 13, color: "#8890A0" },
+  perfLeft: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    gap: 10 
+  },
+  perfEmoji: { 
+    fontSize: 16 
+  },
+  perfCat: { 
+    fontSize: 14, 
+    fontWeight: "600", 
+    color: "#111111" 
+  },
+  statusBadge: { 
+    borderRadius: 12, 
+    paddingHorizontal: 10, 
+    paddingVertical: 3, 
+    borderWidth: 1 
+  },
+  statusText: { 
+    fontSize: 11, 
+    fontWeight: "bold" 
+  },
+  perfBarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 6,
+  },
+  perfPct: { 
+    fontSize: 13, 
+    fontWeight: "bold", 
+    width: 36, 
+    textAlign: "right" 
+  },
+  perfAmounts: { 
+    flexDirection: "row", 
+    justifyContent: "space-between" 
+  },
+  perfSpent: { 
+    fontSize: 12, 
+    color: "#111111", 
+    fontWeight: "600" 
+  },
+  perfLimit: { 
+    fontSize: 12, 
+    color: "#8E9AA6",
+    fontWeight: "500"
+  },
 });
