@@ -298,9 +298,6 @@ export default function ReportScreen() {
     >
       <Text style={styles.cardHeaderTitle}>Monthly Report</Text>
 
-      {/* Month Navigation Control */}
-      {MonthNav}
-
       {/* Spending Activity Chart Card */}
       <View style={styles.chartCard}>
         <View style={styles.chartHeader}>
@@ -381,6 +378,9 @@ export default function ReportScreen() {
           ))}
         </View>
       </View>
+
+      {/* Month Navigation Control */}
+      {MonthNav}
 
       {loading ? (
         <View style={styles.loadingBox}>
