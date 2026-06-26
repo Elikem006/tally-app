@@ -424,27 +424,27 @@ export default function BudgetScreen() {
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
-    backgroundColor: '#F2F4F7',
+    backgroundColor: '#0F1117',
   },
   centered: {
     flex: 1,
-    backgroundColor: '#F2F4F7',
+    backgroundColor: '#0F1117',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
   },
   headerContainer: {
-    backgroundColor: '#F2F4F7',
+    backgroundColor: '#0F1117',
     paddingBottom: 8,
   },
   tabHeaderContainer: {
     flexDirection: 'row',
-    backgroundColor: '#EAEBEF',
+    backgroundColor: '#1A1F2E',
     borderRadius: 24,
     padding: 4,
     marginHorizontal: 20,
     borderWidth: 1,
-    borderColor: '#E2E4E8',
+    borderColor: '#ffffff15',
   },
   tabHeaderButton: {
     flex: 1,
@@ -454,7 +454,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   tabHeaderButtonActive: {
-    backgroundColor: '#ffffff',
+    backgroundColor: '#0F1117',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -464,10 +464,10 @@ const styles = StyleSheet.create({
   tabHeaderButtonText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#8E9AA6',
+    color: '#8890A0',
   },
   tabHeaderButtonTextActive: {
-    color: '#111111',
+    color: '#ffffff',
   },
   horizontalScrollView: {
     flex: 1,
@@ -481,7 +481,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   mainCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: '#1A1F2E',
     borderRadius: 28,
     padding: 20,
     shadowColor: '#000000',
@@ -493,24 +493,24 @@ const styles = StyleSheet.create({
   cardHeaderTitle: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#111111',
+    color: '#ffffff',
     marginBottom: 4,
   },
   subtitle: {
     fontSize: 13,
-    color: '#8E9AA6',
+    color: '#8890A0',
     marginBottom: 24,
     lineHeight: 18,
   },
   
   // Overview Tab Styles
   categoryCard: {
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#0F1117',
     borderRadius: 24,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#EAEBEF',
+    borderColor: '#ffffff10',
   },
   cardHeader: {
     flexDirection: 'row',
@@ -542,7 +542,7 @@ const styles = StyleSheet.create({
   categoryTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#111111',
+    color: '#ffffff',
   },
   warningBadge: {
     backgroundColor: '#FF3B3012',
@@ -601,11 +601,11 @@ const styles = StyleSheet.create({
   spentText: {
     fontSize: 13,
     fontWeight: 'bold',
-    color: '#111111',
+    color: '#ffffff',
   },
   limitText: {
     fontSize: 13,
-    color: '#8E9AA6',
+    color: '#8890A0',
   },
   remaining: {
     fontSize: 12,
@@ -618,14 +618,14 @@ const styles = StyleSheet.create({
   },
   editButton: {
     borderWidth: 1,
-    borderColor: '#111111',
+    borderColor: '#00C896',
     borderRadius: 24,
     padding: 14,
     alignItems: 'center',
     marginTop: 12,
   },
   editButtonText: {
-    color: '#111111',
+    color: '#00C896',
     fontSize: 15,
     fontWeight: 'bold',
   },
@@ -643,13 +643,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#1A1F2E',
     borderRadius: 24,
     paddingHorizontal: 16,
     paddingVertical: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#EAEBEF',
+    borderColor: '#ffffff10',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.02,
@@ -660,7 +660,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#0F1117',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -670,34 +670,34 @@ const styles = StyleSheet.create({
   categoryLabelName: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#111111',
+    color: '#ffffff',
   },
   categorySpentText: {
     fontSize: 11,
-    color: '#8E9AA6',
+    color: '#8890A0',
     marginTop: 2,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#0F1117',
     borderRadius: 12,
     paddingHorizontal: 10,
     borderWidth: 1,
-    borderColor: '#EAEBEF',
+    borderColor: '#ffffff15',
     height: 40,
   },
   inputContainerFocused: {
-    borderColor: '#111111',
+    borderColor: '#00C896',
   },
   currency: {
     fontSize: 11,
     fontWeight: 'bold',
-    color: '#8E9AA6',
+    color: '#8890A0',
     marginRight: 6,
   },
   input: {
-    color: '#111111',
+    color: '#ffffff',
     fontSize: 14,
     fontWeight: 'bold',
     width: 60,
@@ -719,7 +719,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   button: {
-    backgroundColor: '#111111',
+    backgroundColor: '#00C896',
     borderRadius: 28,
     padding: 18,
     alignItems: 'center',
@@ -736,7 +736,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   buttonText: {
-    color: '#ffffff',
+    color: '#000000',
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -747,7 +747,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 60,
     paddingHorizontal: 20,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#1A1F2E',
     borderRadius: 28,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 8 },
@@ -759,12 +759,12 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#0F1117',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#EAEBEF',
+    borderColor: '#ffffff15',
   },
   emptyIcon: {
     fontSize: 36,
@@ -772,18 +772,18 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#111111',
+    color: '#ffffff',
     marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#8E9AA6',
+    color: '#8890A0',
     marginBottom: 24,
     textAlign: 'center',
     lineHeight: 20,
   },
   setupLinkButton: {
-    backgroundColor: '#111111',
+    backgroundColor: '#00C896',
     borderRadius: 28,
     paddingVertical: 16,
     paddingHorizontal: 28,
@@ -807,7 +807,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   retryButton: {
-    backgroundColor: '#111111',
+    backgroundColor: '#00C896',
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 24,
