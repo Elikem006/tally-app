@@ -92,12 +92,6 @@ export default function TabLayout() {
           href: null,
         }}
       />
-      <Tabs.Screen
-        name="budget-overview"
-        options={{
-          href: null,
-        }}
-      />
     </Tabs>
   );
 }
