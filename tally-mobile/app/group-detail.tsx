@@ -162,6 +162,59 @@ export default function GroupDetailScreen() {
       >
         <Text style={styles.title}>{groupName}</Text>
 
+        {/* Recent Activity */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Recent Activity</Text>
+          {(() => {
+            const expenses: any[] = details?.expenses || [];
+            if (expenses.length === 0) {
+              return <Text style={styles.emptyText}>No activity yet</Text>;
+            }
+            const sorted = [...expenses]
+              .sort((a, b) => {
+                const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                return tb - ta;
+              })
+              .slice(0, 5);
+
+            function timeAgo(createdAt: string) {
+              if (!createdAt) return "";
+              const diffMs = Date.now() - new Date(createdAt).getTime();
+              const diffMins = Math.floor(diffMs / 60000);
+              if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? "s" : ""} ago`;
+              const diffHours = Math.floor(diffMins / 60);
+              if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? "s" : ""} ago`;
+              const d = new Date(createdAt);
+              const dd = String(d.getDate()).padStart(2, "0");
+              const mm = String(d.getMonth() + 1).padStart(2, "0");
+              const yyyy = d.getFullYear();
+              return `${dd}/${mm}/${yyyy}`;
+            }
+
+            return sorted.map((expense: any) => (
+              <View key={expense.id} style={styles.activityItem}>
+                <View style={styles.activityAvatar}>
+                  <Text style={styles.activityAvatarText}>
+                    {String(expense.paidBy || "U").charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+                <View style={styles.activityContent}>
+                  <Text style={styles.activityText}>
+                    User #{expense.paidBy} paid GHS {parseFloat(expense.amount).toFixed(2)} for {expense.description}
+                  </Text>
+                  <Text style={styles.activityTime}>{timeAgo(expense.createdAt)}</Text>
+                </View>
+                <View style={styles.activityBadge}>
+                  <Text style={styles.activityBadgeText}>Shared</Text>
+                </View>
+              </View>
+            ));
+          })()}
+        </View>
+
+        <View style={styles.divider} />
+
         {/* Members */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Members</Text>
@@ -553,6 +606,60 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     color: "#E05C5C",
     fontSize: 15,
+    fontWeight: "600",
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "#ffffff10",
+    marginBottom: 24,
+  },
+  activityItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: 10,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#ffffff10",
+  },
+  activityAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#00C89630",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: "#00C896",
+  },
+  activityAvatarText: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#00C896",
+  },
+  activityContent: {
+    flex: 1,
+  },
+  activityText: {
+    fontSize: 13,
+    color: "#ffffff",
+    lineHeight: 18,
+  },
+  activityTime: {
+    fontSize: 11,
+    color: "#8890A0",
+    marginTop: 3,
+  },
+  activityBadge: {
+    backgroundColor: "#00C89620",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: "#00C896",
+  },
+  activityBadgeText: {
+    fontSize: 11,
+    color: "#00C896",
     fontWeight: "600",
   },
 });
