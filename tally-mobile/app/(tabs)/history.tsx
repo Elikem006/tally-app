@@ -221,6 +221,7 @@ export default function HistoryScreen() {
           const isShared = item.type === "shared";
           const color = CATEGORY_COLORS[item.category] || "#8890A0";
           const { cleanDescription, tags } = parseTagsFromDescription(item.description);
+          const isMomo = item.paymentMethod === "MOMO";
           return (
             <TouchableOpacity
               style={[styles.expenseCard, isShared && styles.sharedCard]}
@@ -233,19 +234,27 @@ export default function HistoryScreen() {
                   </Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <View style={styles.descRow}>
-                    <Text style={styles.expenseDescription}>
-                      {cleanDescription || item.category}
-                    </Text>
-                    {isShared && (
-                      <View style={styles.sharedBadge}>
-                        <Text style={styles.sharedBadgeText}>Shared</Text>
-                      </View>
-                    )}
-                  </View>
+                  <Text style={styles.expenseDescription}>
+                    {cleanDescription || item.category}
+                  </Text>
                   <Text style={styles.expenseCategory}>
                     {item.category} • {item.date}
                   </Text>
+                  <View style={styles.badgeRow}>
+                    {isShared && (
+                      <View style={[styles.badge, { backgroundColor: "#00C89620", borderColor: "#00C896" }]}>
+                        <Text style={[styles.badgeText, { color: "#00C896" }]}>👥 Shared</Text>
+                      </View>
+                    )}
+                    <View style={[styles.badge, {
+                      backgroundColor: isMomo ? "#FFC10720" : "#ffffff10",
+                      borderColor: isMomo ? "#FFC107" : "#ffffff30",
+                    }]}>
+                      <Text style={[styles.badgeText, { color: isMomo ? "#FFC107" : "#8890A0" }]}>
+                        {isMomo ? "📱 MoMo" : "💵 Cash"}
+                      </Text>
+                    </View>
+                  </View>
                   {tags.length > 0 && (
                     <View style={styles.tagsContainer}>
                       {tags.map((tag) => (
@@ -394,24 +403,21 @@ const styles = StyleSheet.create({
   sharedCard: {
     borderColor: "#A78BFA30",
   },
-  descRow: {
+  badgeRow: {
     flexDirection: "row",
-    alignItems: "center",
     gap: 6,
-    marginBottom: 3,
+    marginTop: 4,
+    flexWrap: "wrap",
   },
-  sharedBadge: {
-    backgroundColor: "#00C89620",
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
+  badge: {
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderWidth: 1,
-    borderColor: "#00C89660",
   },
-  sharedBadgeText: {
-    fontSize: 10,
-    color: "#00C896",
-    fontWeight: "600",
+  badgeText: {
+    fontSize: 11,
+    fontWeight: "500",
   },
   expenseDescription: {
     fontSize: 14,

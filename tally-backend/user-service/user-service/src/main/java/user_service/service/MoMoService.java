@@ -111,6 +111,38 @@ public class MoMoService {
     }
 
     /**
+     * Get the MoMo collection account balance.
+     * Returns a map with availableBalance and currency.
+     */
+    public Map<String, String> getAccountBalance() {
+        String token = getAccessToken();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer " + token);
+        headers.set("X-Target-Environment", environment);
+        headers.set("Ocp-Apim-Subscription-Key", subscriptionKey);
+
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        ResponseEntity<Map> response = restTemplate.exchange(
+                baseUrl + "/collection/v1_0/account/balance",
+                HttpMethod.GET,
+                entity,
+                Map.class
+        );
+
+        Map<String, String> result = new HashMap<>();
+        if (response.getBody() != null) {
+            result.put("availableBalance", String.valueOf(response.getBody().getOrDefault("availableBalance", "0")));
+            result.put("currency", String.valueOf(response.getBody().getOrDefault("currency", currency)));
+        } else {
+            result.put("availableBalance", "0");
+            result.put("currency", currency);
+        }
+        return result;
+    }
+
+    /**
      * Check the status of a previously submitted payment.
      * Returns "SUCCESSFUL", "FAILED", or "PENDING".
      */

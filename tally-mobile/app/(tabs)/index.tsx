@@ -13,7 +13,7 @@ import {
   Platform,
 } from "react-native";
 import { useFocusEffect, router } from "expo-router";
-import { expenseAPI, remindersAPI, budgetAPI } from "../../services/api";
+import { expenseAPI, remindersAPI, budgetAPI, momoAPI } from "../../services/api";
 import { getUserId, getUserName } from "../../services/storage";
 import {
   addHistoryItem,
@@ -41,6 +41,10 @@ export default function HomeScreen() {
   // Notification badge
   const [unreadCount, setUnreadCount] = useState(0);
 
+  // MoMo wallet
+  const [momoBalance, setMomoBalance] = useState<{ availableBalance: string; currency: string } | null>(null);
+  const [momoBalanceLoading, setMomoBalanceLoading] = useState(false);
+
   // Quick add state
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [quickAmount, setQuickAmount] = useState("");
@@ -51,10 +55,24 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchExpenses();
+      fetchMomoBalance();
       // Refresh badge whenever screen comes into focus (e.g. returning from notif screen)
       getUnreadCount().then(setUnreadCount);
     }, []),
   );
+
+  async function fetchMomoBalance() {
+    setMomoBalanceLoading(true);
+    try {
+      const res = await momoAPI.getBalance();
+      setMomoBalance(res.data);
+    } catch (error) {
+      console.log("MoMo balance fetch failed:", error);
+      setMomoBalance(null);
+    } finally {
+      setMomoBalanceLoading(false);
+    }
+  }
 
   async function fetchExpenses() {
     try {
@@ -247,6 +265,33 @@ export default function HomeScreen() {
           <Text style={styles.totalAmount}>GHS {totalSpent.toFixed(2)}</Text>
           <Text style={styles.totalSub}>{expenses.length} expenses recorded</Text>
         </View>
+        {/* MoMo Wallet Card */}
+        <View style={styles.momoCard}>
+          <View style={styles.momoCardHeader}>
+            <Text style={styles.momoCardIcon}>📱</Text>
+            <Text style={styles.momoCardTitle}>MTN MoMo Wallet</Text>
+            <TouchableOpacity
+              onPress={fetchMomoBalance}
+              style={styles.momoRefreshBtn}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.momoRefreshText}>↻</Text>
+            </TouchableOpacity>
+          </View>
+          {momoBalanceLoading ? (
+            <ActivityIndicator color="#FFC107" style={{ marginTop: 8 }} />
+          ) : momoBalance ? (
+            <View>
+              <Text style={styles.momoBalance}>
+                GHS {Math.max(0, parseFloat(momoBalance.availableBalance)).toFixed(2)}
+              </Text>
+              <Text style={styles.momoSub}>Sandbox balance</Text>
+            </View>
+          ) : (
+            <Text style={styles.momoUnavailable}>Balance unavailable</Text>
+          )}
+        </View>
+
         {Object.keys(categoryTotals).length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>By Category</Text>
@@ -652,6 +697,58 @@ const styles = StyleSheet.create({
     color: "#8890A0",
   },
 
+  // MoMo wallet card
+  momoCard: {
+    backgroundColor: "#1A1F2E",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: "#FFC10730",
+  },
+  momoCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  momoCardIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  momoCardTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#FFC107",
+  },
+  momoRefreshBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#FFC10720",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  momoRefreshText: {
+    fontSize: 18,
+    color: "#FFC107",
+    fontWeight: "bold",
+  },
+  momoBalance: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#FFC107",
+    marginBottom: 2,
+  },
+  momoSub: {
+    fontSize: 12,
+    color: "#8890A0",
+  },
+  momoUnavailable: {
+    fontSize: 14,
+    color: "#8890A0",
+    fontStyle: "italic",
+  },
   // FAB
   fab: {
     position: "absolute",

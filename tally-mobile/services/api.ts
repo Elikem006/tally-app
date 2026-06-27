@@ -31,8 +31,9 @@ export const expenseAPI = {
     category: string,
     description: string,
     date: string,
+    paymentMethod: string = "CASH",
   ) =>
-    api.post("/api/expenses", { userId, amount, category, description, date }),
+    api.post("/api/expenses", { userId, amount, category, description, date, paymentMethod }),
 
   getUserExpenses: (userId: string) => api.get(`/api/expenses/user/${userId}`),
 
@@ -100,6 +101,23 @@ export const groupAPI = {
     api.post(`/api/groups/${groupId}/settle`, { userId }),
 
   deleteGroup: (groupId: string) => api.delete(`/api/groups/${groupId}`),
+};
+
+export const momoAPI = {
+  requestPayment: (
+    groupId: string,
+    userId: string,
+    phoneNumber: string,
+    amount: string,
+    description: string,
+  ) =>
+    api.post("/api/momo/pay", { groupId, userId, phoneNumber, amount, description }),
+
+  checkStatus: (referenceId: string) =>
+    api.get(`/api/momo/status/${referenceId}`),
+
+  getBalance: () =>
+    api.get("/api/momo/balance"),
 };
 
 export const remindersAPI = {

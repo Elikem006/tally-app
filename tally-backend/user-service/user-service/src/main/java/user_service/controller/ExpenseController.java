@@ -45,9 +45,10 @@ public class ExpenseController {
             }
 
             String description = request.get("description");
+            String paymentMethod = request.getOrDefault("paymentMethod", "CASH");
             LocalDate date = LocalDate.parse(dateStr);
 
-            Expense expense = expenseService.createExpense(userId, amount, category, description, date);
+            Expense expense = expenseService.createExpense(userId, amount, category, description, date, paymentMethod);
             return ResponseEntity.ok(expense);
 
         } catch (Exception e) {

@@ -28,6 +28,7 @@ export default function AddScreen() {
   const [description, setDescription] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Food");
   const [loading, setLoading] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "MOMO">("CASH");
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
 
@@ -70,6 +71,7 @@ export default function AddScreen() {
         selectedCategory,
         fullDescription,
         today,
+        paymentMethod,
       );
       // Record in in-app notification history
       const parsed = parseFloat(amount);
@@ -82,6 +84,7 @@ export default function AddScreen() {
       setAmount("");
       setDescription("");
       setSelectedCategory("Food");
+      setPaymentMethod("CASH");
       setTags([]);
       setTagInput("");
     } catch (error: any) {
@@ -128,6 +131,30 @@ export default function AddScreen() {
             </TouchableOpacity>
           );
         })}
+      </View>
+
+      <Text style={styles.label}>Payment Method</Text>
+      <View style={styles.paymentMethodRow}>
+        <TouchableOpacity
+          style={[styles.paymentChip, paymentMethod === "CASH" && styles.paymentChipActive]}
+          onPress={() => setPaymentMethod("CASH")}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.paymentChipIcon}>💵</Text>
+          <Text style={[styles.paymentChipText, paymentMethod === "CASH" && styles.paymentChipTextActive]}>
+            Cash
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.paymentChip, paymentMethod === "MOMO" && styles.paymentChipActiveMomo]}
+          onPress={() => setPaymentMethod("MOMO")}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.paymentChipIcon}>📱</Text>
+          <Text style={[styles.paymentChipText, paymentMethod === "MOMO" && styles.paymentChipTextMomo]}>
+            MoMo
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <Text style={styles.label}>Description (optional)</Text>
@@ -273,6 +300,46 @@ const styles = StyleSheet.create({
     color: "#000000",
     fontSize: 16,
     fontWeight: "bold",
+  },
+  // Payment method
+  paymentMethodRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 20,
+  },
+  paymentChip: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: "#1A1F2E",
+    borderWidth: 2,
+    borderColor: "#ffffff15",
+  },
+  paymentChipActive: {
+    borderColor: "#00C896",
+    backgroundColor: "#00C89615",
+  },
+  paymentChipActiveMomo: {
+    borderColor: "#FFC107",
+    backgroundColor: "#FFC10715",
+  },
+  paymentChipIcon: {
+    fontSize: 18,
+  },
+  paymentChipText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#8890A0",
+  },
+  paymentChipTextActive: {
+    color: "#00C896",
+  },
+  paymentChipTextMomo: {
+    color: "#FFC107",
   },
   // Tags
   tagInputRow: {

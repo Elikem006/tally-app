@@ -56,14 +56,21 @@ public class ExpenseService {
     }
 
     public Expense createExpense(Long userId, BigDecimal amount, String category,
-                                 String description, LocalDate date) {
+                                 String description, LocalDate date, String paymentMethod) {
         Expense expense = new Expense();
         expense.setUserId(userId);
         expense.setAmount(amount);
         expense.setCategory(category);
         expense.setDescription(description);
         expense.setDate(date);
+        expense.setPaymentMethod(paymentMethod != null && !paymentMethod.isBlank() ? paymentMethod : "CASH");
         return expenseRepository.save(expense);
+    }
+
+    // Overload for backward compatibility
+    public Expense createExpense(Long userId, BigDecimal amount, String category,
+                                 String description, LocalDate date) {
+        return createExpense(userId, amount, category, description, date, "CASH");
     }
 
     public List<Expense> getUserExpenses(Long userId) {
@@ -177,6 +184,7 @@ public class ExpenseService {
             entry.put("date", e.getDate().toString());
             entry.put("type", "personal");
             entry.put("groupId", null);
+            entry.put("paymentMethod", e.getPaymentMethod() != null ? e.getPaymentMethod() : "CASH");
             entry.put("createdAt", e.getCreatedAt() != null ? e.getCreatedAt().toString() : null);
             combined.add(entry);
         }

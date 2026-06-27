@@ -81,6 +81,22 @@ public class MoMoController {
     }
 
     /**
+     * GET /api/momo/balance
+     * Returns the MoMo collection account balance from the sandbox.
+     */
+    @GetMapping("/balance")
+    public ResponseEntity<?> getBalance() {
+        try {
+            Map<String, String> balance = moMoService.getAccountBalance();
+            return ResponseEntity.ok(balance);
+        } catch (Exception e) {
+            log.severe("MoMo balance error: " + e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
      * POST /api/momo/callback
      * Receives MoMo push notifications — log and acknowledge.
      */
