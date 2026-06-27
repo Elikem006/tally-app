@@ -10,6 +10,10 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Handles all expense-related API requests at /api/expenses.
+ * Delegates logic to ExpenseService.
+ */
 @RestController
 @RequestMapping("/api/expenses")
 @CrossOrigin(origins = "*")
@@ -18,6 +22,12 @@ public class ExpenseController {
     @Autowired
     private ExpenseService expenseService;
 
+    /**
+     * POST /api/expenses
+     * Creates a new expense for a user.
+     * Required fields: userId, amount, category, date
+     * Optional field: description
+     */
     @PostMapping
     public ResponseEntity<?> createExpense(@RequestBody Map<String, String> request) {
         try {
@@ -56,6 +66,12 @@ public class ExpenseController {
         }
     }
 
+    /**
+     * GET /api/expenses/user/{userId}
+     * Returns all expenses for a user.
+     * Optional query param: category — filters results by category.
+     * Example: /api/expenses/user/1?category=Food
+     */
     @GetMapping("/user/{userId}")
     public ResponseEntity<?> getUserExpenses(@PathVariable Long userId,
                                              @RequestParam(required = false) String category) {
@@ -73,6 +89,10 @@ public class ExpenseController {
         }
     }
 
+    /**
+     * DELETE /api/expenses/{expenseId}
+     * Deletes a single expense by its ID.
+     */
     @DeleteMapping("/{expenseId}")
     public ResponseEntity<?> deleteExpense(@PathVariable Long expenseId) {
         try {
@@ -84,6 +104,12 @@ public class ExpenseController {
         }
     }
 
+    /**
+     * GET /api/expenses/user/{userId}/report
+     * Returns a monthly spending report for a user.
+     * Optional query params: month, year — defaults to current month/year.
+     * Example: /api/expenses/user/1/report?month=6&year=2026
+     */
     @GetMapping("/user/{userId}/report")
     public ResponseEntity<?> getMonthlyReport(@PathVariable Long userId,
                                               @RequestParam(required = false) Integer month,
@@ -97,6 +123,10 @@ public class ExpenseController {
         }
     }
 
+    /**
+     * GET /api/expenses/user/{userId}/history
+     * Returns a combined history of all expenses for a user.
+     */
     @GetMapping("/user/{userId}/history")
     public ResponseEntity<?> getCombinedHistory(@PathVariable Long userId) {
         try {
