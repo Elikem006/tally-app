@@ -9,6 +9,10 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Handles all budget-related API requests at /api/budgets.
+ * Delegates logic to BudgetService.
+ */
 @RestController
 @RequestMapping("/api/budgets")
 @CrossOrigin(origins = "*")
@@ -17,6 +21,11 @@ public class BudgetController {
     @Autowired
     private BudgetService budgetService;
 
+    /**
+     * POST /api/budgets
+     * Creates or updates a monthly budget for a specific category.
+     * Required fields: userId, category, monthlyLimit
+     */
     @PostMapping
     public ResponseEntity<?> setBudget(@RequestBody Map<String, String> request) {
         try {
@@ -38,6 +47,10 @@ public class BudgetController {
         }
     }
 
+    /**
+     * GET /api/budgets/user/{userId}
+     * Returns all budgets belonging to the specified user.
+     */
     @GetMapping("/user/{userId}")
     public ResponseEntity<?> getUserBudgets(@PathVariable Long userId) {
         try {
@@ -49,6 +62,10 @@ public class BudgetController {
         }
     }
 
+    /**
+     * GET /api/budgets/user/{userId}/summary
+     * Returns a spending summary showing amount spent vs limit per category.
+     */
     @GetMapping("/user/{userId}/summary")
     public ResponseEntity<?> getBudgetSummary(@PathVariable Long userId) {
         try {
@@ -60,6 +77,10 @@ public class BudgetController {
         }
     }
 
+    /**
+     * DELETE /api/budgets/user/{userId}/{category}
+     * Deletes the budget for the specified user and category.
+     */
     @DeleteMapping("/user/{userId}/{category}")
     public ResponseEntity<?> deleteBudget(
             @PathVariable Long userId,
