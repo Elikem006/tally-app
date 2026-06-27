@@ -64,4 +64,11 @@ public class UserService {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
     }
+
+    public User updatePhoneNumber(Long userId, String phoneNumber) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        user.setPhoneNumber(phoneNumber);
+        return userRepository.save(user);
+    }
 }

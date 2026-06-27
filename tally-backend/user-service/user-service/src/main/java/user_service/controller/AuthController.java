@@ -96,6 +96,26 @@ public class AuthController {
         }
     }
 
+    @PutMapping("/user/{userId}/phone")
+    public ResponseEntity<?> updatePhone(
+            @PathVariable Long userId,
+            @RequestBody Map<String, String> request) {
+        try {
+            String phoneNumber = request.get("phoneNumber");
+            if (phoneNumber == null || phoneNumber.isBlank()) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Phone number is required"));
+            }
+            var user = userService.updatePhoneNumber(userId, phoneNumber);
+            return ResponseEntity.ok(Map.of(
+                    "message", "Phone number updated",
+                    "phoneNumber", user.getPhoneNumber()
+            ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @GetMapping("/health")
     public ResponseEntity<?> health() {
         return ResponseEntity.ok(Map.of("status", "User service is running"));

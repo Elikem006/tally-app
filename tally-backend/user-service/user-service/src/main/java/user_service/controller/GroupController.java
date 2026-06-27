@@ -128,14 +128,15 @@ public class GroupController {
         }
     }
 
-    // POST /api/groups/:id/settle — settle up
+    // POST /api/groups/:id/settle — settle up (optionally with MoMo payment)
     @PostMapping("/{groupId}/settle")
     public ResponseEntity<?> settleUp(
             @PathVariable Long groupId,
             @RequestBody Map<String, String> request) {
         try {
             Long userId = Long.parseLong(request.get("userId"));
-            Map<String, Object> result = groupService.settleUp(groupId, userId);
+            String phoneNumber = request.get("phoneNumber"); // optional
+            Map<String, Object> result = groupService.settleUp(groupId, userId, phoneNumber);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             return ResponseEntity.badRequest()

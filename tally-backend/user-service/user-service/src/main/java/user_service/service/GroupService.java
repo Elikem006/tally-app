@@ -30,6 +30,9 @@ public class GroupService {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private MoMoService moMoService;
+
     // Fetch a user once and return it (null-safe)
     private User findUser(Long userId) {
         if (userId == null) return null;
@@ -180,8 +183,8 @@ public class GroupService {
         return debts;
     }
 
-    // Settle up — clear all debts for a user in a group
-    public Map<String, Object> settleUp(Long groupId, Long userId) {
+    // Settle up — optionally trigger MoMo payment, then clear expenses
+    public Map<String, Object> settleUp(Long groupId, Long userId, String phoneNumber) {
         groupRepository.findById(groupId)
                 .orElseThrow(() -> new RuntimeException("Group not found"));
 
@@ -189,14 +192,58 @@ public class GroupService {
             throw new RuntimeException("User is not a member of this group");
         }
 
-        List<SharedExpense> expenses = sharedExpenseRepository.findByGroupId(groupId);
-        sharedExpenseRepository.deleteAll(expenses);
+        String momoReferenceId = null;
+        String momoStatus = null;
+
+        // If a phone number is provided, fire the MoMo request first
+        if (phoneNumber != null && !phoneNumber.isBlank()) {
+            // Calculate total owed by this user
+            List<GroupMember> members = groupMemberRepository.findByGroupId(groupId);
+            List<SharedExpense> expenses = sharedExpenseRepository.findByGroupId(groupId);
+            int memberCount = Math.max(members.size(), 1);
+
+            java.math.BigDecimal owedAmount = java.math.BigDecimal.ZERO;
+            for (SharedExpense se : expenses) {
+                if ("SETTLED".equals(se.getDescription())) continue;
+                java.math.BigDecimal share = se.getAmount()
+                        .divide(java.math.BigDecimal.valueOf(memberCount), 2, java.math.RoundingMode.HALF_UP);
+                if (!se.getPaidBy().equals(userId)) {
+                    owedAmount = owedAmount.add(share);
+                }
+            }
+
+            if (owedAmount.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                try {
+                    String refId = java.util.UUID.randomUUID().toString();
+                    momoReferenceId = moMoService.requestToPay(
+                            phoneNumber, owedAmount, "Tally group settle-up", refId);
+                    momoStatus = "PENDING";
+                } catch (Exception e) {
+                    // Log but don't block settle-up in sandbox
+                    System.err.println("MoMo request failed (sandbox): " + e.getMessage());
+                    momoStatus = "FAILED";
+                }
+            }
+        }
+
+        // Always clear expenses (sandbox behaviour)
+        List<SharedExpense> allExpenses = sharedExpenseRepository.findByGroupId(groupId);
+        sharedExpenseRepository.deleteAll(allExpenses);
 
         Map<String, Object> result = new HashMap<>();
         result.put("message", "Successfully settled up — all expenses cleared");
         result.put("userId",  userId);
         result.put("groupId", groupId);
+        if (momoReferenceId != null) {
+            result.put("momoReferenceId", momoReferenceId);
+            result.put("momoStatus",      momoStatus);
+        }
         return result;
+    }
+
+    // Overload for backward compatibility (no phone number)
+    public Map<String, Object> settleUp(Long groupId, Long userId) {
+        return settleUp(groupId, userId, null);
     }
 
     public void deleteGroup(Long groupId) {

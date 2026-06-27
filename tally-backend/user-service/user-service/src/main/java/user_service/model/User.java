@@ -30,4 +30,7 @@ public class User {
 
     @Column(name = "avatar_data", columnDefinition = "TEXT", nullable = true)
     private String avatarData;
+
+    @Column(name = "phone_number", nullable = true)
+    private String phoneNumber;
 }
