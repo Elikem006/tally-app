@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect } from "expo-router";
 import { expenseAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
 
@@ -62,14 +63,16 @@ export default function ReportScreen() {
   const [chartTimeline, setChartTimeline] = useState<'day' | 'week' | 'month' | 'year'>('week');
 
   const isCurrentMonth = selectedMonth === todayMonth && selectedYear === todayYear;
+  const refDate = isCurrentMonth 
+    ? new Date() 
+    : new Date(selectedYear, selectedMonth + 1, 0);
 
-  useEffect(() => {
-    fetchReport(selectedMonth, selectedYear);
-  }, [selectedMonth, selectedYear]);
-
-  useEffect(() => {
-    fetchExpenses();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchReport(selectedMonth, selectedYear);
+      fetchExpenses();
+    }, [selectedMonth, selectedYear])
+  );
 
   async function fetchReport(month: number, year: number) {
     setLoading(true);
@@ -133,11 +136,11 @@ export default function ReportScreen() {
     const SHORT_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
     if (chartTimeline === 'day') {
-      // Last 7 days
+      // Last 7 days relative to refDate
       const chartBars = [];
       let sum = 0;
       for (let i = 6; i >= 0; i--) {
-        const d = new Date(now);
+        const d = new Date(refDate);
         d.setDate(d.getDate() - i);
         const dayLabel = SHORT_DAYS[d.getDay()];
         const year = d.getFullYear();
@@ -156,16 +159,16 @@ export default function ReportScreen() {
     }
 
     if (chartTimeline === 'week') {
-      // Last 4 weeks relative to today
+      // Last 4 weeks relative to refDate
       const chartBars = [];
       let sum = 0;
       for (let i = 3; i >= 0; i--) {
-        const start = new Date(now);
-        start.setDate(now.getDate() - (i + 1) * 7 + 1);
+        const start = new Date(refDate);
+        start.setDate(refDate.getDate() - (i + 1) * 7 + 1);
         start.setHours(0, 0, 0, 0);
         
-        const end = new Date(now);
-        end.setDate(now.getDate() - i * 7);
+        const end = new Date(refDate);
+        end.setDate(refDate.getDate() - i * 7);
         end.setHours(23, 59, 59, 999);
 
         const weekSpend = expenses.filter(e => {
@@ -181,11 +184,11 @@ export default function ReportScreen() {
     }
 
     if (chartTimeline === 'month') {
-      // Last 6 months
+      // Last 6 months relative to refDate
       const chartBars = [];
       let sum = 0;
       for (let i = 5; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const d = new Date(refDate.getFullYear(), refDate.getMonth() - i, 1);
         const label = SHORT_MONTHS[d.getMonth()];
         const yr = d.getFullYear();
         const mo = d.getMonth() + 1;
@@ -202,11 +205,11 @@ export default function ReportScreen() {
       return { chartBars, chartSum: sum };
     }
 
-    // Yearly: Last 3 years
+    // Yearly: Last 3 years relative to refDate
     const chartBars = [];
     let sum = 0;
     for (let i = 2; i >= 0; i--) {
-      const yr = now.getFullYear() - i;
+      const yr = refDate.getFullYear() - i;
       const yearSpend = expenses.filter(e => {
         if (!e.date) return false;
         const ed = parseLocalDate(e.date);
