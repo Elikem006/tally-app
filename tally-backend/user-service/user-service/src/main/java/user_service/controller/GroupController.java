@@ -12,6 +12,10 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Handles all group and shared expense API requests at /api/groups.
+ * Delegates logic to GroupService.
+ */
 @RestController
 @RequestMapping("/api/groups")
 @CrossOrigin(origins = "*")
@@ -20,7 +24,11 @@ public class GroupController {
     @Autowired
     private GroupService groupService;
 
-    // POST /api/groups — create a group
+    /**
+     * POST /api/groups
+     * Creates a new group. The creator is automatically added as a member.
+     * Required fields: name, createdBy
+     */
     @PostMapping
     public ResponseEntity<?> createGroup(@RequestBody Map<String, String> request) {
         try {
@@ -40,7 +48,11 @@ public class GroupController {
         }
     }
 
-    // POST /api/groups/:id/members — add a member
+    /**
+     * POST /api/groups/{groupId}/members
+     * Adds a user to an existing group.
+     * Required field: userId
+     */
     @PostMapping("/{groupId}/members")
     public ResponseEntity<?> addMember(
             @PathVariable Long groupId,
@@ -55,7 +67,10 @@ public class GroupController {
         }
     }
 
-    // GET /api/groups/user/:id — get all groups for a user
+    /**
+     * GET /api/groups/user/{userId}
+     * Returns all groups the specified user belongs to.
+     */
     @GetMapping("/user/{userId}")
     public ResponseEntity<?> getUserGroups(@PathVariable Long userId) {
         try {
@@ -67,7 +82,10 @@ public class GroupController {
         }
     }
 
-    // GET /api/groups/:id — group details with members and expenses
+    /**
+     * GET /api/groups/{groupId}
+     * Returns full group details including members and shared expenses.
+     */
     @GetMapping("/{groupId}")
     public ResponseEntity<?> getGroupDetails(@PathVariable Long groupId) {
         try {
@@ -79,7 +97,11 @@ public class GroupController {
         }
     }
 
-    // POST /api/groups/:id/expenses — add a shared expense
+    /**
+     * POST /api/groups/{groupId}/expenses
+     * Adds a shared expense to a group. Split equally among all members.
+     * Required fields: paidBy, amount, description
+     */
     @PostMapping("/{groupId}/expenses")
     public ResponseEntity<?> addSharedExpense(
             @PathVariable Long groupId,
@@ -116,7 +138,10 @@ public class GroupController {
         }
     }
 
-    // GET /api/groups/:id/balances — calculate who owes whom
+    /**
+     * GET /api/groups/{groupId}/balances
+     * Calculates and returns who owes whom within the group.
+     */
     @GetMapping("/{groupId}/balances")
     public ResponseEntity<?> getBalances(@PathVariable Long groupId) {
         try {
@@ -128,7 +153,11 @@ public class GroupController {
         }
     }
 
-    // POST /api/groups/:id/settle — settle up
+    /**
+     * POST /api/groups/{groupId}/settle
+     * Marks all expenses as settled for a specific user in the group.
+     * Required field: userId
+     */
     @PostMapping("/{groupId}/settle")
     public ResponseEntity<?> settleUp(
             @PathVariable Long groupId,
@@ -143,6 +172,10 @@ public class GroupController {
         }
     }
 
+    /**
+     * DELETE /api/groups/{groupId}
+     * Deletes a group and all its associated data.
+     */
     @DeleteMapping("/{groupId}")
     public ResponseEntity<?> deleteGroup(@PathVariable Long groupId) {
         try {
