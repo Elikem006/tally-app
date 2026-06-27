@@ -46,7 +46,22 @@ public class UserService {
         response.put("userId", user.getId());
         response.put("name", user.getName());
         response.put("email", user.getEmail());
+        response.put("avatarType", user.getAvatarType());
+        response.put("avatarData", user.getAvatarData());
 
         return response;
+    }
+
+    public User updateAvatar(Long userId, String avatarType, String avatarData) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        user.setAvatarType(avatarType);
+        user.setAvatarData(avatarData);
+        return userRepository.save(user);
+    }
+
+    public User getUserById(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
     }
 }

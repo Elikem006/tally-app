@@ -333,20 +333,23 @@ const styles = StyleSheet.create({
   },
   filterRow: {
     paddingHorizontal: 16,
+    paddingTop: 16,
     paddingBottom: 12,
     gap: 8,
     flexDirection: "row",
   },
   filterBtn: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
     backgroundColor: "#1A1F2E",
     borderWidth: 1,
     borderColor: "#ffffff15",
+    minWidth: 64,
+    alignItems: "center",
   },
   filterBtnActive: {
-    backgroundColor: "#00C896",
+    backgroundColor: "#00C89620",
     borderColor: "#00C896",
   },
   filterText: {
@@ -355,7 +358,7 @@ const styles = StyleSheet.create({
     color: "#8890A0",
   },
   filterTextActive: {
-    color: "#000000",
+    color: "#00C896",
   },
   list: {
     padding: 16,

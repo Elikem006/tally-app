@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { remindersAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
+import { addHistoryItem } from "../../services/notificationHistory";
 
 export default function RemindersScreen() {
   const [reminders, setReminders] = useState<any[]>([]);
@@ -69,6 +70,11 @@ export default function RemindersScreen() {
       setIsRecurring(false);
       setShowAddForm(false);
       await fetchReminders();
+      await addHistoryItem({
+        type: "reminder_due",
+        title: "Reminder set",
+        body: `"${title.trim()}" due ${dueDate.trim()}${amount.trim() ? ` — GHS ${amount.trim()}` : ""}.`,
+      });
       Alert.alert("Success", "Reminder added!");
     } catch (error) {
       Alert.alert("Error", "Failed to save reminder");

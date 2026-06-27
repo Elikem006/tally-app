@@ -3,6 +3,7 @@ import { notifyNewSharedExpense } from "../services/notifications";
 import { useLocalSearchParams, router } from "expo-router";
 import { groupAPI } from "../services/api";
 import { getUserId } from "../services/storage";
+import Avatar from "../components/Avatar";
 import {
   View,
   Text,
@@ -76,10 +77,10 @@ export default function GroupDetailScreen() {
     }
   }
 
-  async function handleSettleUp(userId: number) {
+  async function handleSettleUp(userId: number, name: string) {
     Alert.alert(
       "Settle Up",
-      `Are you sure you want to settle up User #${userId}?`,
+      `Are you sure you want to settle up with ${name}?`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -194,14 +195,16 @@ export default function GroupDetailScreen() {
 
             return sorted.map((expense: any) => (
               <View key={expense.id} style={styles.activityItem}>
-                <View style={styles.activityAvatar}>
-                  <Text style={styles.activityAvatarText}>
-                    {String(expense.paidBy || "U").charAt(0).toUpperCase()}
-                  </Text>
-                </View>
+                <Avatar
+                  userId={expense.paidBy}
+                  name={expense.paidByName || String(expense.paidBy)}
+                  size={36}
+                  avatarData={expense.paidByAvatarData}
+                  style={{ marginRight: 12 }}
+                />
                 <View style={styles.activityContent}>
                   <Text style={styles.activityText}>
-                    User #{expense.paidBy} paid GHS {parseFloat(expense.amount).toFixed(2)} for {expense.description}
+                    {expense.paidByName || `User #${expense.paidBy}`} paid GHS {parseFloat(expense.amount).toFixed(2)} for {expense.description}
                   </Text>
                   <Text style={styles.activityTime}>{timeAgo(expense.createdAt)}</Text>
                 </View>
@@ -220,12 +223,17 @@ export default function GroupDetailScreen() {
           <Text style={styles.sectionTitle}>Members</Text>
           {details?.members?.map((member: any) => (
             <View key={member.id} style={styles.memberRow}>
-              <View style={styles.memberAvatar}>
-                <Text style={styles.memberAvatarText}>
-                  {String(member.userId).charAt(0)}
-                </Text>
+              <Avatar
+                userId={member.userId}
+                name={member.name || String(member.userId)}
+                size={36}
+                avatarData={member.avatarData}
+                style={{ marginRight: 12 }}
+              />
+              <View>
+                <Text style={styles.memberText}>{member.name || `User #${member.userId}`}</Text>
+                <Text style={styles.memberSubText}>#{member.userId}</Text>
               </View>
-              <Text style={styles.memberText}>User #{member.userId}</Text>
             </View>
           ))}
         </View>
@@ -273,11 +281,20 @@ export default function GroupDetailScreen() {
             <Text style={styles.sectionTitle}>Balances</Text>
             {balances.map((b: any, index: number) => (
               <View key={index} style={styles.balanceRow}>
-                <View>
-                  <Text style={styles.balanceText}>User #{b.userId}</Text>
-                  <Text style={styles.balanceSub}>
-                    {b.owes ? "Owes money" : "Is owed money"}
-                  </Text>
+                <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+                  <Avatar
+                    userId={b.userId}
+                    name={b.name || String(b.userId)}
+                    size={36}
+                    avatarData={b.avatarData}
+                    style={{ marginRight: 10 }}
+                  />
+                  <View>
+                    <Text style={styles.balanceText}>{b.name || `User #${b.userId}`}</Text>
+                    <Text style={styles.balanceSub}>
+                      {b.owes ? "Owes money" : "Is owed money"}
+                    </Text>
+                  </View>
                 </View>
                 <View style={{ alignItems: "flex-end", gap: 8 }}>
                   <View
@@ -302,7 +319,7 @@ export default function GroupDetailScreen() {
                   {b.owes && (
                     <TouchableOpacity
                       style={styles.settleButton}
-                      onPress={() => handleSettleUp(b.userId)}
+                      onPress={() => handleSettleUp(b.userId, b.name || `User #${b.userId}`)}
                     >
                       <Text style={styles.settleButtonText}>Settle Up</Text>
                     </TouchableOpacity>
@@ -324,7 +341,7 @@ export default function GroupDetailScreen() {
                 <View>
                   <Text style={styles.expenseName}>{expense.description}</Text>
                   <Text style={styles.expenseSub}>
-                    Paid by User #{expense.paidBy} • Split equally
+                    Paid by {expense.paidByName || `User #${expense.paidBy}`} • Split equally
                   </Text>
                 </View>
                 <Text style={styles.expenseAmount}>
@@ -458,6 +475,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#ffffff",
     fontWeight: "500",
+  },
+  memberSubText: {
+    fontSize: 11,
+    color: "#8890A0",
+    marginTop: 1,
   },
   balanceRow: {
     flexDirection: "row",

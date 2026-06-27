@@ -16,6 +16,12 @@ export const authAPI = {
 
   login: (email: string, password: string) =>
     api.post("/api/auth/login", { email, password }),
+
+  updateAvatar: (userId: string, avatarType: string, avatarData: string) =>
+    api.put(`/api/auth/user/${userId}/avatar`, { avatarType, avatarData }),
+
+  getUserProfile: (userId: string) =>
+    api.get(`/api/auth/user/${userId}`),
 };
 
 export const expenseAPI = {

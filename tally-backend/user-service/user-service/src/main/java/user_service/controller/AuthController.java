@@ -62,6 +62,40 @@ public class AuthController {
         }
     }
 
+    @PutMapping("/user/{userId}/avatar")
+    public ResponseEntity<?> updateAvatar(
+            @PathVariable Long userId,
+            @RequestBody Map<String, String> request) {
+        try {
+            String avatarType = request.get("avatarType");
+            String avatarData = request.get("avatarData");
+            var user = userService.updateAvatar(userId, avatarType, avatarData);
+            return ResponseEntity.ok(Map.of(
+                    "message", "Avatar updated",
+                    "avatarType", user.getAvatarType() != null ? user.getAvatarType() : "",
+                    "avatarData", user.getAvatarData() != null ? user.getAvatarData() : ""
+            ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<?> getUserById(@PathVariable Long userId) {
+        try {
+            var user = userService.getUserById(userId);
+            return ResponseEntity.ok(Map.of(
+                    "userId", user.getId(),
+                    "name", user.getName(),
+                    "email", user.getEmail(),
+                    "avatarType", user.getAvatarType() != null ? user.getAvatarType() : "",
+                    "avatarData", user.getAvatarData() != null ? user.getAvatarData() : ""
+            ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @GetMapping("/health")
     public ResponseEntity<?> health() {
         return ResponseEntity.ok(Map.of("status", "User service is running"));

@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback } from "react";
 import { currentUser } from "../(auth)/login";
 import { expenseAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
+import Avatar from "../../components/Avatar";
 
 const CATEGORY_ICONS: { [key: string]: string } = {
   Food: "🍔",
@@ -16,10 +18,17 @@ const CATEGORY_ICONS: { [key: string]: string } = {
 export default function ProfileScreen() {
   const [stats, setStats] = useState<any>(null);
   const [loadingStats, setLoadingStats] = useState(true);
+  const [avatarData, setAvatarData] = useState<string | null>(currentUser.avatarData || null);
 
   useEffect(() => {
     fetchStats();
   }, []);
+
+  // Refresh avatar state every time this screen comes into focus
+  // (so photos saved in avatar-builder appear immediately)
+  useFocusEffect(useCallback(() => {
+    setAvatarData(currentUser.avatarData || null);
+  }, []));
 
   async function fetchStats() {
     try {
@@ -76,11 +85,16 @@ export default function ProfileScreen() {
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       {/* Avatar */}
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>
-          {currentUser.userName.charAt(0).toUpperCase()}
-        </Text>
-      </View>
+      <Avatar
+        userId={Number(currentUser.userId)}
+        name={currentUser.userName}
+        size={88}
+        avatarData={avatarData}
+        style={styles.avatarMargin}
+      />
+      <TouchableOpacity style={styles.editAvatarBtn} onPress={() => router.push("/avatar-builder")}>
+        <Text style={styles.editAvatarText}>✏️  Edit Avatar</Text>
+      </TouchableOpacity>
 
       <Text style={styles.name}>{currentUser.userName}</Text>
       <Text style={styles.subtitle}>Tally Member</Text>
@@ -160,20 +174,23 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: "center",
   },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#00C896",
-    alignItems: "center",
-    justifyContent: "center",
+  avatarMargin: {
     marginTop: 40,
-    marginBottom: 16,
+    marginBottom: 10,
   },
-  avatarText: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: "#000000",
+  editAvatarBtn: {
+    backgroundColor: "#1A1F2E",
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#ffffff15",
+  },
+  editAvatarText: {
+    fontSize: 13,
+    color: "#8890A0",
+    fontWeight: "500",
   },
   name: {
     fontSize: 22,

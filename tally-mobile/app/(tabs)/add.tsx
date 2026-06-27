@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { expenseAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
+import { addHistoryItem } from "../../services/notificationHistory";
 
 const CATEGORIES = [
   { name: "Food", emoji: "🍔" },
@@ -70,6 +71,13 @@ export default function AddScreen() {
         fullDescription,
         today,
       );
+      // Record in in-app notification history
+      const parsed = parseFloat(amount);
+      await addHistoryItem({
+        type: "expense_added",
+        title: "Expense recorded",
+        body: `GHS ${parsed.toFixed(2)} added to ${selectedCategory}${description ? ` — ${description}` : ""}.`,
+      });
       Alert.alert("Success", "Expense added successfully!");
       setAmount("");
       setDescription("");
