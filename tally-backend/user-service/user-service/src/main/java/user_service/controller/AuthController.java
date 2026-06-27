@@ -7,6 +7,10 @@ import user_service.model.User;
 import user_service.service.UserService;
 import java.util.Map;
 
+/**
+ * Handles all authentication API requests at /api/auth.
+ * Delegates logic to UserService.
+ */
 @RestController
 @RequestMapping("/api/auth")
 @CrossOrigin(origins = "*")
@@ -15,6 +19,11 @@ public class AuthController {
     @Autowired
     private UserService userService;
 
+    /**
+     * POST /api/auth/register
+     * Creates a new user account.
+     * Required fields: name, email, password
+     */
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody Map<String, String> request) {
         try {
@@ -42,6 +51,11 @@ public class AuthController {
         }
     }
 
+    /**
+     * POST /api/auth/login
+     * Authenticates a user and returns a JWT token.
+     * Required fields: email, password
+     */
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody Map<String, String> request) {
         try {
@@ -62,6 +76,10 @@ public class AuthController {
         }
     }
 
+    /**
+     * GET /api/auth/health
+     * Simple health check to confirm the backend is running.
+     */
     @GetMapping("/health")
     public ResponseEntity<?> health() {
         return ResponseEntity.ok(Map.of("status", "User service is running"));
