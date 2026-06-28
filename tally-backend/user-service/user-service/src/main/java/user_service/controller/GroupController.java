@@ -97,6 +97,8 @@ public class GroupController {
                         .body(Map.of("error", "paidBy, amount and description are required", "success", false));
             }
 
+            // Trim before empty-check so "   " is treated as empty
+            description = description.trim();
             if (description.isEmpty()) {
                 return ResponseEntity.badRequest()
                         .body(Map.of("error", "Description cannot be empty", "success", false));

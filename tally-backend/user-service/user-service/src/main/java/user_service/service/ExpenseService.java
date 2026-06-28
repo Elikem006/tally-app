@@ -57,6 +57,12 @@ public class ExpenseService {
 
     public Expense createExpense(Long userId, BigDecimal amount, String category,
                                  String description, LocalDate date, String paymentMethod) {
+        // Sanitize description: trim whitespace; treat blank as null
+        if (description != null) {
+            description = description.trim();
+            if (description.isEmpty()) description = null;
+        }
+
         Expense expense = new Expense();
         expense.setUserId(userId);
         expense.setAmount(amount);

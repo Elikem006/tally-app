@@ -24,6 +24,10 @@ public class MoMoController {
     /**
      * POST /api/momo/pay
      * Body: { "userId", "phoneNumber", "amount", "description", "groupId" }
+     *
+     * TODO: Add rate limiting before production to prevent abuse of MoMo payment endpoint.
+     * Consider using Spring's @RateLimiter (Resilience4j) or a Redis-based solution
+     * (e.g. Bucket4j) to limit requests per user/IP.
      */
     @PostMapping("/pay")
     public ResponseEntity<?> initiatePay(@RequestBody Map<String, String> request) {

@@ -3,15 +3,27 @@ package user_service;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.util.Date;
 
 @Component
 public class JwtUtil {
 
-    private Key key = Keys.secretKeyFor(SignatureAlgorithm.HS256);
-    private long expiration = 86400000;
+    // Stable key derived from application.properties jwt.secret.
+    // Using a fixed secret means tokens survive server restarts.
+    // Must be at least 32 characters for HS256.
+    @Value("${jwt.secret}")
+    private String secret;
+
+    private long expiration = 86400000; // 24 hours
+
+    private Key getKey() {
+        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        return Keys.hmacShaKeyFor(keyBytes);
+    }
 
     public String generateToken(String email, Long userId) {
         return Jwts.builder()
@@ -19,13 +31,13 @@ public class JwtUtil {
                 .claim("userId", userId)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + expiration))
-                .signWith(key)
+                .signWith(getKey(), SignatureAlgorithm.HS256)
                 .compact();
     }
 
     public String getEmailFromToken(String token) {
         return Jwts.parserBuilder()
-                .setSigningKey(key)
+                .setSigningKey(getKey())
                 .build()
                 .parseClaimsJws(token)
                 .getBody()
@@ -35,7 +47,7 @@ public class JwtUtil {
     public boolean validateToken(String token) {
         try {
             Jwts.parserBuilder()
-                    .setSigningKey(key)
+                    .setSigningKey(getKey())
                     .build()
                     .parseClaimsJws(token);
             return true;
