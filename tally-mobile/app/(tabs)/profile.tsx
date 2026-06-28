@@ -85,9 +85,12 @@ export default function ProfileScreen() {
         style: "destructive",
         onPress: () => {
           currentUser.token = "";
-          currentUser.userId = "";
+          currentUser.userId = "1";
           currentUser.userName = "";
           currentUser.email = "";
+          currentUser.avatarType = "";
+          currentUser.avatarData = "";
+          currentUser.phoneNumber = "";
           router.replace("/(auth)/login");
         },
       },

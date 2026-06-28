@@ -2,6 +2,7 @@ package user_service.service;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
@@ -38,7 +39,14 @@ public class MoMoService {
     @Value("${momo.callback.url}")
     private String callbackUrl;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate = buildRestTemplate();
+
+    private static RestTemplate buildRestTemplate() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(10_000); // 10 seconds
+        factory.setReadTimeout(30_000);    // 30 seconds
+        return new RestTemplate(factory);
+    }
 
     /**
      * Obtain a Bearer access token from the MoMo collections API.
@@ -62,8 +70,11 @@ public class MoMoService {
                     Map.class
             );
 
-            if (response.getBody() == null || !response.getBody().containsKey("access_token")) {
-                throw new RuntimeException("Failed to get MoMo access token: empty or unexpected response");
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                throw new RuntimeException("Failed to get MoMo access token. Status: " + response.getStatusCode());
+            }
+            if (!response.getBody().containsKey("access_token")) {
+                throw new RuntimeException("Failed to get MoMo access token: response missing access_token field");
             }
 
             return (String) response.getBody().get("access_token");
@@ -176,6 +187,10 @@ public class MoMoService {
                     entity,
                     Map.class
             );
+
+            if (!response.getStatusCode().is2xxSuccessful()) {
+                throw new RuntimeException("Failed to get payment status. Status: " + response.getStatusCode());
+            }
 
             if (response.getBody() != null && response.getBody().containsKey("status")) {
                 return (String) response.getBody().get("status");
