@@ -9,6 +9,7 @@ import {
   Alert,
   ScrollView,
   TextInput,
+  RefreshControl,
 } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import { expenseAPI } from "../../services/api";
@@ -60,6 +61,8 @@ function parseTagsFromDescription(description: string | null | undefined): {
 export default function HistoryScreen() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -77,10 +80,20 @@ export default function HistoryScreen() {
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
       );
       setExpenses(sorted);
-    } catch (error) {
-      Alert.alert("Error", "Failed to load expenses");
+      setError(null);
+    } catch (err) {
+      setError("Something went wrong. Pull down to refresh.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      await fetchExpenses();
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -135,9 +148,25 @@ export default function HistoryScreen() {
     );
   }
 
+  if (error && expenses.length === 0) {
+    return (
+      <ScrollView
+        style={{ flex: 1, backgroundColor: "#0F1117" }}
+        contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center" }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+      >
+        <Text style={styles.errorText}>{error}</Text>
+      </ScrollView>
+    );
+  }
+
   if (expenses.length === 0) {
     return (
-      <View style={styles.centered}>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: "#0F1117" }}
+        contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center" }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+      >
         <Text style={styles.emptyIcon}>📭</Text>
         <Text style={styles.emptyText}>No expenses yet</Text>
         <Text style={styles.emptySubtext}>
@@ -149,7 +178,7 @@ export default function HistoryScreen() {
         >
           <Text style={styles.emptyButtonText}>Add Your First Expense</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     );
   }
 
@@ -217,10 +246,12 @@ export default function HistoryScreen() {
         data={filteredExpenses}
         keyExtractor={(item) => String(item.id)}
         contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
         renderItem={({ item }) => {
           const isShared = item.type === "shared";
           const color = CATEGORY_COLORS[item.category] || "#8890A0";
           const { cleanDescription, tags } = parseTagsFromDescription(item.description);
+          const isMomo = item.paymentMethod === "MOMO";
           return (
             <TouchableOpacity
               style={[styles.expenseCard, isShared && styles.sharedCard]}
@@ -233,19 +264,27 @@ export default function HistoryScreen() {
                   </Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <View style={styles.descRow}>
-                    <Text style={styles.expenseDescription}>
-                      {cleanDescription || item.category}
-                    </Text>
-                    {isShared && (
-                      <View style={styles.sharedBadge}>
-                        <Text style={styles.sharedBadgeText}>Shared</Text>
-                      </View>
-                    )}
-                  </View>
+                  <Text style={styles.expenseDescription}>
+                    {cleanDescription || item.category}
+                  </Text>
                   <Text style={styles.expenseCategory}>
                     {item.category} • {item.date}
                   </Text>
+                  <View style={styles.badgeRow}>
+                    {isShared && (
+                      <View style={[styles.badge, { backgroundColor: "#00C89620", borderColor: "#00C896" }]}>
+                        <Text style={[styles.badgeText, { color: "#00C896" }]}>👥 Shared</Text>
+                      </View>
+                    )}
+                    <View style={[styles.badge, {
+                      backgroundColor: isMomo ? "#FFC10720" : "#ffffff10",
+                      borderColor: isMomo ? "#FFC107" : "#ffffff30",
+                    }]}>
+                      <Text style={[styles.badgeText, { color: isMomo ? "#FFC107" : "#8890A0" }]}>
+                        {isMomo ? "📱 MoMo" : "💵 Cash"}
+                      </Text>
+                    </View>
+                  </View>
                   {tags.length > 0 && (
                     <View style={styles.tagsContainer}>
                       {tags.map((tag) => (
@@ -279,6 +318,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#0F1117",
     alignItems: "center",
     justifyContent: "center",
+  },
+  errorText: {
+    color: "#E05C5C",
+    fontSize: 14,
+    textAlign: "center",
+    paddingHorizontal: 24,
   },
   emptyIcon: {
     fontSize: 48,
@@ -333,20 +378,23 @@ const styles = StyleSheet.create({
   },
   filterRow: {
     paddingHorizontal: 16,
+    paddingTop: 16,
     paddingBottom: 12,
     gap: 8,
     flexDirection: "row",
   },
   filterBtn: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
     backgroundColor: "#1A1F2E",
     borderWidth: 1,
     borderColor: "#ffffff15",
+    minWidth: 64,
+    alignItems: "center",
   },
   filterBtnActive: {
-    backgroundColor: "#00C896",
+    backgroundColor: "#00C89620",
     borderColor: "#00C896",
   },
   filterText: {
@@ -355,7 +403,7 @@ const styles = StyleSheet.create({
     color: "#8890A0",
   },
   filterTextActive: {
-    color: "#000000",
+    color: "#00C896",
   },
   list: {
     padding: 16,
@@ -391,24 +439,21 @@ const styles = StyleSheet.create({
   sharedCard: {
     borderColor: "#A78BFA30",
   },
-  descRow: {
+  badgeRow: {
     flexDirection: "row",
-    alignItems: "center",
     gap: 6,
-    marginBottom: 3,
+    marginTop: 4,
+    flexWrap: "wrap",
   },
-  sharedBadge: {
-    backgroundColor: "#00C89620",
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
+  badge: {
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderWidth: 1,
-    borderColor: "#00C89660",
   },
-  sharedBadgeText: {
-    fontSize: 10,
-    color: "#00C896",
-    fontWeight: "600",
+  badgeText: {
+    fontSize: 11,
+    fontWeight: "500",
   },
   expenseDescription: {
     fontSize: 14,

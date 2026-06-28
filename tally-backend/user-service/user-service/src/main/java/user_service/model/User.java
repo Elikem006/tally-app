@@ -24,4 +24,13 @@ public class User {
 
     @Column(updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    @Column(name = "avatar_type", nullable = true)
+    private String avatarType;
+
+    @Column(name = "avatar_data", columnDefinition = "TEXT", nullable = true)
+    private String avatarData;
+
+    @Column(name = "phone_number", nullable = true)
+    private String phoneNumber;
 }

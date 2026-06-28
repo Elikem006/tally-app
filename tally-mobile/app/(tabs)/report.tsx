@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Dimensions,
   TouchableOpacity,
+  RefreshControl,
 } from "react-native";
 import { LineChart } from "react-native-chart-kit";
 import { expenseAPI } from "../../services/api";
@@ -141,6 +142,8 @@ export default function ReportScreen() {
   const [chartValues,  setChartValues]  = useState<number[]>([]);
   const [chartLoading, setChartLoading] = useState(true);
   const [selectedDot,  setSelectedDot]  = useState<{ label: string; value: number } | null>(null);
+  const [refreshing,   setRefreshing]   = useState(false);
+  const [error,        setError]        = useState<string | null>(null);
 
   const isCurrentMonth = selectedMonth === todayMonth && selectedYear === todayYear;
 
@@ -164,13 +167,14 @@ export default function ReportScreen() {
     }
   }, [allExpenses, timeView]);
 
-  async function fetchReport(month: number, year: number) {
-    setLoading(true);
+  async function fetchReport(month: number, year: number, showSpinner = true) {
+    if (showSpinner) setLoading(true);
     try {
       const reportRes = await expenseAPI.getMonthlyReport(getUserId(), month + 1, year);
       setReport(reportRes.data);
+      setError(null);
     } catch (e) {
-      console.log("Error fetching report:", e);
+      setError("Something went wrong. Pull down to refresh.");
     } finally {
       setLoading(false);
     }
@@ -180,10 +184,23 @@ export default function ReportScreen() {
     try {
       const res = await expenseAPI.getCombinedHistory(getUserId());
       setAllExpenses(res.data || []);
+      setError(null);
     } catch (e) {
-      console.log("Error fetching expenses:", e);
+      setError("Something went wrong. Pull down to refresh.");
     } finally {
       setChartLoading(false);
+    }
+  }
+
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        fetchReport(selectedMonth, selectedYear, false),
+        fetchAllExpenses(),
+      ]);
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -232,8 +249,26 @@ export default function ReportScreen() {
     return "#00C896";
   }
 
+  if (error && !report && allExpenses.length === 0) {
+    return (
+      <ScrollView
+        style={{ flex: 1, backgroundColor: "#0F1117" }}
+        contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center" }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+      >
+        <Text style={{ color: "#E05C5C", fontSize: 14, textAlign: "center", paddingHorizontal: 24 }}>
+          {error}
+        </Text>
+      </ScrollView>
+    );
+  }
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+    >
 
       {/* ── Interactive spending chart ── */}
       <View style={styles.chartCard}>

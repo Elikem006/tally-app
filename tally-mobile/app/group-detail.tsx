@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { notifyNewSharedExpense } from "../services/notifications";
 import { useLocalSearchParams, router } from "expo-router";
-import { groupAPI } from "../services/api";
+import { groupAPI, momoAPI } from "../services/api";
 import { getUserId } from "../services/storage";
+import { currentUser } from "./(auth)/login";
+import Avatar from "../components/Avatar";
 import {
   View,
   Text,
@@ -14,6 +16,8 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Modal,
+  RefreshControl,
 } from "react-native";
 
 export default function GroupDetailScreen() {
@@ -21,6 +25,8 @@ export default function GroupDetailScreen() {
   const [details, setDetails] = useState<any>(null);
   const [balances, setBalances] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expenseDescription, setExpenseDescription] = useState("");
@@ -28,6 +34,14 @@ export default function GroupDetailScreen() {
   const [showAddMember, setShowAddMember] = useState(false);
   const [memberUserId, setMemberUserId] = useState("");
   const [addingMember, setAddingMember] = useState(false);
+
+  // MoMo modal state
+  const [showMomoModal, setShowMomoModal] = useState(false);
+  const [momoPhone, setMomoPhone] = useState("");
+  const [settlingUserId, setSettlingUserId] = useState<number | null>(null);
+  const [settlingName, setSettlingName] = useState("");
+  const [settlingAmount, setSettlingAmount] = useState(0);
+  const [momoLoading, setMomoLoading] = useState(false);
 
   useEffect(() => {
     fetchDetails();
@@ -41,10 +55,20 @@ export default function GroupDetailScreen() {
       ]);
       setDetails(detailsRes.data);
       setBalances(balancesRes.data);
-    } catch (error) {
-      console.log("Error fetching group details:", error);
+      setError(null);
+    } catch (err) {
+      setError("Something went wrong. Pull down to refresh.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      await fetchDetails();
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -53,7 +77,6 @@ export default function GroupDetailScreen() {
       Alert.alert("Error", "Please enter amount and description");
       return;
     }
-
     setAddingExpense(true);
     try {
       const userId = getUserId();
@@ -76,26 +99,79 @@ export default function GroupDetailScreen() {
     }
   }
 
-  async function handleSettleUp(userId: number) {
-    Alert.alert(
-      "Settle Up",
-      `Are you sure you want to settle up User #${userId}?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Settle Up",
-          onPress: async () => {
-            try {
-              await groupAPI.settleUp(String(groupId), String(userId));
-              Alert.alert("Success", "Settled up successfully!");
-              fetchDetails();
-            } catch (error) {
-              Alert.alert("Error", "Failed to settle up");
-            }
-          },
-        },
-      ],
-    );
+  // Opens the MoMo modal for a balance row
+  function handleSettleUp(userId: number, name: string, amount: number) {
+    setSettlingUserId(userId);
+    setSettlingName(name);
+    setSettlingAmount(Math.abs(amount));
+    setMomoPhone("");
+    setShowMomoModal(true);
+  }
+
+  async function handleMomoPayment() {
+    const phone = momoPhone.trim();
+    if (!phone) {
+      Alert.alert("Required", "Please enter your MoMo phone number.");
+      return;
+    }
+    if (!/^\d{10}$/.test(phone)) {
+      Alert.alert("Invalid", "Phone number must be exactly 10 digits.");
+      return;
+    }
+
+    setMomoLoading(true);
+    try {
+      const res = await momoAPI.requestPayment(
+        String(groupId),
+        currentUser.userId,
+        phone,
+        String(settlingAmount),
+        "Tally group settle-up",
+      );
+      const referenceId: string = res.data.referenceId;
+
+      setShowMomoModal(false);
+      Alert.alert(
+        "Payment Requested",
+        "A payment prompt has been sent to your MoMo number. Please approve it on your phone.",
+      );
+
+      // Wait 3 s then poll status
+      await new Promise((r) => setTimeout(r, 3000));
+
+      const statusRes = await momoAPI.checkStatus(referenceId);
+      const status: string = statusRes.data.status;
+
+      if (status === "FAILED") {
+        Alert.alert("Payment Failed", "The MoMo payment failed. Please try again.");
+        return;
+      }
+
+      // SUCCESSFUL or PENDING — settle the group balance
+      await groupAPI.settleUp(String(groupId), String(settlingUserId));
+      await fetchDetails();
+
+      if (status === "SUCCESSFUL") {
+        Alert.alert("Done!", "Payment confirmed and group settled! ✅");
+      } else {
+        Alert.alert("Group Settled", "Payment is pending on MoMo — the group balance has been cleared.");
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e?.response?.data?.error || e?.message || "Something went wrong.");
+    } finally {
+      setMomoLoading(false);
+    }
+  }
+
+  async function handleSkipAndSettle() {
+    setShowMomoModal(false);
+    try {
+      await groupAPI.settleUp(String(groupId), String(settlingUserId));
+      await fetchDetails();
+      Alert.alert("Settled", "Group balance cleared (no payment sent).");
+    } catch (e: any) {
+      Alert.alert("Error", e?.response?.data?.error || e?.message || "Failed to settle.");
+    }
   }
 
   async function handleAddMember() {
@@ -151,6 +227,18 @@ export default function GroupDetailScreen() {
     );
   }
 
+  if (error && !details) {
+    return (
+      <ScrollView
+        style={{ flex: 1, backgroundColor: "#0F1117" }}
+        contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center" }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+      >
+        <Text style={styles.errorText}>{error}</Text>
+      </ScrollView>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
@@ -159,6 +247,8 @@ export default function GroupDetailScreen() {
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
       >
         <Text style={styles.title}>{groupName}</Text>
 
@@ -182,26 +272,26 @@ export default function GroupDetailScreen() {
               if (!createdAt) return "";
               const diffMs = Date.now() - new Date(createdAt).getTime();
               const diffMins = Math.floor(diffMs / 60000);
-              if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? "s" : ""} ago`;
+              if (diffMins < 60) return `${diffMins}m ago`;
               const diffHours = Math.floor(diffMins / 60);
-              if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? "s" : ""} ago`;
+              if (diffHours < 24) return `${diffHours}h ago`;
               const d = new Date(createdAt);
-              const dd = String(d.getDate()).padStart(2, "0");
-              const mm = String(d.getMonth() + 1).padStart(2, "0");
-              const yyyy = d.getFullYear();
-              return `${dd}/${mm}/${yyyy}`;
+              return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
             }
 
             return sorted.map((expense: any) => (
               <View key={expense.id} style={styles.activityItem}>
-                <View style={styles.activityAvatar}>
-                  <Text style={styles.activityAvatarText}>
-                    {String(expense.paidBy || "U").charAt(0).toUpperCase()}
-                  </Text>
-                </View>
+                <Avatar
+                  userId={expense.paidBy}
+                  name={expense.paidByName || String(expense.paidBy)}
+                  size={36}
+                  avatarData={expense.paidByAvatarData}
+                  style={{ marginRight: 12 }}
+                />
                 <View style={styles.activityContent}>
                   <Text style={styles.activityText}>
-                    User #{expense.paidBy} paid GHS {parseFloat(expense.amount).toFixed(2)} for {expense.description}
+                    {expense.paidByName || `User #${expense.paidBy}`} paid GHS{" "}
+                    {parseFloat(expense.amount).toFixed(2)} for {expense.description}
                   </Text>
                   <Text style={styles.activityTime}>{timeAgo(expense.createdAt)}</Text>
                 </View>
@@ -220,15 +310,21 @@ export default function GroupDetailScreen() {
           <Text style={styles.sectionTitle}>Members</Text>
           {details?.members?.map((member: any) => (
             <View key={member.id} style={styles.memberRow}>
-              <View style={styles.memberAvatar}>
-                <Text style={styles.memberAvatarText}>
-                  {String(member.userId).charAt(0)}
-                </Text>
+              <Avatar
+                userId={member.userId}
+                name={member.name || String(member.userId)}
+                size={40}
+                avatarData={member.avatarData}
+                style={{ marginRight: 12 }}
+              />
+              <View>
+                <Text style={styles.memberText}>{member.name || `User #${member.userId}`}</Text>
+                <Text style={styles.memberSubText}>ID: {member.userId}</Text>
               </View>
-              <Text style={styles.memberText}>User #{member.userId}</Text>
             </View>
           ))}
         </View>
+
         {showAddMember ? (
           <View style={styles.addExpenseForm}>
             <Text style={styles.sectionTitle}>Add Member by User ID</Text>
@@ -251,18 +347,12 @@ export default function GroupDetailScreen() {
                 <Text style={styles.buttonText}>Add Member</Text>
               )}
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setShowAddMember(false)}
-            >
+            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowAddMember(false)}>
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         ) : (
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => setShowAddMember(true)}
-          >
+          <TouchableOpacity style={styles.addButton} onPress={() => setShowAddMember(true)}>
             <Text style={styles.addButtonText}>+ Add Member</Text>
           </TouchableOpacity>
         )}
@@ -273,11 +363,20 @@ export default function GroupDetailScreen() {
             <Text style={styles.sectionTitle}>Balances</Text>
             {balances.map((b: any, index: number) => (
               <View key={index} style={styles.balanceRow}>
-                <View>
-                  <Text style={styles.balanceText}>User #{b.userId}</Text>
-                  <Text style={styles.balanceSub}>
-                    {b.owes ? "Owes money" : "Is owed money"}
-                  </Text>
+                <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+                  <Avatar
+                    userId={b.userId}
+                    name={b.name || String(b.userId)}
+                    size={40}
+                    avatarData={b.avatarData}
+                    style={{ marginRight: 10 }}
+                  />
+                  <View>
+                    <Text style={styles.balanceText}>{b.name || `User #${b.userId}`}</Text>
+                    <Text style={styles.balanceSub}>
+                      {b.owes ? "Owes money" : "Is owed money"}
+                    </Text>
+                  </View>
                 </View>
                 <View style={{ alignItems: "flex-end", gap: 8 }}>
                   <View
@@ -299,12 +398,18 @@ export default function GroupDetailScreen() {
                       {Math.abs(parseFloat(b.balance)).toFixed(2)}
                     </Text>
                   </View>
-                  {b.owes && (
+                  {b.owes && String(b.userId) === String(currentUser.userId) && (
                     <TouchableOpacity
                       style={styles.settleButton}
-                      onPress={() => handleSettleUp(b.userId)}
+                      onPress={() =>
+                        handleSettleUp(
+                          b.userId,
+                          b.name || `User #${b.userId}`,
+                          parseFloat(b.balance),
+                        )
+                      }
                     >
-                      <Text style={styles.settleButtonText}>Settle Up</Text>
+                      <Text style={styles.settleButtonText}>💳 Settle Up</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -321,10 +426,10 @@ export default function GroupDetailScreen() {
           ) : (
             details?.expenses?.map((expense: any) => (
               <View key={expense.id} style={styles.expenseRow}>
-                <View>
+                <View style={{ flex: 1 }}>
                   <Text style={styles.expenseName}>{expense.description}</Text>
                   <Text style={styles.expenseSub}>
-                    Paid by User #{expense.paidBy} • Split equally
+                    Paid by {expense.paidByName || `User #${expense.paidBy}`} • Split equally
                   </Text>
                 </View>
                 <Text style={styles.expenseAmount}>
@@ -365,301 +470,259 @@ export default function GroupDetailScreen() {
                 <Text style={styles.buttonText}>Add & Split Equally</Text>
               )}
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => setShowAddExpense(false)}
-            >
+            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowAddExpense(false)}>
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         )}
 
         {!showAddExpense && (
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => setShowAddExpense(true)}
-          >
+          <TouchableOpacity style={styles.addButton} onPress={() => setShowAddExpense(true)}>
             <Text style={styles.addButtonText}>+ Add Shared Expense</Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={handleDeleteGroup}
-        >
+
+        <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteGroup}>
           <Text style={styles.deleteButtonText}>Delete Group</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backButtonText}>← Back to Groups</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* ── MoMo Payment Modal ── */}
+      <Modal
+        visible={showMomoModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !momoLoading && setShowMomoModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ width: "100%" }}
+          >
+            <View style={styles.modalCard}>
+              {/* Header */}
+              <Text style={styles.modalTitle}>Pay with MoMo</Text>
+              <Text style={styles.modalSubtitle}>
+                Settling{" "}
+                <Text style={{ color: "#00C896", fontWeight: "bold" }}>
+                  GHS {settlingAmount.toFixed(2)}
+                </Text>{" "}
+                with {settlingName}
+              </Text>
+
+              {/* Phone input */}
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Enter MoMo number e.g. 0241234567"
+                placeholderTextColor="#8890A0"
+                value={momoPhone}
+                onChangeText={setMomoPhone}
+                keyboardType="phone-pad"
+                maxLength={10}
+                editable={!momoLoading}
+              />
+
+              {/* Pay Now */}
+              <TouchableOpacity
+                style={[styles.payButton, momoLoading && { opacity: 0.6 }]}
+                onPress={handleMomoPayment}
+                disabled={momoLoading}
+              >
+                {momoLoading ? (
+                  <ActivityIndicator color="#000000" />
+                ) : (
+                  <Text style={styles.payButtonText}>💳  Pay Now</Text>
+                )}
+              </TouchableOpacity>
+
+              {/* Skip & Settle */}
+              <TouchableOpacity
+                style={styles.skipButton}
+                onPress={handleSkipAndSettle}
+                disabled={momoLoading}
+              >
+                <Text style={styles.skipButtonText}>Skip &amp; Settle</Text>
+              </TouchableOpacity>
+
+              {/* Cancel link */}
+              {!momoLoading && (
+                <TouchableOpacity
+                  style={styles.cancelLink}
+                  onPress={() => setShowMomoModal(false)}
+                >
+                  <Text style={styles.cancelLinkText}>Cancel</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#0F1117",
-  },
+  container: { flex: 1, backgroundColor: "#0F1117" },
   centered: {
-    flex: 1,
-    backgroundColor: "#0F1117",
-    alignItems: "center",
-    justifyContent: "center",
+    flex: 1, backgroundColor: "#0F1117",
+    alignItems: "center", justifyContent: "center",
   },
-  content: {
-    padding: 24,
+  errorText: {
+    color: "#E05C5C",
+    fontSize: 14,
+    textAlign: "center",
+    paddingHorizontal: 24,
   },
+  content: { padding: 24 },
   title: {
-    fontSize: 26,
-    fontWeight: "bold",
-    color: "#ffffff",
-    marginBottom: 24,
-    marginTop: 8,
+    fontSize: 26, fontWeight: "bold", color: "#ffffff",
+    marginBottom: 24, marginTop: 8,
   },
-  section: {
-    marginBottom: 24,
-  },
+  section: { marginBottom: 24 },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#ffffff",
-    marginBottom: 12,
+    fontSize: 16, fontWeight: "bold", color: "#ffffff", marginBottom: 12,
   },
   memberRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1A1F2E",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: "#ffffff10",
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: "#1A1F2E", borderRadius: 12,
+    padding: 14, marginBottom: 8,
+    borderWidth: 1, borderColor: "#ffffff10",
   },
-  memberAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#00C89620",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  memberAvatarText: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#00C896",
-  },
-  memberText: {
-    fontSize: 14,
-    color: "#ffffff",
-    fontWeight: "500",
-  },
+  memberText: { fontSize: 14, color: "#ffffff", fontWeight: "500" },
+  memberSubText: { fontSize: 11, color: "#8890A0", marginTop: 1 },
   balanceRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#1A1F2E",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: "#ffffff10",
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    backgroundColor: "#1A1F2E", borderRadius: 12,
+    padding: 14, marginBottom: 8,
+    borderWidth: 1, borderColor: "#ffffff10",
   },
-  balanceText: {
-    fontSize: 14,
-    color: "#ffffff",
-  },
-  balanceAmount: {
-    fontSize: 15,
-    fontWeight: "bold",
-  },
-  expenseRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#1A1F2E",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: "#ffffff10",
-  },
-  expenseName: {
-    fontSize: 14,
-    color: "#ffffff",
-    fontWeight: "500",
-    marginBottom: 3,
-  },
-  expenseSub: {
-    fontSize: 12,
-    color: "#8890A0",
-  },
-  expenseAmount: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#00C896",
-  },
-  emptyText: {
-    fontSize: 14,
-    color: "#8890A0",
-    fontStyle: "italic",
-  },
-  addExpenseForm: {
-    backgroundColor: "#1A1F2E",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#ffffff10",
-  },
-  input: {
-    backgroundColor: "#0F1117",
-    borderRadius: 10,
-    padding: 14,
-    color: "#ffffff",
-    fontSize: 15,
-    borderWidth: 1,
-    borderColor: "#ffffff20",
-    marginBottom: 12,
-  },
-  button: {
-    backgroundColor: "#00C896",
-    borderRadius: 12,
-    padding: 14,
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: "#000000",
-    fontSize: 15,
-    fontWeight: "bold",
-  },
-  cancelButton: {
-    padding: 10,
-    alignItems: "center",
-  },
-  cancelText: {
-    color: "#8890A0",
-    fontSize: 14,
-  },
-  addButton: {
-    borderWidth: 1,
-    borderColor: "#00C896",
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  addButtonText: {
-    color: "#00C896",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  backButton: {
-    padding: 16,
-    alignItems: "center",
-  },
-  backButtonText: {
-    color: "#8890A0",
-    fontSize: 14,
-  },
-  balanceSub: {
-    fontSize: 12,
-    color: "#8890A0",
-    marginTop: 2,
-  },
+  balanceText: { fontSize: 14, color: "#ffffff", fontWeight: "500" },
+  balanceAmount: { fontSize: 15, fontWeight: "bold" },
+  balanceSub: { fontSize: 12, color: "#8890A0", marginTop: 2 },
   balanceBadge: {
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
+    borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1,
   },
   settleButton: {
-    backgroundColor: "#00C89620",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: "#00C896",
+    backgroundColor: "#00C89620", borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderWidth: 1, borderColor: "#00C896",
   },
-  settleButtonText: {
-    color: "#00C896",
-    fontSize: 12,
-    fontWeight: "bold",
+  settleButtonText: { color: "#00C896", fontSize: 12, fontWeight: "bold" },
+  expenseRow: {
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    backgroundColor: "#1A1F2E", borderRadius: 12,
+    padding: 14, marginBottom: 8,
+    borderWidth: 1, borderColor: "#ffffff10",
   },
+  expenseName: { fontSize: 14, color: "#ffffff", fontWeight: "500", marginBottom: 3 },
+  expenseSub: { fontSize: 12, color: "#8890A0" },
+  expenseAmount: { fontSize: 14, fontWeight: "bold", color: "#00C896" },
+  emptyText: { fontSize: 14, color: "#8890A0", fontStyle: "italic" },
+  addExpenseForm: {
+    backgroundColor: "#1A1F2E", borderRadius: 16,
+    padding: 16, marginBottom: 16,
+    borderWidth: 1, borderColor: "#ffffff10",
+  },
+  input: {
+    backgroundColor: "#0F1117", borderRadius: 10,
+    padding: 14, color: "#ffffff", fontSize: 15,
+    borderWidth: 1, borderColor: "#ffffff20", marginBottom: 12,
+  },
+  button: {
+    backgroundColor: "#00C896", borderRadius: 12,
+    padding: 14, alignItems: "center", marginBottom: 8,
+  },
+  buttonDisabled: { opacity: 0.6 },
+  buttonText: { color: "#000000", fontSize: 15, fontWeight: "bold" },
+  cancelButton: { padding: 10, alignItems: "center" },
+  cancelText: { color: "#8890A0", fontSize: 14 },
+  addButton: {
+    borderWidth: 1, borderColor: "#00C896",
+    borderRadius: 12, padding: 16,
+    alignItems: "center", marginBottom: 12,
+  },
+  addButtonText: { color: "#00C896", fontSize: 15, fontWeight: "600" },
   deleteButton: {
+    borderWidth: 1, borderColor: "#E05C5C",
+    borderRadius: 12, padding: 16,
+    alignItems: "center", marginBottom: 12,
+  },
+  deleteButtonText: { color: "#E05C5C", fontSize: 15, fontWeight: "600" },
+  backButton: { padding: 16, alignItems: "center" },
+  backButtonText: { color: "#8890A0", fontSize: 14 },
+  divider: { height: 1, backgroundColor: "#ffffff10", marginBottom: 24 },
+
+  // Activity
+  activityItem: {
+    flexDirection: "row", alignItems: "flex-start",
+    paddingVertical: 10,
+    borderBottomWidth: 0.5, borderBottomColor: "#ffffff10",
+  },
+  activityContent: { flex: 1 },
+  activityText: { fontSize: 13, color: "#ffffff", lineHeight: 18 },
+  activityTime: { fontSize: 11, color: "#8890A0", marginTop: 3 },
+  activityBadge: {
+    backgroundColor: "#00C89620", borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderWidth: 1, borderColor: "#00C896",
+  },
+  activityBadgeText: { fontSize: 11, color: "#00C896", fontWeight: "600" },
+
+  // MoMo Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.75)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 0,
+  },
+  modalCard: {
+    backgroundColor: "#1A1F2E",
+    borderRadius: 24,
+    padding: 24,
+    margin: 24,
     borderWidth: 1,
-    borderColor: "#E05C5C",
+    borderColor: "#00C89630",
+  },
+  modalTitle: {
+    fontSize: 22, fontWeight: "bold", color: "#ffffff",
+    marginBottom: 6, textAlign: "center",
+  },
+  modalSubtitle: {
+    fontSize: 14, color: "#8890A0",
+    textAlign: "center", marginBottom: 4, lineHeight: 20,
+  },
+  modalInput: {
+    backgroundColor: "#0F1117",
+    borderRadius: 12,
+    padding: 16,
+    color: "#ffffff",
+    fontSize: 18,
+    borderWidth: 1,
+    borderColor: "#ffffff20",
+    marginVertical: 16,
+    textAlign: "center",
+    letterSpacing: 2,
+  },
+  payButton: {
+    backgroundColor: "#00C896",
     borderRadius: 12,
     padding: 16,
     alignItems: "center",
-    marginBottom: 12,
   },
-  deleteButtonText: {
-    color: "#E05C5C",
-    fontSize: 15,
-    fontWeight: "600",
+  payButtonText: {
+    color: "#000000", fontSize: 16, fontWeight: "bold",
   },
-  divider: {
-    height: 1,
-    backgroundColor: "#ffffff10",
-    marginBottom: 24,
+  skipButton: {
+    borderWidth: 1, borderColor: "#8890A0",
+    borderRadius: 12, padding: 16,
+    alignItems: "center", marginTop: 8,
   },
-  activityItem: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    paddingVertical: 10,
-    borderBottomWidth: 0.5,
-    borderBottomColor: "#ffffff10",
-  },
-  activityAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#00C89630",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-    borderWidth: 1,
-    borderColor: "#00C896",
-  },
-  activityAvatarText: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#00C896",
-  },
-  activityContent: {
-    flex: 1,
-  },
-  activityText: {
-    fontSize: 13,
-    color: "#ffffff",
-    lineHeight: 18,
-  },
-  activityTime: {
-    fontSize: 11,
-    color: "#8890A0",
-    marginTop: 3,
-  },
-  activityBadge: {
-    backgroundColor: "#00C89620",
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderWidth: 1,
-    borderColor: "#00C896",
-  },
-  activityBadgeText: {
-    fontSize: 11,
-    color: "#00C896",
-    fontWeight: "600",
-  },
+  skipButtonText: { color: "#8890A0", fontSize: 15, fontWeight: "600" },
+  cancelLink: { padding: 14, alignItems: "center" },
+  cancelLinkText: { color: "#ffffff40", fontSize: 13 },
 });

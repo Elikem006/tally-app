@@ -4,9 +4,11 @@ import {
   Text,
   StyleSheet,
   FlatList,
+  ScrollView,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  RefreshControl,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { groupAPI } from "../../services/api";
@@ -15,6 +17,8 @@ import { getUserId } from "../../services/storage";
 export default function GroupsScreen() {
   const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [groupSummaries, setGroupSummaries] = useState<{ [key: number]: { total: number; memberCount: number } }>({});
 
   useFocusEffect(
@@ -28,6 +32,7 @@ export default function GroupsScreen() {
       const userId = getUserId();
       const response = await groupAPI.getUserGroups(userId);
       setGroups(response.data);
+      setError(null);
 
       // Fetch details for each group to get totals and member counts
       for (const group of response.data) {
@@ -48,10 +53,19 @@ export default function GroupsScreen() {
           // silently skip — card will show "Loading..."
         }
       }
-    } catch (error) {
-      console.log("Error fetching groups:", error);
+    } catch (err) {
+      setError("Something went wrong. Pull down to refresh.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      await fetchGroups();
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -63,10 +77,26 @@ export default function GroupsScreen() {
     );
   }
 
+  if (error && groups.length === 0) {
+    return (
+      <ScrollView
+        style={{ flex: 1, backgroundColor: "#0F1117" }}
+        contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center", padding: 24 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+      >
+        <Text style={styles.errorText}>{error}</Text>
+      </ScrollView>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {groups.length === 0 ? (
-        <View style={styles.centered}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center", padding: 24 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+        >
           <Text style={styles.emptyIcon}>👥</Text>
           <Text style={styles.emptyText}>No groups yet</Text>
           <Text style={styles.emptySubtext}>
@@ -78,7 +108,7 @@ export default function GroupsScreen() {
           >
             <Text style={styles.createButtonText}>Create Your First Group</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       ) : (
         <>
           <FlatList
@@ -86,13 +116,15 @@ export default function GroupsScreen() {
             keyExtractor={(item) => String(item.id)}
             contentContainerStyle={styles.list}
             extraData={groupSummaries}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.groupCard}
                 onPress={() =>
-                  router.push(
-                    `/group-detail?groupId=${item.id}&groupName=${item.name}`,
-                  )
+                  router.push({
+                    pathname: "/group-detail",
+                    params: { groupId: String(item.id), groupName: item.name },
+                  })
                 }
               >
                 <View style={styles.groupAvatar}>
@@ -141,6 +173,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
+  },
+  errorText: {
+    color: "#E05C5C",
+    fontSize: 14,
+    textAlign: "center",
+    paddingHorizontal: 24,
   },
   emptyIcon: {
     fontSize: 48,

@@ -10,13 +10,19 @@ import {
   ActivityIndicator,
   ScrollView,
   Modal,
+  RefreshControl,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { remindersAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
+import { addHistoryItem } from "../../services/notificationHistory";
 
 export default function RemindersScreen() {
   const [reminders, setReminders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
@@ -28,16 +34,26 @@ export default function RemindersScreen() {
     fetchReminders();
   }, []);
 
-  async function fetchReminders() {
+  async function fetchReminders(showSpinner = true) {
     try {
-      setLoading(true);
+      if (showSpinner) setLoading(true);
       const userId = getUserId();
       const response = await remindersAPI.getUserReminders(userId);
       setReminders(response.data);
-    } catch (error) {
-      Alert.alert("Error", "Failed to load reminders");
+      setError(null);
+    } catch (err) {
+      setError("Something went wrong. Pull down to refresh.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      await fetchReminders(false);
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -69,6 +85,11 @@ export default function RemindersScreen() {
       setIsRecurring(false);
       setShowAddForm(false);
       await fetchReminders();
+      await addHistoryItem({
+        type: "reminder_due",
+        title: "Reminder set",
+        body: `"${title.trim()}" due ${dueDate.trim()}${amount.trim() ? ` — GHS ${amount.trim()}` : ""}.`,
+      });
       Alert.alert("Success", "Reminder added!");
     } catch (error) {
       Alert.alert("Error", "Failed to save reminder");
@@ -112,8 +133,24 @@ export default function RemindersScreen() {
     );
   }
 
+  if (error && reminders.length === 0) {
+    return (
+      <ScrollView
+        style={{ flex: 1, backgroundColor: "#0F1117" }}
+        contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center" }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+      >
+        <Text style={styles.errorText}>{error}</Text>
+      </ScrollView>
+    );
+  }
+
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+    <View style={{ flex: 1 }}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Bill Reminders</Text>
@@ -207,6 +244,8 @@ export default function RemindersScreen() {
           data={reminders}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.list}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
           renderItem={({ item }) => (
             <View style={[styles.card, item.isPaid && styles.cardPaid]}>
               <View style={styles.cardBody}>
@@ -256,6 +295,7 @@ export default function RemindersScreen() {
         />
       )}
     </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -269,6 +309,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#0F1117",
     alignItems: "center",
     justifyContent: "center",
+  },
+  errorText: {
+    color: "#E05C5C",
+    fontSize: 14,
+    textAlign: "center",
+    paddingHorizontal: 24,
   },
   header: {
     flexDirection: "row",

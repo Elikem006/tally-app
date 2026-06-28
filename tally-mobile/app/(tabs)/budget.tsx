@@ -10,6 +10,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import { budgetAPI } from '../../services/api';
 import { getUserId } from '../../services/storage';
@@ -34,13 +35,14 @@ export default function BudgetScreen() {
   });
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadExistingBudgets();
   }, []);
 
   async function loadExistingBudgets() {
-    setFetching(true);
     try {
       const userId = getUserId();
       const response = await budgetAPI.getUserBudgets(userId);
@@ -56,11 +58,18 @@ export default function BudgetScreen() {
         Other: '',
         ...existing,
       });
-    } catch (error) {
-      console.log('Error loading budgets:', error);
+      setError(null);
+    } catch (err) {
+      setError('Something went wrong. Pull down to refresh.');
     } finally {
       setFetching(false);
     }
+  }
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await loadExistingBudgets();
+    setRefreshing(false);
   }
 
   function clearCategory(category: string) {
@@ -116,12 +125,28 @@ export default function BudgetScreen() {
     );
   }
 
+  if (error) {
+    return (
+      <ScrollView
+        contentContainerStyle={styles.centered}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={['#00C896']} />}
+      >
+        <Text style={styles.errorText}>{error}</Text>
+      </ScrollView>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={['#00C896']} />}
+      >
         <Text style={styles.title}>Monthly Budgets</Text>
         <Text style={styles.subtitle}>
           Set how much you want to spend per category this month
@@ -194,6 +219,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F1117',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  errorText: {
+    color: '#E05C5C',
+    fontSize: 14,
+    textAlign: 'center',
+    paddingHorizontal: 24,
   },
   content: {
     padding: 24,

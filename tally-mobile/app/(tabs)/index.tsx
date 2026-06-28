@@ -11,10 +11,16 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
 } from "react-native";
 import { useFocusEffect, router } from "expo-router";
-import { expenseAPI, remindersAPI, budgetAPI } from "../../services/api";
+import { expenseAPI, remindersAPI, budgetAPI, momoAPI } from "../../services/api";
 import { getUserId, getUserName } from "../../services/storage";
+import {
+  addHistoryItem,
+  shouldFireBudgetAlert,
+  getUnreadCount,
+} from "../../services/notificationHistory";
 
 const CATEGORY_ICONS: { [key: string]: string } = {
   Food: "🍔",
@@ -31,7 +37,16 @@ export default function HomeScreen() {
   const [upcomingReminders, setUpcomingReminders] = useState<any[]>([]);
   const [budgetAlerts, setBudgetAlerts] = useState<{ category: string; isOverBudget: boolean; isNearLimit: boolean; percentage: number }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [userName, setUserName] = useState("");
+
+  // Notification badge
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // MoMo wallet
+  const [momoBalance, setMomoBalance] = useState<{ availableBalance: string; currency: string } | null>(null);
+  const [momoBalanceLoading, setMomoBalanceLoading] = useState(false);
 
   // Quick add state
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -43,8 +58,34 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchExpenses();
+      fetchMomoBalance();
+      // Refresh badge whenever screen comes into focus (e.g. returning from notif screen)
+      getUnreadCount().then(setUnreadCount);
     }, []),
   );
+
+  async function fetchMomoBalance() {
+    setMomoBalanceLoading(true);
+    try {
+      const res = await momoAPI.getBalance();
+      setMomoBalance(res.data);
+    } catch (error) {
+      console.log("MoMo balance fetch failed:", error);
+      setMomoBalance(null);
+    } finally {
+      setMomoBalanceLoading(false);
+    }
+  }
+
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      await fetchExpenses();
+      await fetchMomoBalance();
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   async function fetchExpenses() {
     try {
@@ -53,8 +94,9 @@ export default function HomeScreen() {
       setUserName(name);
       const response = await expenseAPI.getUserExpenses(userId);
       setExpenses(response.data);
-    } catch (error) {
-      console.log("Error fetching expenses:", error);
+      setError(null);
+    } catch (err) {
+      setError("Something went wrong. Pull down to refresh.");
     } finally {
       setLoading(false);
     }
@@ -83,6 +125,31 @@ export default function HomeScreen() {
         }));
       console.log("Budget alerts:", alerts);
       setBudgetAlerts(alerts);
+
+      // Record each alert in the in-app notification history (once per day)
+      for (const alert of alerts) {
+        if (alert.isOverBudget) {
+          const fire = await shouldFireBudgetAlert(alert.category, "over");
+          if (fire) {
+            await addHistoryItem({
+              type: "budget_over",
+              title: `Over budget — ${alert.category}`,
+              body: `You've used ${alert.percentage.toFixed(0)}% of your ${alert.category} budget this month.`,
+            });
+          }
+        } else if (alert.isNearLimit) {
+          const fire = await shouldFireBudgetAlert(alert.category, "near");
+          if (fire) {
+            await addHistoryItem({
+              type: "budget_near",
+              title: `Near limit — ${alert.category}`,
+              body: `${alert.percentage.toFixed(0)}% of your ${alert.category} budget used. Slow down!`,
+            });
+          }
+        }
+      }
+      // Refresh badge
+      getUnreadCount().then(setUnreadCount);
     } catch (error) {
       console.log("Error fetching budget alerts:", error);
     }
@@ -114,6 +181,13 @@ export default function HomeScreen() {
       setQuickCategory("Food");
       setQuickDescription("");
       setShowQuickAdd(false);
+      // Record in notification history
+      await addHistoryItem({
+        type: "expense_added",
+        title: "Expense recorded",
+        body: `GHS ${parsed.toFixed(2)} added to ${quickCategory}${quickDescription ? ` — ${quickDescription}` : ""}.`,
+      });
+      getUnreadCount().then(setUnreadCount);
       // Refresh data
       await fetchExpenses();
       Alert.alert("✅ Added", `GHS ${parsed.toFixed(2)} in ${quickCategory} recorded.`);
@@ -149,11 +223,27 @@ export default function HomeScreen() {
     );
   }
 
+  if (error && expenses.length === 0) {
+    return (
+      <ScrollView
+        style={{ flex: 1, backgroundColor: "#0F1117" }}
+        contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center" }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+      >
+        <Text style={styles.errorText}>{error}</Text>
+      </ScrollView>
+    );
+  }
+
   console.log('budgetAlerts:', budgetAlerts);
 
   return (
     <View style={styles.wrapper}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+      >
         {/* Budget Alerts */}
         {budgetAlerts.length > 0 && (
           <View style={styles.alertsSection}>
@@ -179,13 +269,59 @@ export default function HomeScreen() {
           </View>
         )}
 
-        <Text style={styles.greeting}>Good day, {userName} 👋</Text>
-        <Text style={styles.subtitle}>Here's your spending summary</Text>
+        {/* Top row: greeting + notification bell */}
+        <View style={styles.topRow}>
+          <View>
+            <Text style={styles.greeting}>Good day, {userName} 👋</Text>
+            <Text style={styles.subtitle}>Here's your spending summary</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.bellBtn}
+            onPress={() => router.push("/notification-history")}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.bellIcon}>🔔</Text>
+            {unreadCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {unreadCount > 9 ? "9+" : String(unreadCount)}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
         <View style={styles.totalCard}>
           <Text style={styles.totalLabel}>Total Spent</Text>
           <Text style={styles.totalAmount}>GHS {totalSpent.toFixed(2)}</Text>
           <Text style={styles.totalSub}>{expenses.length} expenses recorded</Text>
         </View>
+        {/* MoMo Wallet Card */}
+        <View style={styles.momoCard}>
+          <View style={styles.momoCardHeader}>
+            <Text style={styles.momoCardIcon}>📱</Text>
+            <Text style={styles.momoCardTitle}>MTN MoMo Wallet</Text>
+            <TouchableOpacity
+              onPress={fetchMomoBalance}
+              style={styles.momoRefreshBtn}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.momoRefreshText}>↻</Text>
+            </TouchableOpacity>
+          </View>
+          {momoBalanceLoading ? (
+            <ActivityIndicator color="#FFC107" style={{ marginTop: 8 }} />
+          ) : momoBalance ? (
+            <View>
+              <Text style={styles.momoBalance}>
+                GHS {Math.max(0, parseFloat(momoBalance.availableBalance)).toFixed(2)}
+              </Text>
+              <Text style={styles.momoSub}>Sandbox balance</Text>
+            </View>
+          ) : (
+            <Text style={styles.momoUnavailable}>Balance unavailable</Text>
+          )}
+        </View>
+
         {Object.keys(categoryTotals).length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>By Category</Text>
@@ -393,14 +529,53 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  errorText: {
+    color: "#E05C5C",
+    fontSize: 14,
+    textAlign: "center",
+    paddingHorizontal: 24,
+  },
   content: { padding: 24 },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 24,
+  },
   greeting: {
     fontSize: 24,
     fontWeight: "bold",
     color: "#ffffff",
     marginBottom: 4,
   },
-  subtitle: { fontSize: 14, color: "#8890A0", marginBottom: 24 },
+  subtitle: { fontSize: 14, color: "#8890A0" },
+  bellBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#1A1F2E",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#ffffff15",
+    marginTop: 2,
+  },
+  bellIcon: { fontSize: 20 },
+  badge: {
+    position: "absolute",
+    top: -4,
+    right: -4,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#E05C5C",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+    borderWidth: 2,
+    borderColor: "#0F1117",
+  },
+  badgeText: { fontSize: 10, color: "#ffffff", fontWeight: "800" },
   totalCard: {
     backgroundColor: "#1A1F2E",
     borderRadius: 16,
@@ -558,6 +733,58 @@ const styles = StyleSheet.create({
     color: "#8890A0",
   },
 
+  // MoMo wallet card
+  momoCard: {
+    backgroundColor: "#1A1F2E",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: "#FFC10730",
+  },
+  momoCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  momoCardIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  momoCardTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#FFC107",
+  },
+  momoRefreshBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#FFC10720",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  momoRefreshText: {
+    fontSize: 18,
+    color: "#FFC107",
+    fontWeight: "bold",
+  },
+  momoBalance: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#FFC107",
+    marginBottom: 2,
+  },
+  momoSub: {
+    fontSize: 12,
+    color: "#8890A0",
+  },
+  momoUnavailable: {
+    fontSize: 14,
+    color: "#8890A0",
+    fontStyle: "italic",
+  },
   // FAB
   fab: {
     position: "absolute",

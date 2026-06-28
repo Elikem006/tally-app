@@ -29,7 +29,7 @@ export default function CreateGroupScreen() {
       const userId = getUserId();
       await groupAPI.createGroup(groupName.trim(), userId);
       Alert.alert("Success", `Group "${groupName}" created!`, [
-        { text: "OK", onPress: () => router.back() },
+        { text: "OK", onPress: () => router.replace("/(tabs)/groups") },
       ]);
     } catch (error: any) {
       Alert.alert("Error", "Failed to create group. Please try again.");

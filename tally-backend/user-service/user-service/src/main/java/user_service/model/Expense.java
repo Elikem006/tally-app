@@ -31,4 +31,7 @@ public class Expense {
 
     @Column(updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    @Column(name = "payment_method", nullable = true)
+    private String paymentMethod = "CASH";
 }

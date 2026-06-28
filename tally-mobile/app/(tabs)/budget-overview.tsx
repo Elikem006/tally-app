@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   SafeAreaView,
+  RefreshControl,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { budgetAPI, expenseAPI } from "../../services/api";
@@ -25,6 +26,25 @@ export default function BudgetOverviewScreen() {
   const [summary, setSummary] = useState<{ [key: string]: any }>({});
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function fetchBudgetData() {
+    try {
+      const userId = getUserId();
+      const [budgetResponse, reportResponse] = await Promise.all([
+        budgetAPI.getBudgetSummary(userId),
+        expenseAPI.getMonthlyReport(userId),
+      ]);
+      setSummary(budgetResponse.data);
+      setReport(reportResponse.data);
+      setError(null);
+      return budgetResponse.data;
+    } catch (err) {
+      setError("Something went wrong. Pull down to refresh.");
+      return null;
+    }
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -32,34 +52,31 @@ export default function BudgetOverviewScreen() {
 
       async function load() {
         setLoading(true);
-        try {
-          const userId = getUserId();
-          const [budgetResponse, reportResponse] = await Promise.all([
-            budgetAPI.getBudgetSummary(userId),
-            expenseAPI.getMonthlyReport(userId),
-          ]);
-          setSummary(budgetResponse.data);
-          setReport(reportResponse.data);
+        const data = await fetchBudgetData();
+        setLoading(false);
 
-          if (!notificationsSent) {
-            notificationsSent = true;
-            const data = budgetResponse.data;
-            for (const category in data) {
-              if (data[category].isNearLimit || data[category].isOverBudget) {
-                await notifyBudgetWarning(category, data[category].percentage);
-              }
+        if (!notificationsSent && data) {
+          notificationsSent = true;
+          for (const category in data) {
+            if (data[category].isNearLimit || data[category].isOverBudget) {
+              await notifyBudgetWarning(category, data[category].percentage);
             }
           }
-        } catch (error) {
-          console.log("Error fetching budget summary:", error);
-        } finally {
-          setLoading(false);
         }
       }
 
       load();
     }, []),
   );
+
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      await fetchBudgetData();
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   function getBarColor(percentage: number, isOverBudget: boolean) {
     if (isOverBudget) return "#E05C5C";
@@ -75,9 +92,25 @@ export default function BudgetOverviewScreen() {
     );
   }
 
+  if (error && Object.keys(summary).length === 0) {
+    return (
+      <ScrollView
+        style={{ flex: 1, backgroundColor: "#0F1117" }}
+        contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center", padding: 24 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+      >
+        <Text style={styles.errorText}>{error}</Text>
+      </ScrollView>
+    );
+  }
+
   if (Object.keys(summary).length === 0) {
     return (
-      <View style={styles.centered}>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: "#0F1117" }}
+        contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center", padding: 24 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+      >
         <Text style={styles.emptyIcon}>📊</Text>
         <Text style={styles.emptyText}>No budgets set yet</Text>
         <Text style={styles.emptySubtext}>Set your monthly limits first</Text>
@@ -87,7 +120,7 @@ export default function BudgetOverviewScreen() {
         >
           <Text style={styles.setupButtonText}>Set Up Budgets</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     );
   }
 
@@ -103,7 +136,11 @@ export default function BudgetOverviewScreen() {
         <View style={styles.navSpacer} />
       </View>
 
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+      >
       <Text style={styles.subtitle}>
         Your spending this month vs your limits
       </Text>
@@ -308,6 +345,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
+  },
+  errorText: {
+    color: "#E05C5C",
+    fontSize: 14,
+    textAlign: "center",
+    paddingHorizontal: 24,
   },
   emptyIcon: {
     fontSize: 48,

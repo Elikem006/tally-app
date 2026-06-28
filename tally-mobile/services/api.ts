@@ -16,6 +16,12 @@ export const authAPI = {
 
   login: (email: string, password: string) =>
     api.post("/api/auth/login", { email, password }),
+
+  updateAvatar: (userId: string, avatarType: string, avatarData: string) =>
+    api.put(`/api/auth/user/${userId}/avatar`, { avatarType, avatarData }),
+
+  getUserProfile: (userId: string) =>
+    api.get(`/api/auth/user/${userId}`),
 };
 
 export const expenseAPI = {
@@ -25,8 +31,9 @@ export const expenseAPI = {
     category: string,
     description: string,
     date: string,
+    paymentMethod: string = "CASH",
   ) =>
-    api.post("/api/expenses", { userId, amount, category, description, date }),
+    api.post("/api/expenses", { userId, amount, category, description, date, paymentMethod }),
 
   getUserExpenses: (userId: string) => api.get(`/api/expenses/user/${userId}`),
 
@@ -96,6 +103,23 @@ export const groupAPI = {
   deleteGroup: (groupId: string) => api.delete(`/api/groups/${groupId}`),
 };
 
+export const momoAPI = {
+  requestPayment: (
+    groupId: string,
+    userId: string,
+    phoneNumber: string,
+    amount: string,
+    description: string,
+  ) =>
+    api.post("/api/momo/pay", { groupId, userId, phoneNumber, amount, description }),
+
+  checkStatus: (referenceId: string) =>
+    api.get(`/api/momo/status/${referenceId}`),
+
+  getBalance: () =>
+    api.get("/api/momo/balance"),
+};
+
 export const remindersAPI = {
   createReminder: (
     userId: string,
@@ -126,5 +150,50 @@ export const remindersAPI = {
   deleteReminder: (reminderId: string) =>
     api.delete(`/api/reminders/${reminderId}`),
 };
+
+// ─── Response interceptor ────────────────────────────────────────────────────
+// Handles 401 (session expired) and 5xx (server errors) globally.
+// Uses lazy require() inside the callback to avoid circular dependencies with
+// login.tsx (which imports authAPI from this file).
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status: number | undefined = error.response?.status;
+
+    if (status === 401) {
+      console.warn("[Tally API] 401 Unauthorized — clearing session and redirecting to login.");
+      try {
+        // Lazy require avoids circular dep at module load time
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { currentUser } = require("../app/(auth)/login");
+        currentUser.token = "";
+        currentUser.userId = "1";
+        currentUser.userName = "";
+        currentUser.email = "";
+        currentUser.avatarType = "";
+        currentUser.avatarData = "";
+        currentUser.phoneNumber = "";
+      } catch (e) {
+        console.warn("[Tally API] Could not clear currentUser:", e);
+      }
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { router } = require("expo-router");
+        router.replace("/(auth)/login");
+      } catch (e) {
+        console.warn("[Tally API] Could not navigate to login:", e);
+      }
+    }
+
+    if (status !== undefined && status >= 500) {
+      console.error(
+        `[Tally API] Server error ${status} on ${error.config?.url}:`,
+        error.response?.data || error.message,
+      );
+    }
+
+    return Promise.reject(error);
+  },
+);
 
 export default api;

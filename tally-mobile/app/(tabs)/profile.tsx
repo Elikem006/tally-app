@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView } from "react-native";
-import { router } from "expo-router";
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, RefreshControl } from "react-native";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback } from "react";
 import { currentUser } from "../(auth)/login";
 import { expenseAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
+import Avatar from "../../components/Avatar";
 
 const CATEGORY_ICONS: { [key: string]: string } = {
   Food: "🍔",
@@ -16,10 +18,19 @@ const CATEGORY_ICONS: { [key: string]: string } = {
 export default function ProfileScreen() {
   const [stats, setStats] = useState<any>(null);
   const [loadingStats, setLoadingStats] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [avatarData, setAvatarData] = useState<string | null>(currentUser.avatarData || null);
 
   useEffect(() => {
     fetchStats();
   }, []);
+
+  // Refresh avatar state every time this screen comes into focus
+  // (so photos saved in avatar-builder appear immediately)
+  useFocusEffect(useCallback(() => {
+    setAvatarData(currentUser.avatarData || null);
+  }, []));
 
   async function fetchStats() {
     try {
@@ -49,10 +60,20 @@ export default function ProfileScreen() {
         thisMonthSpent: parseFloat(report.currentMonth) || 0,
         topCategory: report.highestCategory,
       });
-    } catch (error) {
-      console.log("Error fetching stats:", error);
+      setError(null);
+    } catch (err) {
+      setError("Something went wrong. Pull down to refresh.");
     } finally {
       setLoadingStats(false);
+    }
+  }
+
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      await fetchStats();
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -64,9 +85,12 @@ export default function ProfileScreen() {
         style: "destructive",
         onPress: () => {
           currentUser.token = "";
-          currentUser.userId = "";
+          currentUser.userId = "1";
           currentUser.userName = "";
           currentUser.email = "";
+          currentUser.avatarType = "";
+          currentUser.avatarData = "";
+          currentUser.phoneNumber = "";
           router.replace("/(auth)/login");
         },
       },
@@ -74,13 +98,22 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.container}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+    >
       {/* Avatar */}
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>
-          {currentUser.userName.charAt(0).toUpperCase()}
-        </Text>
-      </View>
+      <Avatar
+        userId={Number(currentUser.userId)}
+        name={currentUser.userName}
+        size={88}
+        avatarData={avatarData}
+        style={styles.avatarMargin}
+      />
+      <TouchableOpacity style={styles.editAvatarBtn} onPress={() => router.push("/avatar-builder")}>
+        <Text style={styles.editAvatarText}>✏️  Edit Avatar</Text>
+      </TouchableOpacity>
 
       <Text style={styles.name}>{currentUser.userName}</Text>
       <Text style={styles.subtitle}>Tally Member</Text>
@@ -106,6 +139,8 @@ export default function ProfileScreen() {
 
       {loadingStats ? (
         <ActivityIndicator size="small" color="#00C896" style={{ marginVertical: 16 }} />
+      ) : error && !stats ? (
+        <Text style={styles.errorText}>{error}</Text>
       ) : stats ? (
         <>
           {/* 3-card stat row */}
@@ -160,20 +195,23 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: "center",
   },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#00C896",
-    alignItems: "center",
-    justifyContent: "center",
+  avatarMargin: {
     marginTop: 40,
-    marginBottom: 16,
+    marginBottom: 10,
   },
-  avatarText: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: "#000000",
+  editAvatarBtn: {
+    backgroundColor: "#1A1F2E",
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#ffffff15",
+  },
+  editAvatarText: {
+    fontSize: 13,
+    color: "#8890A0",
+    fontWeight: "500",
   },
   name: {
     fontSize: 22,
@@ -260,6 +298,13 @@ const styles = StyleSheet.create({
   topCatSub: {
     fontSize: 12,
     color: "#8890A0",
+  },
+  errorText: {
+    color: "#E05C5C",
+    fontSize: 14,
+    textAlign: "center",
+    paddingHorizontal: 24,
+    marginVertical: 16,
   },
   logoutButton: {
     width: "100%",

@@ -1,6 +1,7 @@
 package user_service.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import user_service.model.Reminder;
@@ -28,7 +29,7 @@ public class ReminderController {
 
             if (userIdStr == null || title == null || title.isBlank()) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "userId and title are required"));
+                        .body(Map.of("error", "userId and title are required", "success", false));
             }
 
             Long userId = Long.parseLong(userIdStr);
@@ -49,10 +50,10 @@ public class ReminderController {
 
             Reminder reminder = reminderService.createReminder(
                     userId, title, amount, dueDate, isRecurring, recurrenceType);
-            return ResponseEntity.ok(reminder);
+            return ResponseEntity.status(HttpStatus.CREATED).body(reminder);
 
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -63,7 +64,7 @@ public class ReminderController {
             List<Reminder> reminders = reminderService.getUserReminders(userId);
             return ResponseEntity.ok(reminders);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -74,7 +75,7 @@ public class ReminderController {
             List<Reminder> reminders = reminderService.getUpcomingReminders(userId);
             return ResponseEntity.ok(reminders);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -85,7 +86,7 @@ public class ReminderController {
             Reminder reminder = reminderService.markPaid(reminderId);
             return ResponseEntity.ok(reminder);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -94,9 +95,9 @@ public class ReminderController {
     public ResponseEntity<?> deleteReminder(@PathVariable Long reminderId) {
         try {
             reminderService.deleteReminder(reminderId);
-            return ResponseEntity.ok(Map.of("message", "Reminder deleted"));
+            return ResponseEntity.ok(Map.of("message", "Reminder deleted", "success", true));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 }
