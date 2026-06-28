@@ -90,6 +90,8 @@ public class MoMoController {
     /**
      * GET /api/momo/balance
      * Returns the MoMo collection account balance from the sandbox.
+     * The MoMo sandbox balance endpoint returns 503 occasionally — this is normal
+     * sandbox behaviour. We return a graceful fallback instead of propagating an error.
      */
     @GetMapping("/balance")
     public ResponseEntity<?> getBalance() {
@@ -99,9 +101,23 @@ public class MoMoController {
             Map<String, Object> response = new HashMap<>();
             response.put("availableBalance", balance.getOrDefault("availableBalance", "0"));
             response.put("currency", balance.getOrDefault("currency", ""));
+            response.put("status", "available");
             response.put("success", true);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
+            String msg = e.getMessage() != null ? e.getMessage() : "";
+            // Sandbox returns 503 SERVICE_UNAVAILABLE intermittently — treat it as
+            // a soft failure and return a fallback so the frontend can degrade gracefully.
+            if (msg.contains("503") || msg.contains("SERVICE_UNAVAILABLE")) {
+                log.warning("MoMo sandbox balance returned 503 — returning fallback response");
+                return ResponseEntity.ok(Map.of(
+                        "availableBalance", "0.00",
+                        "currency",         "EUR",
+                        "status",           "unavailable",
+                        "message",          "MoMo service temporarily unavailable",
+                        "success",          true
+                ));
+            }
             log.severe("MoMo balance error: " + e.getMessage());
             return ResponseEntity.badRequest()
                     .body(Map.of("error", e.getMessage(), "success", false));

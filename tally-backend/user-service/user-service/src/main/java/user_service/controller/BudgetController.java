@@ -7,7 +7,6 @@ import org.springframework.web.bind.annotation.*;
 import user_service.model.Budget;
 import user_service.service.BudgetService;
 import java.math.BigDecimal;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -66,11 +65,11 @@ public class BudgetController {
     @GetMapping("/user/{userId}/summary")
     public ResponseEntity<?> getBudgetSummary(@PathVariable Long userId) {
         try {
+            // Return the summary map directly — its keys are category names (Food, Transport, etc.)
+            // so we must NOT add extra fields like "success" here, as the frontend
+            // iterates every key and would try to render "success" as a budget category.
             Map<String, Object> summary = budgetService.getBudgetSummary(userId);
-            // Copy to new map so we don't mutate the service-returned object
-            Map<String, Object> response = new HashMap<>(summary);
-            response.put("success", true);
-            return ResponseEntity.ok(response);
+            return ResponseEntity.ok(summary);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", e.getMessage(), "success", false));

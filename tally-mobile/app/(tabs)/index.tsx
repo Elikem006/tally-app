@@ -44,8 +44,14 @@ export default function HomeScreen() {
   // Notification badge
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // MoMo wallet
-  const [momoBalance, setMomoBalance] = useState<{ availableBalance: string; currency: string } | null>(null);
+  // MoMo wallet — status is "available" | "unavailable" when the response arrived,
+  // or null when the fetch failed entirely (network error, etc.)
+  const [momoBalance, setMomoBalance] = useState<{
+    availableBalance: string;
+    currency: string;
+    status?: string;
+    message?: string;
+  } | null>(null);
   const [momoBalanceLoading, setMomoBalanceLoading] = useState(false);
 
   // Quick add state
@@ -296,10 +302,18 @@ export default function HomeScreen() {
           <Text style={styles.totalSub}>{expenses.length} expenses recorded</Text>
         </View>
         {/* MoMo Wallet Card */}
-        <View style={styles.momoCard}>
+        <View style={[
+          styles.momoCard,
+          momoBalance?.status === "unavailable" && styles.momoCardUnavailable,
+        ]}>
           <View style={styles.momoCardHeader}>
             <Text style={styles.momoCardIcon}>📱</Text>
-            <Text style={styles.momoCardTitle}>MTN MoMo Wallet</Text>
+            <Text style={[
+              styles.momoCardTitle,
+              momoBalance?.status === "unavailable" && { color: "#8890A0" },
+            ]}>
+              MTN MoMo Wallet
+            </Text>
             <TouchableOpacity
               onPress={fetchMomoBalance}
               style={styles.momoRefreshBtn}
@@ -311,12 +325,18 @@ export default function HomeScreen() {
           {momoBalanceLoading ? (
             <ActivityIndicator color="#FFC107" style={{ marginTop: 8 }} />
           ) : momoBalance ? (
-            <View>
-              <Text style={styles.momoBalance}>
-                GHS {Math.max(0, parseFloat(momoBalance.availableBalance)).toFixed(2)}
+            momoBalance.status === "unavailable" ? (
+              <Text style={styles.momoUnavailable}>
+                MoMo service temporarily unavailable. Try again later.
               </Text>
-              <Text style={styles.momoSub}>Sandbox balance</Text>
-            </View>
+            ) : (
+              <View>
+                <Text style={styles.momoBalance}>
+                  GHS {Math.max(0, parseFloat(momoBalance.availableBalance)).toFixed(2)}
+                </Text>
+                <Text style={styles.momoSub}>Sandbox balance</Text>
+              </View>
+            )
           ) : (
             <Text style={styles.momoUnavailable}>Balance unavailable</Text>
           )}
@@ -741,6 +761,9 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     borderWidth: 1,
     borderColor: "#FFC10730",
+  },
+  momoCardUnavailable: {
+    borderColor: "#8890A030",
   },
   momoCardHeader: {
     flexDirection: "row",
