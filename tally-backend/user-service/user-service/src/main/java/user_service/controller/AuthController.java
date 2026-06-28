@@ -1,6 +1,7 @@
 package user_service.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import user_service.model.User;
@@ -25,21 +26,22 @@ public class AuthController {
             if (name == null || name.isBlank() || email == null || email.isBlank()
                     || password == null || password.isBlank()) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "Name, email and password are required"));
+                        .body(Map.of("error", "Name, email and password are required", "success", false));
             }
 
             User user = userService.registerUser(name, email, password);
 
-            return ResponseEntity.ok(Map.of(
+            return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
                     "message", "Registration successful",
                     "userId", user.getId(),
                     "name", user.getName(),
-                    "email", user.getEmail()
+                    "email", user.getEmail(),
+                    "success", true
             ));
 
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -51,15 +53,16 @@ public class AuthController {
 
             if (email == null || password == null) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "Email and password are required"));
+                        .body(Map.of("error", "Email and password are required", "success", false));
             }
 
             Map<String, Object> result = userService.loginUser(email, password);
+            result.put("success", true);
             return ResponseEntity.ok(result);
 
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -74,10 +77,11 @@ public class AuthController {
             return ResponseEntity.ok(Map.of(
                     "message", "Avatar updated",
                     "avatarType", user.getAvatarType() != null ? user.getAvatarType() : "",
-                    "avatarData", user.getAvatarData() != null ? user.getAvatarData() : ""
+                    "avatarData", user.getAvatarData() != null ? user.getAvatarData() : "",
+                    "success", true
             ));
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -90,10 +94,11 @@ public class AuthController {
                     "name", user.getName(),
                     "email", user.getEmail(),
                     "avatarType", user.getAvatarType() != null ? user.getAvatarType() : "",
-                    "avatarData", user.getAvatarData() != null ? user.getAvatarData() : ""
+                    "avatarData", user.getAvatarData() != null ? user.getAvatarData() : "",
+                    "success", true
             ));
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -105,20 +110,21 @@ public class AuthController {
             String phoneNumber = request.get("phoneNumber");
             if (phoneNumber == null || phoneNumber.isBlank()) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "Phone number is required"));
+                        .body(Map.of("error", "Phone number is required", "success", false));
             }
             var user = userService.updatePhoneNumber(userId, phoneNumber);
             return ResponseEntity.ok(Map.of(
                     "message", "Phone number updated",
-                    "phoneNumber", user.getPhoneNumber()
+                    "phoneNumber", user.getPhoneNumber(),
+                    "success", true
             ));
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
     @GetMapping("/health")
     public ResponseEntity<?> health() {
-        return ResponseEntity.ok(Map.of("status", "User service is running"));
+        return ResponseEntity.ok(Map.of("status", "User service is running", "success", true));
     }
 }

@@ -1,6 +1,7 @@
 package user_service.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import user_service.model.Group;
@@ -29,14 +30,14 @@ public class GroupController {
 
             if (name == null || name.isEmpty()) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "Group name is required"));
+                        .body(Map.of("error", "Group name is required", "success", false));
             }
 
             Group group = groupService.createGroup(name, createdBy);
-            return ResponseEntity.ok(group);
+            return ResponseEntity.status(HttpStatus.CREATED).body(group);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -48,10 +49,10 @@ public class GroupController {
         try {
             Long userId = Long.parseLong(request.get("userId"));
             GroupMember member = groupService.addMember(groupId, userId);
-            return ResponseEntity.ok(member);
+            return ResponseEntity.status(HttpStatus.CREATED).body(member);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -63,7 +64,7 @@ public class GroupController {
             return ResponseEntity.ok(groups);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -72,10 +73,12 @@ public class GroupController {
     public ResponseEntity<?> getGroupDetails(@PathVariable Long groupId) {
         try {
             Map<String, Object> details = groupService.getGroupDetails(groupId);
+            // GroupService creates a new HashMap — safe to mutate directly
+            details.put("success", true);
             return ResponseEntity.ok(details);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -91,12 +94,12 @@ public class GroupController {
 
             if (paidByStr == null || amountStr == null || description == null) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "paidBy, amount and description are required"));
+                        .body(Map.of("error", "paidBy, amount and description are required", "success", false));
             }
 
             if (description.isEmpty()) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "Description cannot be empty"));
+                        .body(Map.of("error", "Description cannot be empty", "success", false));
             }
 
             Long paidBy = Long.parseLong(paidByStr);
@@ -104,15 +107,15 @@ public class GroupController {
 
             if (amount.compareTo(BigDecimal.ZERO) <= 0) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "Amount must be greater than zero"));
+                        .body(Map.of("error", "Amount must be greater than zero", "success", false));
             }
 
             SharedExpense expense = groupService.addSharedExpense(
                     groupId, paidBy, amount, description);
-            return ResponseEntity.ok(expense);
+            return ResponseEntity.status(HttpStatus.CREATED).body(expense);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -124,7 +127,7 @@ public class GroupController {
             return ResponseEntity.ok(balances);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -137,10 +140,12 @@ public class GroupController {
             Long userId = Long.parseLong(request.get("userId"));
             String phoneNumber = request.get("phoneNumber"); // optional
             Map<String, Object> result = groupService.settleUp(groupId, userId, phoneNumber);
+            // GroupService creates a new HashMap — safe to mutate directly
+            result.put("success", true);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -148,10 +153,10 @@ public class GroupController {
     public ResponseEntity<?> deleteGroup(@PathVariable Long groupId) {
         try {
             groupService.deleteGroup(groupId);
-            return ResponseEntity.ok(Map.of("message", "Group deleted successfully"));
+            return ResponseEntity.ok(Map.of("message", "Group deleted successfully", "success", true));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 }

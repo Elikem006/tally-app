@@ -48,6 +48,7 @@ public class UserService {
         response.put("email", user.getEmail());
         response.put("avatarType", user.getAvatarType());
         response.put("avatarData", user.getAvatarData());
+        response.put("phoneNumber", user.getPhoneNumber() != null ? user.getPhoneNumber() : "");
 
         return response;
     }

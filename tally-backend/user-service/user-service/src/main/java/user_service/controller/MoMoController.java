@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.*;
 import user_service.service.MoMoService;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.logging.Logger;
@@ -33,17 +34,17 @@ public class MoMoController {
 
             if (phoneNumber == null || phoneNumber.isBlank()) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "phoneNumber is required"));
+                        .body(Map.of("error", "phoneNumber is required", "success", false));
             }
             if (amountStr == null || amountStr.isBlank()) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "amount is required"));
+                        .body(Map.of("error", "amount is required", "success", false));
             }
 
             BigDecimal amount = new BigDecimal(amountStr);
             if (amount.compareTo(BigDecimal.ZERO) <= 0) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "amount must be greater than zero"));
+                        .body(Map.of("error", "amount must be greater than zero", "success", false));
             }
 
             String referenceId = UUID.randomUUID().toString();
@@ -52,13 +53,14 @@ public class MoMoController {
             return ResponseEntity.ok(Map.of(
                     "message",     "Payment request sent",
                     "referenceId", referenceId,
-                    "status",      "PENDING"
+                    "status",      "PENDING",
+                    "success",     true
             ));
 
         } catch (Exception e) {
             log.severe("MoMo pay error: " + e.getMessage());
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -71,12 +73,13 @@ public class MoMoController {
             String status = moMoService.getPaymentStatus(referenceId);
             return ResponseEntity.ok(Map.of(
                     "referenceId", referenceId,
-                    "status",      status
+                    "status",      status,
+                    "success",     true
             ));
         } catch (Exception e) {
             log.severe("MoMo status error: " + e.getMessage());
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -88,11 +91,16 @@ public class MoMoController {
     public ResponseEntity<?> getBalance() {
         try {
             Map<String, String> balance = moMoService.getAccountBalance();
-            return ResponseEntity.ok(balance);
+            // Build a new Map<String, Object> so we can add the boolean success field
+            Map<String, Object> response = new HashMap<>();
+            response.put("availableBalance", balance.getOrDefault("availableBalance", "0"));
+            response.put("currency", balance.getOrDefault("currency", ""));
+            response.put("success", true);
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.severe("MoMo balance error: " + e.getMessage());
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -103,6 +111,6 @@ public class MoMoController {
     @PostMapping("/callback")
     public ResponseEntity<?> callback(@RequestBody(required = false) Map<String, Object> payload) {
         log.info("MoMo callback received: " + payload);
-        return ResponseEntity.ok(Map.of("message", "Callback received"));
+        return ResponseEntity.ok(Map.of("message", "Callback received", "success", true));
     }
 }

@@ -1,11 +1,13 @@
 package user_service.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import user_service.model.Budget;
 import user_service.service.BudgetService;
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -25,28 +27,28 @@ public class BudgetController {
             String monthlyLimitStr = request.get("monthlyLimit");
 
             if (userIdStr == null || userIdStr.isBlank()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "userId is required"));
+                return ResponseEntity.badRequest().body(Map.of("error", "userId is required", "success", false));
             }
             if (category == null || category.isBlank()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "category is required"));
+                return ResponseEntity.badRequest().body(Map.of("error", "category is required", "success", false));
             }
             if (monthlyLimitStr == null || monthlyLimitStr.isBlank()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "monthlyLimit is required"));
+                return ResponseEntity.badRequest().body(Map.of("error", "monthlyLimit is required", "success", false));
             }
 
             Long userId = Long.parseLong(userIdStr);
             BigDecimal monthlyLimit = new BigDecimal(monthlyLimitStr);
 
             if (monthlyLimit.compareTo(BigDecimal.ZERO) <= 0) {
-                return ResponseEntity.badRequest().body(Map.of("error", "monthlyLimit must be greater than zero"));
+                return ResponseEntity.badRequest().body(Map.of("error", "monthlyLimit must be greater than zero", "success", false));
             }
 
             Budget budget = budgetService.setBudget(userId, category, monthlyLimit);
-            return ResponseEntity.ok(budget);
+            return ResponseEntity.status(HttpStatus.CREATED).body(budget);
 
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -57,7 +59,7 @@ public class BudgetController {
             return ResponseEntity.ok(budgets);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -65,10 +67,13 @@ public class BudgetController {
     public ResponseEntity<?> getBudgetSummary(@PathVariable Long userId) {
         try {
             Map<String, Object> summary = budgetService.getBudgetSummary(userId);
-            return ResponseEntity.ok(summary);
+            // Copy to new map so we don't mutate the service-returned object
+            Map<String, Object> response = new HashMap<>(summary);
+            response.put("success", true);
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -78,10 +83,10 @@ public class BudgetController {
             @PathVariable String category) {
         try {
             budgetService.deleteBudget(userId, category);
-            return ResponseEntity.ok(Map.of("message", "Budget deleted"));
+            return ResponseEntity.ok(Map.of("message", "Budget deleted", "success", true));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 }
