@@ -11,6 +11,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
 } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import { expenseAPI, remindersAPI, budgetAPI, momoAPI } from "../../services/api";
@@ -36,6 +37,8 @@ export default function HomeScreen() {
   const [upcomingReminders, setUpcomingReminders] = useState<any[]>([]);
   const [budgetAlerts, setBudgetAlerts] = useState<{ category: string; isOverBudget: boolean; isNearLimit: boolean; percentage: number }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [userName, setUserName] = useState("");
 
   // Notification badge
@@ -74,6 +77,16 @@ export default function HomeScreen() {
     }
   }
 
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      await fetchExpenses();
+      await fetchMomoBalance();
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   async function fetchExpenses() {
     try {
       const userId = getUserId();
@@ -81,8 +94,9 @@ export default function HomeScreen() {
       setUserName(name);
       const response = await expenseAPI.getUserExpenses(userId);
       setExpenses(response.data);
-    } catch (error) {
-      console.log("Error fetching expenses:", error);
+      setError(null);
+    } catch (err) {
+      setError("Something went wrong. Pull down to refresh.");
     } finally {
       setLoading(false);
     }
@@ -209,11 +223,27 @@ export default function HomeScreen() {
     );
   }
 
+  if (error && expenses.length === 0) {
+    return (
+      <ScrollView
+        style={{ flex: 1, backgroundColor: "#0F1117" }}
+        contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center" }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+      >
+        <Text style={styles.errorText}>{error}</Text>
+      </ScrollView>
+    );
+  }
+
   console.log('budgetAlerts:', budgetAlerts);
 
   return (
     <View style={styles.wrapper}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+      >
         {/* Budget Alerts */}
         {budgetAlerts.length > 0 && (
           <View style={styles.alertsSection}>
@@ -498,6 +528,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#0F1117",
     alignItems: "center",
     justifyContent: "center",
+  },
+  errorText: {
+    color: "#E05C5C",
+    fontSize: 14,
+    textAlign: "center",
+    paddingHorizontal: 24,
   },
   content: { padding: 24 },
   topRow: {

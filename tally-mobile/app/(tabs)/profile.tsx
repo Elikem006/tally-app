@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, RefreshControl } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback } from "react";
 import { currentUser } from "../(auth)/login";
@@ -18,6 +18,8 @@ const CATEGORY_ICONS: { [key: string]: string } = {
 export default function ProfileScreen() {
   const [stats, setStats] = useState<any>(null);
   const [loadingStats, setLoadingStats] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [avatarData, setAvatarData] = useState<string | null>(currentUser.avatarData || null);
 
   useEffect(() => {
@@ -58,10 +60,20 @@ export default function ProfileScreen() {
         thisMonthSpent: parseFloat(report.currentMonth) || 0,
         topCategory: report.highestCategory,
       });
-    } catch (error) {
-      console.log("Error fetching stats:", error);
+      setError(null);
+    } catch (err) {
+      setError("Something went wrong. Pull down to refresh.");
     } finally {
       setLoadingStats(false);
+    }
+  }
+
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      await fetchStats();
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -83,7 +95,11 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.container}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+    >
       {/* Avatar */}
       <Avatar
         userId={Number(currentUser.userId)}
@@ -120,6 +136,8 @@ export default function ProfileScreen() {
 
       {loadingStats ? (
         <ActivityIndicator size="small" color="#00C896" style={{ marginVertical: 16 }} />
+      ) : error && !stats ? (
+        <Text style={styles.errorText}>{error}</Text>
       ) : stats ? (
         <>
           {/* 3-card stat row */}
@@ -277,6 +295,13 @@ const styles = StyleSheet.create({
   topCatSub: {
     fontSize: 12,
     color: "#8890A0",
+  },
+  errorText: {
+    color: "#E05C5C",
+    fontSize: 14,
+    textAlign: "center",
+    paddingHorizontal: 24,
+    marginVertical: 16,
   },
   logoutButton: {
     width: "100%",

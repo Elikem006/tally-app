@@ -155,7 +155,8 @@ public class GroupService {
         }
 
         for (SharedExpense expense : expenses) {
-            if (expense.getDescription().equals("SETTLED")) continue;
+            if ("SETTLED".equals(expense.getDescription())) continue;
+            if (expense.getAmount() == null) continue;
             BigDecimal share = expense.getAmount()
                     .divide(BigDecimal.valueOf(memberCount), 2, RoundingMode.HALF_UP);
 
@@ -205,6 +206,7 @@ public class GroupService {
             java.math.BigDecimal owedAmount = java.math.BigDecimal.ZERO;
             for (SharedExpense se : expenses) {
                 if ("SETTLED".equals(se.getDescription())) continue;
+                if (se.getAmount() == null || se.getPaidBy() == null) continue;
                 java.math.BigDecimal share = se.getAmount()
                         .divide(java.math.BigDecimal.valueOf(memberCount), 2, java.math.RoundingMode.HALF_UP);
                 if (!se.getPaidBy().equals(userId)) {

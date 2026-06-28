@@ -17,6 +17,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Modal,
+  RefreshControl,
 } from "react-native";
 
 export default function GroupDetailScreen() {
@@ -24,6 +25,8 @@ export default function GroupDetailScreen() {
   const [details, setDetails] = useState<any>(null);
   const [balances, setBalances] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [expenseAmount, setExpenseAmount] = useState("");
   const [expenseDescription, setExpenseDescription] = useState("");
@@ -52,10 +55,20 @@ export default function GroupDetailScreen() {
       ]);
       setDetails(detailsRes.data);
       setBalances(balancesRes.data);
-    } catch (error) {
-      console.log("Error fetching group details:", error);
+      setError(null);
+    } catch (err) {
+      setError("Something went wrong. Pull down to refresh.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      await fetchDetails();
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -214,6 +227,18 @@ export default function GroupDetailScreen() {
     );
   }
 
+  if (error && !details) {
+    return (
+      <ScrollView
+        style={{ flex: 1, backgroundColor: "#0F1117" }}
+        contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center" }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+      >
+        <Text style={styles.errorText}>{error}</Text>
+      </ScrollView>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
@@ -223,6 +248,7 @@ export default function GroupDetailScreen() {
         style={styles.container}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
       >
         <Text style={styles.title}>{groupName}</Text>
 
@@ -544,6 +570,12 @@ const styles = StyleSheet.create({
   centered: {
     flex: 1, backgroundColor: "#0F1117",
     alignItems: "center", justifyContent: "center",
+  },
+  errorText: {
+    color: "#E05C5C",
+    fontSize: 14,
+    textAlign: "center",
+    paddingHorizontal: 24,
   },
   content: { padding: 24 },
   title: {

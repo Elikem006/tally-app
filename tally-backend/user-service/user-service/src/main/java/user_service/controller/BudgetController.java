@@ -20,13 +20,25 @@ public class BudgetController {
     @PostMapping
     public ResponseEntity<?> setBudget(@RequestBody Map<String, String> request) {
         try {
-            Long userId = Long.parseLong(request.get("userId"));
+            String userIdStr = request.get("userId");
             String category = request.get("category");
-            BigDecimal monthlyLimit = new BigDecimal(request.get("monthlyLimit"));
+            String monthlyLimitStr = request.get("monthlyLimit");
 
-            if (category == null || monthlyLimit == null) {
-                return ResponseEntity.badRequest()
-                        .body(Map.of("error", "Category and monthlyLimit are required"));
+            if (userIdStr == null || userIdStr.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "userId is required"));
+            }
+            if (category == null || category.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "category is required"));
+            }
+            if (monthlyLimitStr == null || monthlyLimitStr.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "monthlyLimit is required"));
+            }
+
+            Long userId = Long.parseLong(userIdStr);
+            BigDecimal monthlyLimit = new BigDecimal(monthlyLimitStr);
+
+            if (monthlyLimit.compareTo(BigDecimal.ZERO) <= 0) {
+                return ResponseEntity.badRequest().body(Map.of("error", "monthlyLimit must be greater than zero"));
             }
 
             Budget budget = budgetService.setBudget(userId, category, monthlyLimit);

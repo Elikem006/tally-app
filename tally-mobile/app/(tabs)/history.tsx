@@ -9,6 +9,7 @@ import {
   Alert,
   ScrollView,
   TextInput,
+  RefreshControl,
 } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import { expenseAPI } from "../../services/api";
@@ -60,6 +61,8 @@ function parseTagsFromDescription(description: string | null | undefined): {
 export default function HistoryScreen() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -77,10 +80,20 @@ export default function HistoryScreen() {
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
       );
       setExpenses(sorted);
-    } catch (error) {
-      Alert.alert("Error", "Failed to load expenses");
+      setError(null);
+    } catch (err) {
+      setError("Something went wrong. Pull down to refresh.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      await fetchExpenses();
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -135,9 +148,25 @@ export default function HistoryScreen() {
     );
   }
 
+  if (error && expenses.length === 0) {
+    return (
+      <ScrollView
+        style={{ flex: 1, backgroundColor: "#0F1117" }}
+        contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center" }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+      >
+        <Text style={styles.errorText}>{error}</Text>
+      </ScrollView>
+    );
+  }
+
   if (expenses.length === 0) {
     return (
-      <View style={styles.centered}>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: "#0F1117" }}
+        contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center" }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+      >
         <Text style={styles.emptyIcon}>📭</Text>
         <Text style={styles.emptyText}>No expenses yet</Text>
         <Text style={styles.emptySubtext}>
@@ -149,7 +178,7 @@ export default function HistoryScreen() {
         >
           <Text style={styles.emptyButtonText}>Add Your First Expense</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     );
   }
 
@@ -217,6 +246,7 @@ export default function HistoryScreen() {
         data={filteredExpenses}
         keyExtractor={(item) => String(item.id)}
         contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
         renderItem={({ item }) => {
           const isShared = item.type === "shared";
           const color = CATEGORY_COLORS[item.category] || "#8890A0";
@@ -288,6 +318,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#0F1117",
     alignItems: "center",
     justifyContent: "center",
+  },
+  errorText: {
+    color: "#E05C5C",
+    fontSize: 14,
+    textAlign: "center",
+    paddingHorizontal: 24,
   },
   emptyIcon: {
     fontSize: 48,

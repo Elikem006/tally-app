@@ -52,7 +52,7 @@ export default function RegisterScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.inner}>
+      <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
         <Text style={styles.logo}>Tally 💰</Text>
         <Text style={styles.tagline}>Create your account</Text>
 
@@ -100,7 +100,7 @@ export default function RegisterScreen() {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
+          <TouchableOpacity onPress={() => router.back()}>
             <Text style={styles.link}>
               Already have an account?{' '}
               <Text style={styles.linkBold}>Log in</Text>

@@ -3,6 +3,7 @@ package user_service.service;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
@@ -53,18 +54,22 @@ public class MoMoService {
 
         HttpEntity<String> entity = new HttpEntity<>("", headers);
 
-        ResponseEntity<Map> response = restTemplate.exchange(
-                baseUrl + "/collection/token/",
-                HttpMethod.POST,
-                entity,
-                Map.class
-        );
+        try {
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    baseUrl + "/collection/token/",
+                    HttpMethod.POST,
+                    entity,
+                    Map.class
+            );
 
-        if (response.getBody() == null || !response.getBody().containsKey("access_token")) {
-            throw new RuntimeException("Failed to obtain MoMo access token");
+            if (response.getBody() == null || !response.getBody().containsKey("access_token")) {
+                throw new RuntimeException("Failed to get MoMo access token: empty or unexpected response");
+            }
+
+            return (String) response.getBody().get("access_token");
+        } catch (HttpStatusCodeException e) {
+            throw new RuntimeException("Failed to get MoMo access token: " + e.getStatusCode() + " — " + e.getResponseBodyAsString());
         }
-
-        return (String) response.getBody().get("access_token");
     }
 
     /**
@@ -95,19 +100,23 @@ public class MoMoService {
 
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
 
-        ResponseEntity<String> response = restTemplate.exchange(
-                baseUrl + "/collection/v1_0/requesttopay",
-                HttpMethod.POST,
-                entity,
-                String.class
-        );
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(
+                    baseUrl + "/collection/v1_0/requesttopay",
+                    HttpMethod.POST,
+                    entity,
+                    String.class
+            );
 
-        if (response.getStatusCode() == HttpStatus.ACCEPTED) {
-            log.info("MoMo requestToPay accepted. referenceId=" + referenceId);
-            return referenceId;
+            if (response.getStatusCode() == HttpStatus.ACCEPTED) {
+                log.info("MoMo requestToPay accepted. referenceId=" + referenceId);
+                return referenceId;
+            }
+
+            throw new RuntimeException("MoMo requestToPay returned unexpected status: " + response.getStatusCode());
+        } catch (HttpStatusCodeException e) {
+            throw new RuntimeException("MoMo requestToPay failed: " + e.getStatusCode() + " — " + e.getResponseBodyAsString());
         }
-
-        throw new RuntimeException("MoMo requestToPay returned unexpected status: " + response.getStatusCode());
     }
 
     /**
@@ -124,22 +133,26 @@ public class MoMoService {
 
         HttpEntity<Void> entity = new HttpEntity<>(headers);
 
-        ResponseEntity<Map> response = restTemplate.exchange(
-                baseUrl + "/collection/v1_0/account/balance",
-                HttpMethod.GET,
-                entity,
-                Map.class
-        );
+        try {
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    baseUrl + "/collection/v1_0/account/balance",
+                    HttpMethod.GET,
+                    entity,
+                    Map.class
+            );
 
-        Map<String, String> result = new HashMap<>();
-        if (response.getBody() != null) {
-            result.put("availableBalance", String.valueOf(response.getBody().getOrDefault("availableBalance", "0")));
-            result.put("currency", String.valueOf(response.getBody().getOrDefault("currency", currency)));
-        } else {
-            result.put("availableBalance", "0");
-            result.put("currency", currency);
+            Map<String, String> result = new HashMap<>();
+            if (response.getBody() != null) {
+                result.put("availableBalance", String.valueOf(response.getBody().getOrDefault("availableBalance", "0")));
+                result.put("currency", String.valueOf(response.getBody().getOrDefault("currency", currency)));
+            } else {
+                result.put("availableBalance", "0");
+                result.put("currency", currency);
+            }
+            return result;
+        } catch (HttpStatusCodeException e) {
+            throw new RuntimeException("MoMo balance check failed: " + e.getStatusCode() + " — " + e.getResponseBodyAsString());
         }
-        return result;
     }
 
     /**
@@ -156,17 +169,21 @@ public class MoMoService {
 
         HttpEntity<Void> entity = new HttpEntity<>(headers);
 
-        ResponseEntity<Map> response = restTemplate.exchange(
-                baseUrl + "/collection/v1_0/requesttopay/" + referenceId,
-                HttpMethod.GET,
-                entity,
-                Map.class
-        );
+        try {
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    baseUrl + "/collection/v1_0/requesttopay/" + referenceId,
+                    HttpMethod.GET,
+                    entity,
+                    Map.class
+            );
 
-        if (response.getBody() != null && response.getBody().containsKey("status")) {
-            return (String) response.getBody().get("status");
+            if (response.getBody() != null && response.getBody().containsKey("status")) {
+                return (String) response.getBody().get("status");
+            }
+
+            return "PENDING";
+        } catch (HttpStatusCodeException e) {
+            throw new RuntimeException("MoMo status check failed: " + e.getStatusCode() + " — " + e.getResponseBodyAsString());
         }
-
-        return "PENDING";
     }
 }

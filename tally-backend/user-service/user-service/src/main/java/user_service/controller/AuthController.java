@@ -22,7 +22,8 @@ public class AuthController {
             String email = request.get("email");
             String password = request.get("password");
 
-            if (name == null || email == null || password == null) {
+            if (name == null || name.isBlank() || email == null || email.isBlank()
+                    || password == null || password.isBlank()) {
                 return ResponseEntity.badRequest()
                         .body(Map.of("error", "Name, email and password are required"));
             }
