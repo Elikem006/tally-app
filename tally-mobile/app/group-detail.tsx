@@ -326,6 +326,23 @@ export default function GroupDetailScreen() {
           ))}
         </View>
 
+        {/* Single-member empty state */}
+        {details?.members?.length === 1 && (
+          <View style={styles.soloMemberCard}>
+            <Text style={styles.soloMemberEmoji}>👥</Text>
+            <Text style={styles.soloMemberTitle}>You're the only one here</Text>
+            <Text style={styles.soloMemberSub}>
+              Add members to start splitting expenses with friends
+            </Text>
+            <TouchableOpacity
+              style={styles.soloAddButton}
+              onPress={() => setShowAddMember(true)}
+            >
+              <Text style={styles.soloAddButtonText}>+ Add Member</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {showAddMember ? (
           <View style={styles.addExpenseForm}>
             <Text style={styles.sectionTitle}>Add Member by User ID</Text>
@@ -419,11 +436,24 @@ export default function GroupDetailScreen() {
           </View>
         )}
 
+        {balances.length === 0 && (details?.members?.length ?? 0) > 1 && (
+          <Text style={styles.settledUpText}>Everyone is settled up! 🎉</Text>
+        )}
+
         {/* Shared Expenses */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Shared Expenses</Text>
           {details?.expenses?.length === 0 ? (
-            <Text style={styles.emptyText}>No expenses yet</Text>
+            (details?.members?.length ?? 0) > 1 ? (
+              <View style={styles.expensesEmptyState}>
+                <Text style={styles.emptyText}>No shared expenses yet</Text>
+                <Text style={styles.emptySubText}>
+                  Tap + Add Shared Expense to split costs with the group
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.emptyText}>No expenses yet</Text>
+            )
           ) : (
             details?.expenses?.map((expense: any) => (
               <View key={expense.id} style={styles.expenseRow}>
@@ -727,4 +757,57 @@ const styles = StyleSheet.create({
   skipButtonText: { color: "#8890A0", fontSize: 15, fontWeight: "600" },
   cancelLink: { padding: 14, alignItems: "center" },
   cancelLinkText: { color: "#ffffff60", fontSize: 14 },
+
+  // Solo-member card
+  soloMemberCard: {
+    backgroundColor: "#1A1F2E",
+    borderRadius: 16,
+    padding: 20,
+    alignItems: "center",
+    marginTop: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#00C89630",
+    borderStyle: "dashed",
+  },
+  soloMemberEmoji: { fontSize: 32, marginBottom: 10 },
+  soloMemberTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#ffffff",
+    marginBottom: 6,
+    textAlign: "center",
+  },
+  soloMemberSub: {
+    fontSize: 13,
+    color: "#8890A0",
+    textAlign: "center",
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  soloAddButton: {
+    backgroundColor: "#00C896",
+    borderRadius: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  soloAddButtonText: { color: "#000000", fontWeight: "bold", fontSize: 14 },
+
+  // Settled-up message
+  settledUpText: {
+    fontSize: 14,
+    color: "#00C896",
+    textAlign: "center",
+    marginBottom: 16,
+    fontWeight: "500",
+  },
+
+  // Expenses empty state (multi-member)
+  expensesEmptyState: { paddingVertical: 4 },
+  emptySubText: {
+    fontSize: 12,
+    color: "#8890A0",
+    fontStyle: "italic",
+    marginTop: 4,
+  },
 });
