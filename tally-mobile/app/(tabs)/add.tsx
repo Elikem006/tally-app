@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { expenseAPI, momoAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
+import { currentUser } from "../(auth)/login";
 import { addHistoryItem } from "../../services/notificationHistory";
 import { signalMomoRefresh } from "../../services/momoRefresh";
 import Toast from "../../components/Toast";
@@ -40,7 +41,7 @@ export default function AddScreen() {
 
   // MoMo payment modal
   const [showMomoModal, setShowMomoModal] = useState(false);
-  const [momoPhone, setMomoPhone] = useState("");
+  const [momoPhone, setMomoPhone] = useState(currentUser.phoneNumber || "");
   const [momoStatus, setMomoStatus] = useState<MomoStatus>("idle");
   const [momoLoading, setMomoLoading] = useState(false);
 
@@ -746,8 +747,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   modalPayText: {
-    fontSize: 15,
     color: "#000000",
     fontWeight: "bold",
+    fontSize: 16,
+  },
+  modalStatusText: {
+    color: "#8890A0",
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: 12,
+    minHeight: 20,
   },
 });

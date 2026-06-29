@@ -41,7 +41,7 @@ export default function GroupDetailScreen() {
 
   // MoMo modal state
   const [showMomoModal, setShowMomoModal] = useState(false);
-  const [momoPhone, setMomoPhone] = useState("");
+  const [momoPhone, setMomoPhone] = useState(currentUser.phoneNumber || "");
   const [settlingUserId, setSettlingUserId] = useState<number | null>(null);
   const [settlingName, setSettlingName] = useState("");
   const [settlingAmount, setSettlingAmount] = useState(0);
@@ -726,5 +726,5 @@ const styles = StyleSheet.create({
   },
   skipButtonText: { color: "#8890A0", fontSize: 15, fontWeight: "600" },
   cancelLink: { padding: 14, alignItems: "center" },
-  cancelLinkText: { color: "#ffffff40", fontSize: 13 },
+  cancelLinkText: { color: "#ffffff60", fontSize: 14 },
 });
