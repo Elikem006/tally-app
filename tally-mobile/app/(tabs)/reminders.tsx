@@ -28,8 +28,33 @@ export default function RemindersScreen() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
-  const [dueDate, setDueDate] = useState("");
+  const [selectedDay, setSelectedDay] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
   const [isRecurring, setIsRecurring] = useState(false);
+
+  const MONTHS = [
+    { label: "January",   value: "01", days: 31 },
+    { label: "February",  value: "02", days: 28 },
+    { label: "March",     value: "03", days: 31 },
+    { label: "April",     value: "04", days: 30 },
+    { label: "May",       value: "05", days: 31 },
+    { label: "June",      value: "06", days: 30 },
+    { label: "July",      value: "07", days: 31 },
+    { label: "August",    value: "08", days: 31 },
+    { label: "September", value: "09", days: 30 },
+    { label: "October",   value: "10", days: 31 },
+    { label: "November",  value: "11", days: 30 },
+    { label: "December",  value: "12", days: 31 },
+  ];
+  const currentYear = new Date().getFullYear();
+  const YEARS = [String(currentYear), String(currentYear + 1), String(currentYear + 2)];
+  const daysInMonth = selectedMonth
+    ? MONTHS.find((m) => m.value === selectedMonth)?.days || 31
+    : 31;
+  const DAYS = Array.from({ length: daysInMonth }, (_, i) =>
+    String(i + 1).padStart(2, "0"),
+  );
   const [saving, setSaving] = useState(false);
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
 
@@ -65,10 +90,13 @@ export default function RemindersScreen() {
       showToast("Title is required", "error");
       return;
     }
-    if (!dueDate.trim()) {
-      showToast("Due date is required (YYYY-MM-DD)", "error");
+    if (!selectedDay || !selectedMonth || !selectedYear) {
+      showToast("Please select a due date", "error");
       return;
     }
+
+    const dueDateString = `${selectedYear}-${selectedMonth}-${selectedDay}`;
+    const friendlyDate = `${selectedDay} ${MONTHS.find((m) => m.value === selectedMonth)?.label} ${selectedYear}`;
 
     try {
       setSaving(true);
@@ -77,21 +105,23 @@ export default function RemindersScreen() {
         userId,
         title.trim(),
         amount.trim(),
-        dueDate.trim(),
+        dueDateString,
         isRecurring,
         isRecurring ? "MONTHLY" : "",
       );
       // Reset form
       setTitle("");
       setAmount("");
-      setDueDate("");
+      setSelectedDay("");
+      setSelectedMonth("");
+      setSelectedYear(String(new Date().getFullYear()));
       setIsRecurring(false);
       setShowAddForm(false);
       await fetchReminders();
       await addHistoryItem({
         type: "reminder_due",
         title: "Reminder set",
-        body: `"${title.trim()}" due ${dueDate.trim()}${amount.trim() ? ` — GHS ${amount.trim()}` : ""}.`,
+        body: `"${title.trim()}" due ${friendlyDate}${amount.trim() ? ` — GHS ${amount.trim()}` : ""}.`,
         data: { screen: "reminders" },
       });
       showToast("Reminder added!", "success");
@@ -189,13 +219,80 @@ export default function RemindersScreen() {
             onChangeText={setAmount}
           />
 
-          <TextInput
-            style={styles.input}
-            placeholder="Due date YYYY-MM-DD"
-            placeholderTextColor="#8890A0"
-            value={dueDate}
-            onChangeText={setDueDate}
-          />
+          <Text style={styles.label}>Due Date</Text>
+          <View style={styles.datePickerRow}>
+            {/* Day */}
+            <View style={styles.datePickerSection}>
+              <Text style={styles.datePickerLabel}>Day</Text>
+              <ScrollView
+                style={styles.datePickerScroll}
+                showsVerticalScrollIndicator={false}
+                nestedScrollEnabled={true}
+              >
+                {DAYS.map((day) => (
+                  <TouchableOpacity
+                    key={day}
+                    style={[styles.datePickerItem, selectedDay === day && styles.datePickerItemSelected]}
+                    onPress={() => setSelectedDay(day)}
+                  >
+                    <Text style={[styles.datePickerItemText, selectedDay === day && styles.datePickerItemTextSelected]}>
+                      {day}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+            {/* Month */}
+            <View style={[styles.datePickerSection, { flex: 2 }]}>
+              <Text style={styles.datePickerLabel}>Month</Text>
+              <ScrollView
+                style={styles.datePickerScroll}
+                showsVerticalScrollIndicator={false}
+                nestedScrollEnabled={true}
+              >
+                {MONTHS.map((month) => (
+                  <TouchableOpacity
+                    key={month.value}
+                    style={[styles.datePickerItem, selectedMonth === month.value && styles.datePickerItemSelected]}
+                    onPress={() => {
+                      setSelectedMonth(month.value);
+                      if (parseInt(selectedDay) > month.days) setSelectedDay("01");
+                    }}
+                  >
+                    <Text style={[styles.datePickerItemText, selectedMonth === month.value && styles.datePickerItemTextSelected]}>
+                      {month.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+            {/* Year */}
+            <View style={styles.datePickerSection}>
+              <Text style={styles.datePickerLabel}>Year</Text>
+              <ScrollView
+                style={styles.datePickerScroll}
+                showsVerticalScrollIndicator={false}
+                nestedScrollEnabled={true}
+              >
+                {YEARS.map((year) => (
+                  <TouchableOpacity
+                    key={year}
+                    style={[styles.datePickerItem, selectedYear === year && styles.datePickerItemSelected]}
+                    onPress={() => setSelectedYear(year)}
+                  >
+                    <Text style={[styles.datePickerItemText, selectedYear === year && styles.datePickerItemTextSelected]}>
+                      {year}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+          {selectedDay && selectedMonth && selectedYear && (
+            <Text style={styles.selectedDateText}>
+              📅 Selected: {selectedDay} {MONTHS.find((m) => m.value === selectedMonth)?.label} {selectedYear}
+            </Text>
+          )}
 
           {/* Recurring toggle */}
           <View style={styles.toggleRow}>
@@ -226,7 +323,9 @@ export default function RemindersScreen() {
               setShowAddForm(false);
               setTitle("");
               setAmount("");
-              setDueDate("");
+              setSelectedDay("");
+              setSelectedMonth("");
+              setSelectedYear(String(new Date().getFullYear()));
               setIsRecurring(false);
             }}
           >
@@ -373,6 +472,62 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     borderWidth: 1,
     borderColor: "#ffffff15",
+  },
+  label: {
+    fontSize: 12,
+    color: "#8890A0",
+    fontWeight: "600",
+    marginBottom: 8,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  datePickerRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  datePickerSection: {
+    flex: 1,
+    backgroundColor: "#0F1117",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#ffffff15",
+    overflow: "hidden",
+  },
+  datePickerLabel: {
+    fontSize: 11,
+    color: "#8890A0",
+    textAlign: "center",
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ffffff10",
+    fontWeight: "600",
+  },
+  datePickerScroll: {
+    maxHeight: 140,
+  },
+  datePickerItem: {
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    alignItems: "center",
+  },
+  datePickerItemSelected: {
+    backgroundColor: "#00C89620",
+  },
+  datePickerItemText: {
+    fontSize: 13,
+    color: "#8890A0",
+    textAlign: "center",
+  },
+  datePickerItemTextSelected: {
+    color: "#00C896",
+    fontWeight: "bold",
+  },
+  selectedDateText: {
+    fontSize: 13,
+    color: "#00C896",
+    marginBottom: 12,
+    textAlign: "center",
   },
   toggleRow: {
     flexDirection: "row",
@@ -539,7 +694,6 @@ const styles = StyleSheet.create({
   },
   emptySubtext: {
     fontSize: 14,
-    color: "#8890A0",
     textAlign: "center",
   },
 });

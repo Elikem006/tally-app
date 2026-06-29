@@ -8,7 +8,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "splash": {
-     "resizeMode": "contain",
+      "resizeMode": "contain",
       "backgroundColor": "#0F1117"
     },
     "ios": {
@@ -23,7 +23,8 @@
       "package": "com.tally.app"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "@react-native-community/datetimepicker"
     ]
   }
 }
