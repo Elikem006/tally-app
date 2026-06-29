@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -29,15 +29,37 @@ const CATEGORIES = [
 
 type MomoStatus = "idle" | "sending" | "confirming" | "done";
 
+// Module-level vars persist for the whole app session — no async needed
+let lastUsedCategory = "Food";
+let lastUsedPaymentMethod: "CASH" | "MOMO" = "CASH";
+
 export default function AddScreen() {
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("Food");
+  const [selectedCategory, setSelectedCategory] = useState(lastUsedCategory);
   const [loading, setLoading] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "MOMO">("CASH");
+  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "MOMO">(lastUsedPaymentMethod);
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
+  const [showHint, setShowHint] = useState(true);
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+
+  // Auto-hide the "remembered" hint after 3 seconds
+  useEffect(() => {
+    const timer = setTimeout(() => setShowHint(false), 3000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  function handleCategorySelect(cat: string) {
+    setSelectedCategory(cat);
+    setShowHint(false);
+    lastUsedCategory = cat;
+  }
+
+  function handlePaymentMethodSelect(method: "CASH" | "MOMO") {
+    setPaymentMethod(method);
+    lastUsedPaymentMethod = method;
+  }
 
   // MoMo payment modal
   const [showMomoModal, setShowMomoModal] = useState(false);
@@ -103,8 +125,6 @@ export default function AddScreen() {
       showToast("Expense added successfully!", "success");
       setAmount("");
       setDescription("");
-      setSelectedCategory("Food");
-      setPaymentMethod("CASH");
       setTags([]);
       setTagInput("");
     } catch (error: any) {
@@ -194,8 +214,6 @@ export default function AddScreen() {
         showToast("Payment successful! Expense recorded.", "success");
         setAmount("");
         setDescription("");
-        setSelectedCategory("Food");
-        setPaymentMethod("CASH");
         setTags([]);
         setTagInput("");
         setMomoPhone("");
@@ -245,7 +263,7 @@ export default function AddScreen() {
               <TouchableOpacity
                 key={cat.name}
                 style={[styles.categoryCard, isSelected && styles.categoryCardActive]}
-                onPress={() => setSelectedCategory(cat.name)}
+                onPress={() => handleCategorySelect(cat.name)}
                 activeOpacity={0.7}
               >
                 <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
@@ -256,12 +274,17 @@ export default function AddScreen() {
             );
           })}
         </View>
+        {showHint && (
+          <Text style={{ fontSize: 11, color: "#8890A0", textAlign: "center", marginBottom: 8 }}>
+            ↩ Remembered from last expense
+          </Text>
+        )}
 
         <Text style={styles.label}>Payment Method</Text>
         <View style={styles.paymentMethodRow}>
           <TouchableOpacity
             style={[styles.paymentChip, paymentMethod === "CASH" && styles.paymentChipActive]}
-            onPress={() => setPaymentMethod("CASH")}
+            onPress={() => handlePaymentMethodSelect("CASH")}
             activeOpacity={0.7}
           >
             <Text style={styles.paymentChipIcon}>💵</Text>
@@ -271,7 +294,7 @@ export default function AddScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.paymentChip, paymentMethod === "MOMO" && styles.paymentChipActiveMomo]}
-            onPress={() => setPaymentMethod("MOMO")}
+            onPress={() => handlePaymentMethodSelect("MOMO")}
             activeOpacity={0.7}
           >
             <Text style={styles.paymentChipIcon}>📱</Text>
@@ -521,6 +544,13 @@ const styles = StyleSheet.create({
   },
   categoryNameActive: {
     color: "#00C896",
+  },
+  lastUsedHint: {
+    fontSize: 11,
+    color: "#8890A0",
+    textAlign: "center",
+    marginTop: 4,
+    marginBottom: 8,
   },
   button: {
     backgroundColor: "#00C896",
