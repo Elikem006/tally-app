@@ -17,6 +17,8 @@ import {
 import { remindersAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
 import { addHistoryItem } from "../../services/notificationHistory";
+import Toast from "../../components/Toast";
+import { useToast } from "../../hooks/useToast";
 
 export default function RemindersScreen() {
   const [reminders, setReminders] = useState<any[]>([]);
@@ -29,6 +31,7 @@ export default function RemindersScreen() {
   const [dueDate, setDueDate] = useState("");
   const [isRecurring, setIsRecurring] = useState(false);
   const [saving, setSaving] = useState(false);
+  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
 
   useEffect(() => {
     fetchReminders();
@@ -59,11 +62,11 @@ export default function RemindersScreen() {
 
   async function handleAddReminder() {
     if (!title.trim()) {
-      Alert.alert("Validation", "Title is required");
+      showToast("Title is required", "error");
       return;
     }
     if (!dueDate.trim()) {
-      Alert.alert("Validation", "Due date is required (YYYY-MM-DD)");
+      showToast("Due date is required (YYYY-MM-DD)", "error");
       return;
     }
 
@@ -89,10 +92,11 @@ export default function RemindersScreen() {
         type: "reminder_due",
         title: "Reminder set",
         body: `"${title.trim()}" due ${dueDate.trim()}${amount.trim() ? ` — GHS ${amount.trim()}` : ""}.`,
+        data: { screen: "reminders" },
       });
-      Alert.alert("Success", "Reminder added!");
+      showToast("Reminder added!", "success");
     } catch (error) {
-      Alert.alert("Error", "Failed to save reminder");
+      showToast("Failed to save reminder", "error");
     } finally {
       setSaving(false);
     }
@@ -103,11 +107,12 @@ export default function RemindersScreen() {
       await remindersAPI.markAsPaid(reminderId);
       await fetchReminders();
     } catch (error) {
-      Alert.alert("Error", "Failed to mark as paid");
+      showToast("Failed to mark as paid", "error");
     }
   }
 
   async function handleDelete(reminderId: string) {
+    // Keep Alert for confirmation — it requires user action (Cancel/Delete)
     Alert.alert("Delete Reminder", "Are you sure?", [
       { text: "Cancel", style: "cancel" },
       {
@@ -118,7 +123,7 @@ export default function RemindersScreen() {
             await remindersAPI.deleteReminder(reminderId);
             await fetchReminders();
           } catch (error) {
-            Alert.alert("Error", "Failed to delete reminder");
+            showToast("Failed to delete reminder", "error");
           }
         },
       },
@@ -295,6 +300,7 @@ export default function RemindersScreen() {
         />
       )}
     </View>
+    <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
     </KeyboardAvoidingView>
   );
 }

@@ -5,6 +5,8 @@ import { groupAPI, momoAPI } from "../services/api";
 import { getUserId } from "../services/storage";
 import { currentUser } from "./(auth)/login";
 import Avatar from "../components/Avatar";
+import Toast from "../components/Toast";
+import { useToast } from "../hooks/useToast";
 import {
   View,
   Text,
@@ -34,6 +36,8 @@ export default function GroupDetailScreen() {
   const [showAddMember, setShowAddMember] = useState(false);
   const [memberUserId, setMemberUserId] = useState("");
   const [addingMember, setAddingMember] = useState(false);
+
+  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
 
   // MoMo modal state
   const [showMomoModal, setShowMomoModal] = useState(false);
@@ -74,7 +78,7 @@ export default function GroupDetailScreen() {
 
   async function handleAddExpense() {
     if (!expenseAmount || !expenseDescription) {
-      Alert.alert("Error", "Please enter amount and description");
+      showToast("Please enter amount and description", "error");
       return;
     }
     setAddingExpense(true);
@@ -90,10 +94,10 @@ export default function GroupDetailScreen() {
       setExpenseDescription("");
       setShowAddExpense(false);
       fetchDetails();
-      Alert.alert("Success", "Expense added and split equally!");
-      await notifyNewSharedExpense(String(groupName), expenseAmount, "You");
+      showToast("Expense added and split equally!", "success");
+      await notifyNewSharedExpense(String(groupId), "You", expenseAmount, expenseDescription);
     } catch (error) {
-      Alert.alert("Error", "Failed to add expense");
+      showToast("Failed to add expense", "error");
     } finally {
       setAddingExpense(false);
     }
@@ -111,11 +115,11 @@ export default function GroupDetailScreen() {
   async function handleMomoPayment() {
     const phone = momoPhone.trim();
     if (!phone) {
-      Alert.alert("Required", "Please enter your MoMo phone number.");
+      showToast("Please enter your MoMo phone number.", "error");
       return;
     }
     if (!/^\d{10}$/.test(phone)) {
-      Alert.alert("Invalid", "Phone number must be exactly 10 digits.");
+      showToast("Phone number must be exactly 10 digits.", "error");
       return;
     }
 
@@ -131,10 +135,7 @@ export default function GroupDetailScreen() {
       const referenceId: string = res.data.referenceId;
 
       setShowMomoModal(false);
-      Alert.alert(
-        "Payment Requested",
-        "A payment prompt has been sent to your MoMo number. Please approve it on your phone.",
-      );
+      showToast("Payment prompt sent — please approve on your phone.", "info");
 
       // Wait 3 s then poll status
       await new Promise((r) => setTimeout(r, 3000));
@@ -143,7 +144,7 @@ export default function GroupDetailScreen() {
       const status: string = statusRes.data.status;
 
       if (status === "FAILED") {
-        Alert.alert("Payment Failed", "The MoMo payment failed. Please try again.");
+        showToast("The MoMo payment failed. Please try again.", "error");
         return;
       }
 
@@ -152,12 +153,12 @@ export default function GroupDetailScreen() {
       await fetchDetails();
 
       if (status === "SUCCESSFUL") {
-        Alert.alert("Done!", "Payment confirmed and group settled! ✅");
+        showToast("Payment confirmed and group settled! ✅", "success");
       } else {
-        Alert.alert("Group Settled", "Payment is pending on MoMo — the group balance has been cleared.");
+        showToast("Payment pending — group balance has been cleared.", "info");
       }
     } catch (e: any) {
-      Alert.alert("Error", e?.response?.data?.error || e?.message || "Something went wrong.");
+      showToast(e?.response?.data?.error || e?.message || "Something went wrong.", "error");
     } finally {
       setMomoLoading(false);
     }
@@ -168,15 +169,15 @@ export default function GroupDetailScreen() {
     try {
       await groupAPI.settleUp(String(groupId), String(settlingUserId));
       await fetchDetails();
-      Alert.alert("Settled", "Group balance cleared (no payment sent).");
+      showToast("Group balance cleared (no payment sent).", "success");
     } catch (e: any) {
-      Alert.alert("Error", e?.response?.data?.error || e?.message || "Failed to settle.");
+      showToast(e?.response?.data?.error || e?.message || "Failed to settle.", "error");
     }
   }
 
   async function handleAddMember() {
     if (!memberUserId) {
-      Alert.alert("Error", "Please enter a user ID");
+      showToast("Please enter a user ID", "error");
       return;
     }
     setAddingMember(true);
@@ -185,18 +186,19 @@ export default function GroupDetailScreen() {
       setMemberUserId("");
       setShowAddMember(false);
       fetchDetails();
-      Alert.alert("Success", "Member added successfully!");
+      showToast("Member added successfully!", "success");
     } catch (error: any) {
       const message =
         error.response?.data?.error ||
         "Failed to add member. Make sure the user ID is correct.";
-      Alert.alert("Error", message);
+      showToast(message, "error");
     } finally {
       setAddingMember(false);
     }
   }
 
   async function handleDeleteGroup() {
+    // Keep Alert — confirmation dialog with Cancel/Delete buttons
     Alert.alert(
       "Delete Group",
       "Are you sure you want to delete this group? This cannot be undone.",
@@ -208,10 +210,9 @@ export default function GroupDetailScreen() {
           onPress: async () => {
             try {
               await groupAPI.deleteGroup(String(groupId));
-              Alert.alert("Success", "Group deleted");
               router.back();
             } catch (error) {
-              Alert.alert("Error", "Failed to delete group");
+              showToast("Failed to delete group", "error");
             }
           },
         },
@@ -561,6 +562,7 @@ export default function GroupDetailScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+      <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
     </KeyboardAvoidingView>
   );
 }
