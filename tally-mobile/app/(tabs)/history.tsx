@@ -210,11 +210,11 @@ export default function HistoryScreen() {
         ))}
         {/* MoMo-only filter */}
         <TouchableOpacity
-          style={[styles.filterBtn, styles.filterBtnMomo, momoOnly && styles.filterBtnMomoActive]}
+          style={[styles.momoFilterButton, momoOnly && styles.momoFilterButtonActive]}
           onPress={() => setMomoOnly((v) => !v)}
         >
-          <Text style={[styles.filterText, momoOnly && styles.filterTextMomo]}>
-            📱 MoMo
+          <Text style={[styles.momoFilterText, momoOnly && styles.momoFilterTextActive]}>
+            📱 MoMo Only
           </Text>
         </TouchableOpacity>
       </ScrollView>
@@ -264,6 +264,18 @@ export default function HistoryScreen() {
           <Text style={styles.emptyText}>No expenses this month</Text>
           <Text style={styles.emptySubtext}>
             Try selecting a different month or add a new expense
+          </Text>
+        </View>
+      )}
+
+      {momoOnly && (
+        <View style={styles.momoSummaryCard}>
+          <Text style={styles.momoSummaryTitle}>MoMo Spending</Text>
+          <Text style={styles.momoSummaryAmount}>
+            GHS {filteredExpenses.reduce((sum, e) => sum + parseFloat(e.amount || "0"), 0).toFixed(2)}
+          </Text>
+          <Text style={styles.momoSummaryCount}>
+            {filteredExpenses.length} MoMo transaction{filteredExpenses.length !== 1 ? "s" : ""}
           </Text>
         </View>
       )}
@@ -541,6 +553,53 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#00C896",
     fontWeight: "500",
+  },
+  momoFilterButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#FFC10750",
+    backgroundColor: "#1A1F2E",
+    marginRight: 8,
+  },
+  momoFilterButtonActive: {
+    backgroundColor: "#FFC10720",
+    borderColor: "#FFC107",
+  },
+  momoFilterText: {
+    fontSize: 13,
+    color: "#8890A0",
+    fontWeight: "500",
+  },
+  momoFilterTextActive: {
+    color: "#FFC107",
+    fontWeight: "bold",
+  },
+  momoSummaryCard: {
+    backgroundColor: "#1A1F2E",
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#FFC10730",
+    alignItems: "center",
+  },
+  momoSummaryTitle: {
+    fontSize: 12,
+    color: "#8890A0",
+    marginBottom: 4,
+  },
+  momoSummaryAmount: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#FFC107",
+    marginBottom: 2,
+  },
+  momoSummaryCount: {
+    fontSize: 12,
+    color: "#8890A0",
   },
   searchContainer: {
     flexDirection: "row",
