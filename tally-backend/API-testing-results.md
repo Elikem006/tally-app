@@ -142,6 +142,100 @@
 
 ---
 
+## Group Endpoints
+
+### 7. Create Group
+**Endpoint:** `POST /api/groups`  
+**Headers:** `Authorization: Bearer <token>`  
+**Request Body:**
+```json
+{
+  "name": "Tally Test Group",
+  "createdBy": "1"
+}
+```
+**Response:**
+```json
+{
+  "id": 1,
+  "name": "Tally Test Group",
+  "createdBy": 1,
+  "createdAt": "2026-06-25T20:37:31.1031102"
+}
+```
+**Status Code:** 200 OK  
+**Result:** ✅ Pass
+
+---
+
+### 8. Get User Groups
+**Endpoint:** `GET /api/groups/user/1`  
+**Headers:** `Authorization: Bearer <token>`  
+**Request Body:** None  
+**Response:**
+```json
+[
+  {
+    "id": 1,
+    "name": "Tally Test Group",
+    "createdBy": 1,
+    "createdAt": "2026-06-25T20:37:31.10311"
+  }
+]
+```
+**Status Code:** 200 OK  
+**Result:** ✅ Pass
+
+---
+
+### 9. Add Member to Group
+**Endpoint:** `POST /api/groups/1/members`  
+**Headers:** `Authorization: Bearer <token>`  
+**Request Body:**
+```json
+{
+  "userId": "1"
+}
+```
+**Response:**
+```json
+{
+  "error": "User is already a member of this group"
+}
+```
+**Status Code:** 400 Bad Request  
+**Result:** ✅ Pass (duplicate member check works correctly)
+
+---
+
+### 10. Get Group Details
+**Endpoint:** `GET /api/groups/1`  
+**Headers:** `Authorization: Bearer <token>`  
+**Request Body:** None  
+**Response:**
+```json
+{
+  "members": [
+    {
+      "id": 1,
+      "groupId": 1,
+      "userId": 1,
+      "joinedAt": "2026-06-25T20:37:31.21557"
+    }
+  ],
+  "group": {
+    "id": 1,
+    "name": "Tally Test Group",
+    "createdBy": 1,
+    "createdAt": "2026-06-25T20:37:31.10311"
+  }
+}
+```
+**Status Code:** 200 OK  
+**Result:** ✅ Pass
+
+---
+
 ## Summary
 
 | # | Endpoint | Method | Status |
@@ -152,3 +246,7 @@
 | 4 | /api/budgets/user/1 | GET | ✅ Pass |
 | 5 | /api/budgets/user/1/summary | GET | ✅ Pass |
 | 6 | /api/budgets/user/1/Food | DELETE | ✅ Pass |
+| 7 | /api/groups | POST | ✅ Pass |
+| 8 | /api/groups/user/1 | GET | ✅ Pass |
+| 9 | /api/groups/1/members | POST | ✅ Pass |
+| 10 | /api/groups/1 | GET | ✅ Pass |
