@@ -133,6 +133,12 @@ public class GroupService {
 
     // Add a shared expense to a group
     public SharedExpense addSharedExpense(Long groupId, Long paidBy, BigDecimal amount, String description) {
+        // Sanitize description: trim whitespace; treat blank as null
+        if (description != null) {
+            description = description.trim();
+            if (description.isEmpty()) description = null;
+        }
+
         SharedExpense expense = new SharedExpense();
         expense.setGroupId(groupId);
         expense.setPaidBy(paidBy);

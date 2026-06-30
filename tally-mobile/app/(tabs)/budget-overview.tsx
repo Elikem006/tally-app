@@ -221,7 +221,10 @@ export default function BudgetOverviewScreen() {
         );
       })()}
 
-      {Object.entries(summary).map(([category, data]: [string, any]) => {
+      {Object.entries(summary)
+        // Guard: skip any non-object entry (e.g. a stray "success" boolean field)
+        .filter(([, data]) => data !== null && typeof data === "object")
+        .map(([category, data]: [string, any]) => {
         const percentage = Math.min(data.percentage, 100);
         const barColor = getBarColor(data.percentage, data.isOverBudget);
 

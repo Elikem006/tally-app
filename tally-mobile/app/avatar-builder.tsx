@@ -13,6 +13,8 @@ import * as ImagePicker from "expo-image-picker";
 import { authAPI } from "../services/api";
 import { getUserId } from "../services/storage";
 import { currentUser } from "./(auth)/login";
+import Toast from "../components/Toast";
+import { useToast } from "../hooks/useToast";
 
 export default function AvatarBuilderScreen() {
   const [photoUri,    setPhotoUri]    = useState<string | null>(
@@ -20,6 +22,7 @@ export default function AvatarBuilderScreen() {
   );
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [saving,      setSaving]      = useState(false);
+  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
 
   async function pickImage(fromCamera: boolean) {
     try {
@@ -62,14 +65,14 @@ export default function AvatarBuilderScreen() {
         setPhotoBase64(b64);
       }
     } catch {
-      Alert.alert("Error", "Failed to pick image.");
+      showToast("Failed to pick image.", "error");
     }
   }
 
   async function handleSave() {
     const dataToSave = photoBase64 ?? photoUri;
     if (!dataToSave || !dataToSave.startsWith("data:image")) {
-      Alert.alert("No photo", "Please take or choose a photo first.");
+      showToast("Please take or choose a photo first.", "warning");
       return;
     }
     setSaving(true);
@@ -77,11 +80,10 @@ export default function AvatarBuilderScreen() {
       await authAPI.updateAvatar(getUserId(), "photo", dataToSave);
       currentUser.avatarType = "photo";
       currentUser.avatarData = dataToSave;
-      Alert.alert("Saved!", "Profile photo updated.", [
-        { text: "OK", onPress: () => router.back() },
-      ]);
+      showToast("Profile photo updated.", "success");
+      setTimeout(() => router.back(), 1500);
     } catch (e: any) {
-      Alert.alert("Error", e?.response?.data?.error || e?.message || "Failed to save.");
+      showToast(e?.response?.data?.error || e?.message || "Failed to save.", "error");
     } finally {
       setSaving(false);
     }
@@ -128,6 +130,7 @@ export default function AvatarBuilderScreen() {
       <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()}>
         <Text style={styles.cancelBtnText}>Cancel</Text>
       </TouchableOpacity>
+      <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
     </View>
   );
 }

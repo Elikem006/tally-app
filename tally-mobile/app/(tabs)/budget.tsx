@@ -14,6 +14,8 @@ import {
 } from 'react-native';
 import { budgetAPI } from '../../services/api';
 import { getUserId } from '../../services/storage';
+import Toast from '../../components/Toast';
+import { useToast } from '../../hooks/useToast';
 
 const CATEGORIES = ['Food', 'Transport', 'Entertainment', 'Utilities', 'Other'];
 
@@ -37,6 +39,7 @@ export default function BudgetScreen() {
   const [fetching, setFetching] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
 
   useEffect(() => {
     loadExistingBudgets();
@@ -108,10 +111,10 @@ export default function BudgetScreen() {
           try { await budgetAPI.deleteBudget(userId, category); } catch {}
         }
       }
-      Alert.alert('Success', 'Your budgets have been saved!');
+      showToast('Your budgets have been saved!', 'success');
       await loadExistingBudgets();
     } catch (error: any) {
-      Alert.alert('Error', 'Failed to save budgets. Please try again.');
+      showToast('Failed to save budgets. Please try again.', 'error');
     } finally {
       setLoading(false);
     }
@@ -201,6 +204,7 @@ export default function BudgetScreen() {
           )}
         </TouchableOpacity>
       </ScrollView>
+      <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
     </KeyboardAvoidingView>
   );
 }

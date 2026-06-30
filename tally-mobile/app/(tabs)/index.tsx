@@ -21,6 +21,7 @@ import {
   shouldFireBudgetAlert,
   getUnreadCount,
 } from "../../services/notificationHistory";
+import { consumeMomoRefresh } from "../../services/momoRefresh";
 
 const CATEGORY_ICONS: { [key: string]: string } = {
   Food: "🍔",
@@ -44,9 +45,11 @@ export default function HomeScreen() {
   // Notification badge
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // MoMo wallet
-  const [momoBalance, setMomoBalance] = useState<{ availableBalance: string; currency: string } | null>(null);
+  // MoMo wallet — flat state instead of a nested object
+  const [momoBalance, setMomoBalance] = useState("0.00");
+  const [momoStatus, setMomoStatus] = useState<"loading" | "available" | "unavailable">("loading");
   const [momoBalanceLoading, setMomoBalanceLoading] = useState(false);
+  const [momoMonthlySpent, setMomoMonthlySpent] = useState("0.00");
 
   // Quick add state
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -58,6 +61,8 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchExpenses();
+      // consumeMomoRefresh() clears the flag set by the Add screen after a MoMo payment
+      consumeMomoRefresh();
       fetchMomoBalance();
       // Refresh badge whenever screen comes into focus (e.g. returning from notif screen)
       getUnreadCount().then(setUnreadCount);
@@ -66,12 +71,22 @@ export default function HomeScreen() {
 
   async function fetchMomoBalance() {
     setMomoBalanceLoading(true);
+    setMomoStatus("loading");
     try {
       const res = await momoAPI.getBalance();
-      setMomoBalance(res.data);
-    } catch (error) {
-      console.log("MoMo balance fetch failed:", error);
-      setMomoBalance(null);
+      const data = res.data;
+      if (data.status === "unavailable") {
+        setMomoStatus("unavailable");
+      } else {
+        setMomoBalance(
+          data.availableBalance != null
+            ? String(Math.max(0, parseFloat(data.availableBalance)).toFixed(2))
+            : "0.00",
+        );
+        setMomoStatus("available");
+      }
+    } catch {
+      setMomoStatus("unavailable");
     } finally {
       setMomoBalanceLoading(false);
     }
@@ -93,7 +108,18 @@ export default function HomeScreen() {
       const name = getUserName();
       setUserName(name);
       const response = await expenseAPI.getUserExpenses(userId);
-      setExpenses(response.data);
+      const expenseList = response.data;
+      setExpenses(expenseList);
+      // Calculate MoMo spending for this month
+      const now = new Date();
+      const momoTotal = expenseList
+        .filter((e: any) => e.paymentMethod === "MOMO")
+        .filter((e: any) => {
+          const d = new Date(e.date);
+          return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        })
+        .reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0);
+      setMomoMonthlySpent(momoTotal.toFixed(2));
       setError(null);
     } catch (err) {
       setError("Something went wrong. Pull down to refresh.");
@@ -135,6 +161,7 @@ export default function HomeScreen() {
               type: "budget_over",
               title: `Over budget — ${alert.category}`,
               body: `You've used ${alert.percentage.toFixed(0)}% of your ${alert.category} budget this month.`,
+              data: { screen: "budget-overview" },
             });
           }
         } else if (alert.isNearLimit) {
@@ -144,6 +171,7 @@ export default function HomeScreen() {
               type: "budget_near",
               title: `Near limit — ${alert.category}`,
               body: `${alert.percentage.toFixed(0)}% of your ${alert.category} budget used. Slow down!`,
+              data: { screen: "budget-overview" },
             });
           }
         }
@@ -186,6 +214,7 @@ export default function HomeScreen() {
         type: "expense_added",
         title: "Expense recorded",
         body: `GHS ${parsed.toFixed(2)} added to ${quickCategory}${quickDescription ? ` — ${quickDescription}` : ""}.`,
+        data: { screen: "history" },
       });
       getUnreadCount().then(setUnreadCount);
       // Refresh data
@@ -248,12 +277,14 @@ export default function HomeScreen() {
         {budgetAlerts.length > 0 && (
           <View style={styles.alertsSection}>
             {budgetAlerts.map((alert) => (
-              <View
+              <TouchableOpacity
                 key={alert.category}
                 style={[
                   styles.alertCard,
                   alert.isOverBudget ? styles.alertCardOver : styles.alertCardNear,
                 ]}
+                onPress={() => router.push('/(tabs)/budget-overview')}
+                activeOpacity={0.75}
               >
                 <Text style={styles.alertIcon}>{alert.isOverBudget ? "🚨" : "⚠️"}</Text>
                 <View style={{ flex: 1 }}>
@@ -264,7 +295,8 @@ export default function HomeScreen() {
                     {alert.percentage.toFixed(0)}% of your {alert.category} budget used
                   </Text>
                 </View>
-              </View>
+                <Text style={styles.cardChevron}>›</Text>
+              </TouchableOpacity>
             ))}
           </View>
         )}
@@ -296,29 +328,64 @@ export default function HomeScreen() {
           <Text style={styles.totalSub}>{expenses.length} expenses recorded</Text>
         </View>
         {/* MoMo Wallet Card */}
-        <View style={styles.momoCard}>
+        <View style={[
+          styles.momoCard,
+          momoStatus === "unavailable" && styles.momoCardUnavailable,
+        ]}>
+          {/* Card header — always visible */}
           <View style={styles.momoCardHeader}>
             <Text style={styles.momoCardIcon}>📱</Text>
             <Text style={styles.momoCardTitle}>MTN MoMo Wallet</Text>
-            <TouchableOpacity
-              onPress={fetchMomoBalance}
-              style={styles.momoRefreshBtn}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.momoRefreshText}>↻</Text>
-            </TouchableOpacity>
           </View>
-          {momoBalanceLoading ? (
-            <ActivityIndicator color="#FFC107" style={{ marginTop: 8 }} />
-          ) : momoBalance ? (
-            <View>
-              <Text style={styles.momoBalance}>
-                GHS {Math.max(0, parseFloat(momoBalance.availableBalance)).toFixed(2)}
-              </Text>
-              <Text style={styles.momoSub}>Sandbox balance</Text>
+
+          {/* State 1 — Loading */}
+          {momoBalanceLoading && (
+            <View style={styles.momoStateRow}>
+              <ActivityIndicator color="#FFC107" size="small" />
+              <Text style={styles.momoLoadingText}>Fetching balance...</Text>
             </View>
-          ) : (
-            <Text style={styles.momoUnavailable}>Balance unavailable</Text>
+          )}
+
+          {/* State 2 — Available */}
+          {!momoBalanceLoading && momoStatus === "available" && (
+            <View>
+              <Text style={styles.momoBalance}>EUR {momoBalance}</Text>
+              <Text style={styles.momoSpentSub}>
+                GHS {momoMonthlySpent} spent via MoMo this month
+              </Text>
+              <TouchableOpacity
+                onPress={fetchMomoBalance}
+                style={styles.momoRefreshBtn}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.momoRefreshText}>Refresh ↻</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* State 3 — Unavailable */}
+          {!momoBalanceLoading && momoStatus === "unavailable" && (
+            <View>
+              <View style={styles.momoStateRow}>
+                <Text style={styles.momoUnavailableIcon}>📡</Text>
+                <Text style={styles.momoUnavailableTitle}>
+                  Sandbox balance temporarily unavailable
+                </Text>
+              </View>
+              <Text style={styles.momoUnavailableSub}>
+                This is normal in sandbox mode. Payments still work.
+              </Text>
+              <Text style={styles.momoSpentSubYellow}>
+                GHS {momoMonthlySpent} spent via MoMo this month
+              </Text>
+              <TouchableOpacity
+                onPress={fetchMomoBalance}
+                style={styles.momoRetryBtn}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.momoRetryText}>Retry ↻</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
 
@@ -363,9 +430,11 @@ export default function HomeScreen() {
               {upcomingReminders.map((reminder) => {
                 const isUrgent = reminder.dueDate === today || reminder.dueDate === tomorrow;
                 return (
-                  <View
+                  <TouchableOpacity
                     key={reminder.id}
                     style={[styles.reminderCard, isUrgent && styles.reminderCardUrgent]}
+                    onPress={() => router.push('/(tabs)/reminders')}
+                    activeOpacity={0.75}
                   >
                     <View style={styles.reminderIcon}>
                       <Text style={{ fontSize: 18 }}>🔔</Text>
@@ -385,7 +454,8 @@ export default function HomeScreen() {
                         GHS {parseFloat(reminder.amount).toFixed(2)}
                       </Text>
                     ) : null}
-                  </View>
+                    <Text style={styles.cardChevron}>›</Text>
+                  </TouchableOpacity>
                 );
               })}
             </View>
@@ -700,6 +770,12 @@ const styles = StyleSheet.create({
     color: "#8890A0",
     fontWeight: "600",
   },
+  cardChevron: {
+    fontSize: 20,
+    color: "#8890A0",
+    paddingHorizontal: 4,
+    alignSelf: "center",
+  },
   alertsSection: {
     marginBottom: 16,
     gap: 8,
@@ -742,10 +818,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#FFC10730",
   },
+  momoCardUnavailable: {
+    borderColor: "#FFC10730",
+  },
   momoCardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: 12,
   },
   momoCardIcon: {
     fontSize: 20,
@@ -757,33 +836,87 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#FFC107",
   },
-  momoRefreshBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: "#FFC10720",
+  momoCardTitleGrey: {
+    color: "#8890A0",
+  },
+  momoUnavailableIcon: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  // State 1 — Loading
+  momoStateRow: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 4,
   },
-  momoRefreshText: {
-    fontSize: 18,
-    color: "#FFC107",
-    fontWeight: "bold",
+  momoLoadingText: {
+    fontSize: 13,
+    color: "#8890A0",
   },
+  // State 2 — Available
   momoBalance: {
     fontSize: 28,
     fontWeight: "bold",
     color: "#FFC107",
-    marginBottom: 2,
+    marginBottom: 6,
   },
   momoSub: {
     fontSize: 12,
     color: "#8890A0",
+    marginBottom: 4,
   },
-  momoUnavailable: {
-    fontSize: 14,
+  momoSpentSub: {
+    fontSize: 12,
     color: "#8890A0",
-    fontStyle: "italic",
+    marginBottom: 12,
+  },
+  momoSpentSubYellow: {
+    fontSize: 12,
+    color: "#FFC107",
+    marginBottom: 12,
+  },
+  momoRefreshBtn: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#FFC10715",
+    borderWidth: 1,
+    borderColor: "#FFC10740",
+  },
+  momoRefreshText: {
+    fontSize: 12,
+    color: "#FFC107",
+    fontWeight: "600",
+  },
+  // State 3 — Unavailable
+  momoUnavailableTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#8890A0",
+    flexShrink: 1,
+  },
+  momoUnavailableSub: {
+    fontSize: 11,
+    color: "#8890A0",
+    lineHeight: 16,
+    marginBottom: 10,
+    marginTop: 6,
+  },
+  momoRetryBtn: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#FFC10715",
+    borderWidth: 1,
+    borderColor: "#FFC10740",
+  },
+  momoRetryText: {
+    fontSize: 12,
+    color: "#FFC107",
+    fontWeight: "600",
   },
   // FAB
   fab: {

@@ -22,6 +22,9 @@ export const authAPI = {
 
   getUserProfile: (userId: string) =>
     api.get(`/api/auth/user/${userId}`),
+
+  updatePhone: (userId: string, phoneNumber: string) =>
+    api.put(`/api/auth/user/${userId}/phone`, { phoneNumber }),
 };
 
 export const expenseAPI = {
@@ -187,7 +190,6 @@ api.interceptors.response.use(
 
     if (status !== undefined && status >= 500) {
       console.error(
-        `[Tally API] Server error ${status} on ${error.config?.url}:`,
         error.response?.data || error.message,
       );
     }

@@ -13,13 +13,18 @@ export type NotifType =
   | "budget_over"
   | "budget_near"
   | "expense_added"
-  | "reminder_due";
+  | "reminder_due"
+  | "shared_expense"
+  | "settle_up"
+  | "monthly_report";
 
 export interface HistoryNotif {
   id: string;
   type: NotifType;
   title: string;
   body: string;
+  /** Navigation data — same shape as push notification content.data */
+  data?: Record<string, string>;
   timestamp: number;
   read: boolean;
 }
@@ -56,7 +61,7 @@ async function _save(list: HistoryNotif[]): Promise<void> {
 }
 
 export async function addHistoryItem(
-  item: Pick<HistoryNotif, "type" | "title" | "body">,
+  item: Pick<HistoryNotif, "type" | "title" | "body"> & { data?: Record<string, string> },
 ): Promise<void> {
   const list = await getHistory();
   const entry: HistoryNotif = {

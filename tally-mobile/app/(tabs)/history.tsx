@@ -65,6 +65,7 @@ export default function HistoryScreen() {
   const [error, setError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [momoOnly, setMomoOnly] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -129,16 +130,23 @@ export default function HistoryScreen() {
   }, [expenses, activeFilter]);
 
   const filteredExpenses = useMemo(() => {
-    if (searchQuery === "") return monthFilteredExpenses;
-    const q = searchQuery.toLowerCase();
-    return monthFilteredExpenses.filter(
-      (e) =>
-        (e.description && e.description.toLowerCase().includes(q)) ||
-        e.category.toLowerCase().includes(q),
-    );
-  }, [monthFilteredExpenses, searchQuery]);
+    let result = monthFilteredExpenses;
+    if (momoOnly) result = result.filter((e) => e.paymentMethod === "MOMO");
+    if (searchQuery !== "") {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (e) =>
+          (e.description && e.description.toLowerCase().includes(q)) ||
+          e.category.toLowerCase().includes(q),
+      );
+    }
+    return result;
+  }, [monthFilteredExpenses, searchQuery, momoOnly]);
 
   const totalSpent = filteredExpenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+  const momoTotal = filteredExpenses
+    .filter((e) => e.paymentMethod === "MOMO")
+    .reduce((sum, e) => sum + parseFloat(e.amount), 0);
 
   if (loading) {
     return (
@@ -200,6 +208,15 @@ export default function HistoryScreen() {
             </Text>
           </TouchableOpacity>
         ))}
+        {/* MoMo-only filter */}
+        <TouchableOpacity
+          style={[styles.momoFilterButton, momoOnly && styles.momoFilterButtonActive]}
+          onPress={() => setMomoOnly((v) => !v)}
+        >
+          <Text style={[styles.momoFilterText, momoOnly && styles.momoFilterTextActive]}>
+            📱 MoMo Only
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
 
       {/* Search bar */}
@@ -219,9 +236,18 @@ export default function HistoryScreen() {
         )}
       </View>
 
-      <View style={styles.totalCard}>
-        <Text style={styles.totalLabel}>Total Spent</Text>
-        <Text style={styles.totalAmount}>GHS {totalSpent.toFixed(2)}</Text>
+      <View style={[styles.totalCard, momoOnly && styles.totalCardMomo]}>
+        <Text style={styles.totalLabel}>
+          {momoOnly ? "Total MoMo Spending" : "Total Spent"}
+        </Text>
+        <Text style={[styles.totalAmount, momoOnly && styles.totalAmountMomo]}>
+          GHS {momoOnly ? momoTotal.toFixed(2) : totalSpent.toFixed(2)}
+        </Text>
+        {momoOnly && (
+          <Text style={styles.totalMomoSub}>
+            📱 {filteredExpenses.length} MoMo transaction{filteredExpenses.length !== 1 ? "s" : ""}
+          </Text>
+        )}
       </View>
 
       {filteredExpenses.length === 0 && searchQuery !== "" && (
@@ -238,6 +264,18 @@ export default function HistoryScreen() {
           <Text style={styles.emptyText}>No expenses this month</Text>
           <Text style={styles.emptySubtext}>
             Try selecting a different month or add a new expense
+          </Text>
+        </View>
+      )}
+
+      {momoOnly && (
+        <View style={styles.momoSummaryCard}>
+          <Text style={styles.momoSummaryTitle}>MoMo Spending</Text>
+          <Text style={styles.momoSummaryAmount}>
+            GHS {filteredExpenses.reduce((sum, e) => sum + parseFloat(e.amount || "0"), 0).toFixed(2)}
+          </Text>
+          <Text style={styles.momoSummaryCount}>
+            {filteredExpenses.length} MoMo transaction{filteredExpenses.length !== 1 ? "s" : ""}
           </Text>
         </View>
       )}
@@ -366,6 +404,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#00C89630",
   },
+  totalCardMomo: {
+    borderColor: "#FFC10740",
+  },
   totalLabel: {
     fontSize: 13,
     color: "#8890A0",
@@ -375,6 +416,14 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: "bold",
     color: "#00C896",
+  },
+  totalAmountMomo: {
+    color: "#FFC107",
+  },
+  totalMomoSub: {
+    fontSize: 12,
+    color: "#8890A0",
+    marginTop: 4,
   },
   filterRow: {
     paddingHorizontal: 16,
@@ -397,6 +446,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#00C89620",
     borderColor: "#00C896",
   },
+  filterBtnMomo: {
+    borderColor: "#FFC10740",
+  },
+  filterBtnMomoActive: {
+    backgroundColor: "#FFC10720",
+    borderColor: "#FFC107",
+  },
   filterText: {
     fontSize: 13,
     fontWeight: "600",
@@ -404,6 +460,9 @@ const styles = StyleSheet.create({
   },
   filterTextActive: {
     color: "#00C896",
+  },
+  filterTextMomo: {
+    color: "#FFC107",
   },
   list: {
     padding: 16,
@@ -494,6 +553,53 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#00C896",
     fontWeight: "500",
+  },
+  momoFilterButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#FFC10750",
+    backgroundColor: "#1A1F2E",
+    marginRight: 8,
+  },
+  momoFilterButtonActive: {
+    backgroundColor: "#FFC10720",
+    borderColor: "#FFC107",
+  },
+  momoFilterText: {
+    fontSize: 13,
+    color: "#8890A0",
+    fontWeight: "500",
+  },
+  momoFilterTextActive: {
+    color: "#FFC107",
+    fontWeight: "bold",
+  },
+  momoSummaryCard: {
+    backgroundColor: "#1A1F2E",
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#FFC10730",
+    alignItems: "center",
+  },
+  momoSummaryTitle: {
+    fontSize: 12,
+    color: "#8890A0",
+    marginBottom: 4,
+  },
+  momoSummaryAmount: {
+    fontSize: 28,
+    fontWeight: "bold",
+    color: "#FFC107",
+    marginBottom: 2,
+  },
+  momoSummaryCount: {
+    fontSize: 12,
+    color: "#8890A0",
   },
   searchContainer: {
     flexDirection: "row",

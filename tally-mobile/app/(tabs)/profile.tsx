@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, RefreshControl } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, RefreshControl, TextInput } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback } from "react";
 import { currentUser } from "../(auth)/login";
-import { expenseAPI } from "../../services/api";
+import { expenseAPI, authAPI } from "../../services/api";
+import Toast from "../../components/Toast";
+import { useToast } from "../../hooks/useToast";
 import { getUserId } from "../../services/storage";
 import Avatar from "../../components/Avatar";
 
@@ -21,6 +23,10 @@ export default function ProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [avatarData, setAvatarData] = useState<string | null>(currentUser.avatarData || null);
+  const [phoneNumber, setPhoneNumber] = useState(currentUser.phoneNumber || "");
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [savingPhone, setSavingPhone] = useState(false);
+  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
 
   useEffect(() => {
     fetchStats();
@@ -74,6 +80,25 @@ export default function ProfileScreen() {
       await fetchStats();
     } finally {
       setRefreshing(false);
+    }
+  }
+
+  async function handleSavePhone() {
+    const cleaned = phoneNumber.trim().replace(/\s/g, "");
+    if (cleaned.length !== 10) {
+      showToast("Enter a valid 10-digit phone number", "error");
+      return;
+    }
+    setSavingPhone(true);
+    try {
+      await authAPI.updatePhone(getUserId(), cleaned);
+      currentUser.phoneNumber = cleaned;
+      setEditingPhone(false);
+      showToast("Phone number saved!", "success");
+    } catch {
+      showToast("Failed to save phone number", "error");
+    } finally {
+      setSavingPhone(false);
     }
   }
 
@@ -134,6 +159,62 @@ export default function ProfileScreen() {
         <Text style={styles.cardValue}>{currentUser.email}</Text>
       </View>
 
+      {/* MoMo phone number card */}
+      {!editingPhone ? (
+        <View style={[styles.card, styles.infoCard]}>
+          <Text style={styles.infoLabel}>MoMo Number</Text>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoValue}>
+              {currentUser.phoneNumber || "Not set"}
+            </Text>
+            <TouchableOpacity
+              style={styles.editButton}
+              onPress={() => setEditingPhone(true)}
+            >
+              <Text style={styles.editButtonText}>
+                {currentUser.phoneNumber ? "Edit" : "+ Add"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <View style={[styles.card, styles.infoCard]}>
+          <Text style={styles.infoLabel}>MoMo Number</Text>
+          <TextInput
+            style={styles.phoneInput}
+            value={phoneNumber}
+            onChangeText={setPhoneNumber}
+            keyboardType="phone-pad"
+            placeholder="e.g. 0241234567"
+            placeholderTextColor="#8890A0"
+            maxLength={10}
+            autoFocus
+          />
+          <View style={styles.phoneButtonRow}>
+            <TouchableOpacity
+              style={styles.phoneSaveButton}
+              onPress={handleSavePhone}
+              disabled={savingPhone}
+            >
+              {savingPhone ? (
+                <ActivityIndicator color="#000000" size="small" />
+              ) : (
+                <Text style={styles.phoneSaveText}>Save</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.phoneCancelButton}
+              onPress={() => {
+                setEditingPhone(false);
+                setPhoneNumber(currentUser.phoneNumber || "");
+              }}
+            >
+              <Text style={styles.phoneCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       {/* Stats section */}
       <Text style={styles.sectionTitle}>Your Stats</Text>
 
@@ -182,6 +263,7 @@ export default function ProfileScreen() {
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Text style={styles.logoutText}>Log Out</Text>
       </TouchableOpacity>
+      <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
     </ScrollView>
   );
 }
@@ -320,5 +402,74 @@ const styles = StyleSheet.create({
     color: "#E05C5C",
     fontSize: 16,
     fontWeight: "bold",
+  },
+  infoCard: {
+    borderColor: "#00C89618",
+  },
+  infoLabel: {
+    fontSize: 12,
+    color: "#8890A0",
+    marginBottom: 6,
+  },
+  infoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  infoValue: {
+    fontSize: 15,
+    color: "#ffffff",
+    fontWeight: "500",
+  },
+  editButton: {
+    backgroundColor: "#00C89620",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: "#00C896",
+  },
+  editButtonText: {
+    color: "#00C896",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  phoneInput: {
+    backgroundColor: "#0F1117",
+    borderRadius: 12,
+    padding: 14,
+    color: "#ffffff",
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: "#ffffff20",
+    marginBottom: 10,
+  },
+  phoneButtonRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  phoneSaveButton: {
+    flex: 1,
+    backgroundColor: "#00C896",
+    borderRadius: 10,
+    padding: 12,
+    alignItems: "center",
+  },
+  phoneSaveText: {
+    color: "#000000",
+    fontWeight: "bold",
+    fontSize: 14,
+  },
+  phoneCancelButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#ffffff30",
+    borderRadius: 10,
+    padding: 12,
+    alignItems: "center",
+  },
+  phoneCancelText: {
+    color: "#8890A0",
+    fontSize: 14,
   },
 });

@@ -22,10 +22,13 @@ const TYPE_CONFIG: Record<
   HistoryNotif["type"],
   { icon: string; color: string; bg: string }
 > = {
-  budget_over:   { icon: "🚨", color: "#E05C5C", bg: "#E05C5C18" },
-  budget_near:   { icon: "⚠️", color: "#F7A84F", bg: "#F7A84F18" },
-  expense_added: { icon: "💰", color: "#00C896", bg: "#00C89618" },
-  reminder_due:  { icon: "⏰", color: "#60A5FA", bg: "#60A5FA18" },
+  budget_over:    { icon: "🚨", color: "#E05C5C", bg: "#E05C5C18" },
+  budget_near:    { icon: "⚠️", color: "#F7A84F", bg: "#F7A84F18" },
+  expense_added:  { icon: "💰", color: "#00C896", bg: "#00C89618" },
+  reminder_due:   { icon: "⏰", color: "#60A5FA", bg: "#60A5FA18" },
+  shared_expense: { icon: "💸", color: "#A78BFA", bg: "#A78BFA18" },
+  settle_up:      { icon: "✅", color: "#00C896", bg: "#00C89618" },
+  monthly_report: { icon: "📊", color: "#FFC107", bg: "#FFC10718" },
 };
 
 // ── Relative time label ───────────────────────────────────────────────────────
@@ -71,6 +74,17 @@ function buildSections(items: HistoryNotif[]): ListItem[] {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── Navigation helper ─────────────────────────────────────────────────────────
+const SCREEN_BY_TYPE: Record<HistoryNotif["type"], string> = {
+  budget_over:    "budget-overview",
+  budget_near:    "budget-overview",
+  expense_added:  "history",
+  reminder_due:   "reminders",
+  shared_expense: "groups",
+  settle_up:      "groups",
+  monthly_report: "report",
+};
+
 export default function NotificationHistoryScreen() {
   const [items,   setItems]   = useState<HistoryNotif[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,6 +107,26 @@ export default function NotificationHistoryScreen() {
   async function handleDelete(id: string) {
     await deleteItem(id);
     setItems((prev) => prev.filter((n) => n.id !== id));
+  }
+
+  function handleNotificationPress(notification: HistoryNotif) {
+    // Prefer stored data field (new items); fall back to type-based routing (legacy)
+    const screen = notification.data?.screen ?? SCREEN_BY_TYPE[notification.type];
+    if (!screen) return;
+
+    if (screen === "group-detail" && notification.data?.groupId) {
+      router.push({ pathname: "/group-detail", params: { groupId: notification.data.groupId } });
+    } else if (screen === "budget-overview") {
+      router.push("/(tabs)/budget-overview");
+    } else if (screen === "reminders") {
+      router.push("/(tabs)/reminders");
+    } else if (screen === "report") {
+      router.push("/(tabs)/report");
+    } else if (screen === "groups") {
+      router.push("/(tabs)/groups");
+    } else if (screen === "history") {
+      router.push("/(tabs)/history");
+    }
   }
 
   async function handleClearAll() {
@@ -159,7 +193,9 @@ export default function NotificationHistoryScreen() {
             }
             const cfg = TYPE_CONFIG[item.type];
             return (
-              <View
+              <TouchableOpacity
+                activeOpacity={0.75}
+                onPress={() => handleNotificationPress(item)}
                 style={[
                   styles.card,
                   { backgroundColor: cfg.bg },
@@ -179,6 +215,7 @@ export default function NotificationHistoryScreen() {
                   <Text style={styles.cardDesc}>{item.body}</Text>
                   <Text style={styles.cardTime}>{relativeTime(item.timestamp)}</Text>
                 </View>
+                <Text style={styles.chevron}>›</Text>
                 <TouchableOpacity
                   style={styles.deleteBtn}
                   onPress={() => handleDelete(item.id)}
@@ -186,7 +223,7 @@ export default function NotificationHistoryScreen() {
                 >
                   <Text style={styles.deleteX}>✕</Text>
                 </TouchableOpacity>
-              </View>
+              </TouchableOpacity>
             );
           }}
         />
@@ -259,7 +296,8 @@ const styles = StyleSheet.create({
   unreadDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#00C896" },
   cardDesc:  { fontSize: 13, color: "#8890A0", lineHeight: 18, marginBottom: 4 },
   cardTime:  { fontSize: 11, color: "#6B7280" },
-  deleteBtn: { paddingLeft: 8, paddingTop: 2 },
+  chevron:   { fontSize: 20, color: "#8890A0", paddingHorizontal: 4, alignSelf: "center" },
+  deleteBtn: { paddingLeft: 4, paddingTop: 2 },
   deleteX:   { fontSize: 14, color: "#6B7280" },
 
   // Empty state
