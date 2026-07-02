@@ -56,7 +56,7 @@ export default function RootLayout() {
 
     return () => {
       if (responseListener.current) {
-        Notifications.removeNotificationSubscription(responseListener.current);
+        responseListener.current.remove();
       }
     };
   }, [router]);
@@ -76,6 +76,10 @@ export default function RootLayout() {
       <Stack.Screen
         name="avatar-builder"
         options={{ headerShown: true, title: "Edit Avatar" }}
+      />
+      <Stack.Screen
+        name="help"
+        options={{ headerShown: true, title: "Help & Support" }}
       />
     </Stack>
   );

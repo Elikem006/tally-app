@@ -259,6 +259,13 @@ export default function ProfileScreen() {
         </>
       ) : null}
 
+      {/* Help & Support */}
+      <TouchableOpacity style={styles.helpButton} onPress={() => router.push("/help")}>
+        <Text style={styles.helpButtonIcon}>❓</Text>
+        <Text style={styles.helpButtonText}>Help & Support</Text>
+        <Text style={styles.helpButtonArrow}>›</Text>
+      </TouchableOpacity>
+
       {/* Logout */}
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Text style={styles.logoutText}>Log Out</Text>
@@ -388,6 +395,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     marginVertical: 16,
   },
+  helpButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1A1F2E",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#ffffff10",
+    gap: 12,
+  },
+  helpButtonIcon: { fontSize: 20 },
+  helpButtonText: { flex: 1, color: "#ffffff", fontSize: 15, fontWeight: "500" },
+  helpButtonArrow: { color: "#8890A0", fontSize: 20 },
   logoutButton: {
     width: "100%",
     backgroundColor: "#E05C5C20",
@@ -431,8 +452,6 @@ const styles = StyleSheet.create({
   },
   editButtonText: {
     color: "#00C896",
-    fontSize: 13,
-    fontWeight: "600",
   },
   phoneInput: {
     backgroundColor: "#0F1117",
