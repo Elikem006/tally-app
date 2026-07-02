@@ -4,12 +4,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import user_service.model.Budget;
 import user_service.model.Expense;
+import user_service.model.Group;
 import user_service.model.GroupMember;
 import user_service.model.SharedExpense;
+import user_service.model.User;
 import user_service.repository.BudgetRepository;
 import user_service.repository.ExpenseRepository;
 import user_service.repository.GroupMemberRepository;
+import user_service.repository.GroupRepository;
 import user_service.repository.SharedExpenseRepository;
+import user_service.repository.UserRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -31,15 +35,48 @@ public class ExpenseService {
     @Autowired
     private SharedExpenseRepository sharedExpenseRepository;
 
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private GroupRepository groupRepository;
+
+    private String resolveUserName(Long userId) {
+        if (userId == null) return "Unknown";
+        return userRepository.findById(userId)
+                .map(User::getName)
+                .orElse("User #" + userId);
+    }
+
+    private String resolveGroupName(Long groupId) {
+        if (groupId == null) return "Unknown Group";
+        return groupRepository.findById(groupId)
+                .map(Group::getName)
+                .orElse("Group #" + groupId);
+    }
+
     public Expense createExpense(Long userId, BigDecimal amount, String category,
-                                 String description, LocalDate date) {
+                                 String description, LocalDate date, String paymentMethod) {
+        // Sanitize description: trim whitespace; treat blank as null
+        if (description != null) {
+            description = description.trim();
+            if (description.isEmpty()) description = null;
+        }
+
         Expense expense = new Expense();
         expense.setUserId(userId);
         expense.setAmount(amount);
         expense.setCategory(category);
         expense.setDescription(description);
         expense.setDate(date);
+        expense.setPaymentMethod(paymentMethod != null && !paymentMethod.isBlank() ? paymentMethod : "CASH");
         return expenseRepository.save(expense);
+    }
+
+    // Overload for backward compatibility
+    public Expense createExpense(Long userId, BigDecimal amount, String category,
+                                 String description, LocalDate date) {
+        return createExpense(userId, amount, category, description, date, "CASH");
     }
 
     public List<Expense> getUserExpenses(Long userId) {
@@ -153,16 +190,19 @@ public class ExpenseService {
             entry.put("date", e.getDate().toString());
             entry.put("type", "personal");
             entry.put("groupId", null);
+            entry.put("paymentMethod", e.getPaymentMethod() != null ? e.getPaymentMethod() : "CASH");
             entry.put("createdAt", e.getCreatedAt() != null ? e.getCreatedAt().toString() : null);
             combined.add(entry);
         }
 
-        // 2. Shared expenses where this user paid
+        // 2. All shared expenses from groups this user belongs to
+        Set<Long> seenSharedIds = new HashSet<>();
         List<GroupMember> memberships = groupMemberRepository.findByUserId(userId);
         for (GroupMember membership : memberships) {
             List<SharedExpense> sharedExpenses = sharedExpenseRepository.findByGroupId(membership.getGroupId());
             for (SharedExpense se : sharedExpenses) {
-                if (!se.getPaidBy().equals(userId)) continue;
+                if (seenSharedIds.contains(se.getId())) continue;
+                seenSharedIds.add(se.getId());
                 Map<String, Object> entry = new HashMap<>();
                 entry.put("id", se.getId());
                 entry.put("amount", se.getAmount());
@@ -171,6 +211,9 @@ public class ExpenseService {
                 entry.put("date", se.getCreatedAt().toLocalDate().toString());
                 entry.put("type", "shared");
                 entry.put("groupId", se.getGroupId());
+                entry.put("groupName", resolveGroupName(se.getGroupId()));
+                entry.put("paidBy", se.getPaidBy());
+                entry.put("paidByName", resolveUserName(se.getPaidBy()));
                 entry.put("createdAt", se.getCreatedAt().toString());
                 combined.add(entry);
             }

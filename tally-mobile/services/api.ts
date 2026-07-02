@@ -15,7 +15,7 @@ const USE_MOCK = true;
 
 // Mock database states
 let mockUsers = [
-  { id: 1, name: "Elikem", email: "elikem@test.com", password: "password123" }
+  { id: 1, name: "Elikem", email: "elikem@test.com", password: "password123", avatarType: "", avatarData: "", phoneNumber: "" }
 ];
 
 // Helper to get local date string offset by days ago (avoiding timezone shift)
@@ -29,10 +29,10 @@ const getRelativeDateStr = (daysAgo: number) => {
 };
 
 let mockExpenses = [
-  { id: 1, userId: "1", amount: "55.00", category: "Food", description: "Lunch at cafeteria", date: getRelativeDateStr(0) },
-  { id: 2, userId: "1", amount: "120.00", category: "Transport", description: "Weekly fuel", date: getRelativeDateStr(2) },
-  { id: 3, userId: "1", amount: "80.00", category: "Entertainment", description: "Movie ticket & popcorn", date: getRelativeDateStr(10) },
-  { id: 4, userId: "1", amount: "210.00", category: "Utilities", description: "Water and electricity", date: getRelativeDateStr(45) }
+  { id: 1, userId: "1", amount: "55.00", category: "Food", description: "Lunch at cafeteria", date: getRelativeDateStr(0), paymentMethod: "CASH" },
+  { id: 2, userId: "1", amount: "120.00", category: "Transport", description: "Weekly fuel", date: getRelativeDateStr(2), paymentMethod: "CASH" },
+  { id: 3, userId: "1", amount: "80.00", category: "Entertainment", description: "Movie ticket & popcorn", date: getRelativeDateStr(10), paymentMethod: "CASH" },
+  { id: 4, userId: "1", amount: "210.00", category: "Utilities", description: "Water and electricity", date: getRelativeDateStr(45), paymentMethod: "CASH" }
 ];
 
 let mockBudgets = [
@@ -47,7 +47,7 @@ interface MockGroup {
   id: number;
   name: string;
   createdBy: string;
-  members: { id: number; groupId: number; userId: string }[];
+  members: { id: number; groupId: number; userId: string; name?: string; avatarType?: string; avatarData?: string }[];
   expenses: { id: number; description: string; amount: string; paidBy: string }[];
 }
 
@@ -57,9 +57,9 @@ let mockGroups: MockGroup[] = [
     name: "KNUST Roommates",
     createdBy: "1",
     members: [
-      { id: 1, groupId: 1, userId: "1" },
-      { id: 2, groupId: 1, userId: "2" },
-      { id: 3, groupId: 1, userId: "3" }
+      { id: 1, groupId: 1, userId: "1", name: "Elikem", avatarType: "", avatarData: "" },
+      { id: 2, groupId: 1, userId: "2", name: "Joseph", avatarType: "", avatarData: "" },
+      { id: 3, groupId: 1, userId: "3", name: "Ishmael", avatarType: "", avatarData: "" }
     ],
     expenses: [
       { id: 1, description: "Electricity bill", amount: "150.00", paidBy: "1" },
@@ -102,7 +102,7 @@ export const authAPI = {
     if (existing) {
       return mockError("Email is already registered");
     }
-    const newUser = { id: ++nextId, name, email, password };
+    const newUser = { id: ++nextId, name, email, password, avatarType: "", avatarData: "", phoneNumber: "" };
     mockUsers.push(newUser);
     return mockResponse({ message: "Registration successful" });
   },
@@ -118,8 +118,35 @@ export const authAPI = {
       token: "mock-jwt-token-12345",
       userId: String(user.id),
       name: user.name,
-      email: user.email
+      email: user.email,
+      avatarType: user.avatarType || "",
+      avatarData: user.avatarData || "",
+      phoneNumber: user.phoneNumber || ""
     });
+  },
+
+  updateAvatar: async (userId: string, avatarType: string, avatarData: string) => {
+    if (!USE_MOCK) return api.put(`/api/auth/user/${userId}/avatar`, { avatarType, avatarData });
+    const user = mockUsers.find(u => String(u.id) === String(userId));
+    if (!user) return mockError("User not found", 404);
+    user.avatarType = avatarType;
+    user.avatarData = avatarData;
+    return mockResponse(user);
+  },
+
+  getUserProfile: async (userId: string) => {
+    if (!USE_MOCK) return api.get(`/api/auth/user/${userId}`);
+    const user = mockUsers.find(u => String(u.id) === String(userId));
+    if (!user) return mockError("User not found", 404);
+    return mockResponse(user);
+  },
+
+  updatePhone: async (userId: string, phoneNumber: string) => {
+    if (!USE_MOCK) return api.put(`/api/auth/user/${userId}/phone`, { phoneNumber });
+    const user = mockUsers.find(u => String(u.id) === String(userId));
+    if (!user) return mockError("User not found", 404);
+    user.phoneNumber = phoneNumber;
+    return mockResponse(user);
   },
 };
 
@@ -130,8 +157,9 @@ export const expenseAPI = {
     category: string,
     description: string,
     date: string,
+    paymentMethod: string = "CASH",
   ) => {
-    if (!USE_MOCK) return api.post("/api/expenses", { userId, amount, category, description, date });
+    if (!USE_MOCK) return api.post("/api/expenses", { userId, amount, category, description, date, paymentMethod });
     
     const newExpense = {
       id: ++nextId,
@@ -139,7 +167,8 @@ export const expenseAPI = {
       amount,
       category,
       description,
-      date
+      date,
+      paymentMethod
     };
     mockExpenses.unshift(newExpense);
     return mockResponse(newExpense);
@@ -334,7 +363,7 @@ export const groupAPI = {
       id: ++nextId,
       name,
       createdBy,
-      members: [{ id: ++nextId, groupId: nextId, userId: createdBy }],
+      members: [{ id: ++nextId, groupId: nextId, userId: createdBy, name: "Me", avatarType: "", avatarData: "" }],
       expenses: []
     };
     mockGroups.push(newGroup);
@@ -365,7 +394,7 @@ export const groupAPI = {
     const alreadyMember = group.members.some(m => String(m.userId) === String(userId));
     if (alreadyMember) return mockError("User is already a member", 400);
     
-    group.members.push({ id: ++nextId, groupId: group.id, userId });
+    group.members.push({ id: ++nextId, groupId: group.id, userId, name: `User ${userId}`, avatarType: "", avatarData: "" });
     return mockResponse({ success: true });
   },
 
@@ -455,6 +484,44 @@ export const groupAPI = {
   },
 };
 
+export const momoAPI = {
+  requestPayment: async (
+    groupId: string,
+    userId: string,
+    phoneNumber: string,
+    amount: string,
+    description: string,
+  ) => {
+    if (!USE_MOCK) return api.post("/api/momo/pay", { groupId, userId, phoneNumber, amount, description });
+    
+    // Simulate successful sandbox payment request
+    return mockResponse({
+      status: "PENDING",
+      referenceId: `momo-ref-${++nextId}`,
+      message: "Payment request submitted successfully"
+    });
+  },
+
+  checkStatus: async (referenceId: string) => {
+    if (!USE_MOCK) return api.get(`/api/momo/status/${referenceId}`);
+    
+    return mockResponse({
+      status: "SUCCESSFUL",
+      financialTransactionId: `tx-${++nextId}`,
+      message: "Transaction completed successfully"
+    });
+  },
+
+  getBalance: async () => {
+    if (!USE_MOCK) return api.get("/api/momo/balance");
+    
+    return mockResponse({
+      availableBalance: "1500.00",
+      currency: "GHS"
+    });
+  }
+};
+
 export const remindersAPI = {
   createReminder: async (
     userId: string,
@@ -515,5 +582,49 @@ export const remindersAPI = {
     return mockResponse({ success: true });
   },
 };
+
+// ─── Response interceptor ────────────────────────────────────────────────────
+// Handles 401 (session expired) and 5xx (server errors) globally.
+// Uses lazy require() inside the callback to avoid circular dependencies with
+// login.tsx (which imports authAPI from this file).
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status: number | undefined = error.response?.status;
+
+    if (status === 401) {
+      console.warn("[Tally API] 401 Unauthorized — clearing session and redirecting to login.");
+      try {
+        // Lazy require avoids circular dep at module load time
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { currentUser } = require("../app/(auth)/login");
+        currentUser.token = "";
+        currentUser.userId = "1";
+        currentUser.userName = "";
+        currentUser.email = "";
+        currentUser.avatarType = "";
+        currentUser.avatarData = "";
+        currentUser.phoneNumber = "";
+      } catch (e) {
+        console.warn("[Tally API] Could not clear currentUser:", e);
+      }
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { router } = require("expo-router");
+        router.replace("/(auth)/login");
+      } catch (e) {
+        console.warn("[Tally API] Could not navigate to login:", e);
+      }
+    }
+
+    if (status !== undefined && status >= 500) {
+      console.error(
+        error.response?.data || error.message,
+      );
+    }
+
+    return Promise.reject(error);
+  },
+);
 
 export default api;

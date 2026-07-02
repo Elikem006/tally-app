@@ -11,12 +11,15 @@ import {
   KeyboardAvoidingView,
   Platform,
   Dimensions,
+  RefreshControl,
 } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { budgetAPI, expenseAPI } from '../../services/api';
 import { getUserId } from '../../services/storage';
 import { notifyBudgetWarning } from '../../services/notifications';
+import Toast from '../../components/Toast';
+import { useToast } from '../../hooks/useToast';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -56,8 +59,10 @@ export default function BudgetScreen() {
   // UI / Fetching States
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
+  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
   
   const notificationsSentRef = useRef(false);
 
@@ -120,10 +125,16 @@ export default function BudgetScreen() {
       }
     } catch (err: any) {
       console.log('Error fetching budget summary:', err);
-      setError(err?.message || String(err));
+      setError(err?.message || 'Something went wrong. Pull down to refresh.');
     } finally {
       if (showLoading) setFetching(false);
     }
+  }
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await fetchData(false);
+    setRefreshing(false);
   }
 
   const handleTabPress = (index: number) => {
@@ -151,11 +162,11 @@ export default function BudgetScreen() {
           } catch {}
         }
       }
-      Alert.alert('Success', 'Your budgets have been saved!');
+      showToast('Your budgets have been saved!', 'success');
       await fetchData(false);
       handleTabPress(0); // Transition back to Overview to view updated stats
     } catch (error: any) {
-      Alert.alert('Error', 'Failed to save budgets. Please try again.');
+      showToast('Failed to save budgets. Please try again.', 'error');
     } finally {
       setLoading(false);
     }
@@ -175,6 +186,7 @@ export default function BudgetScreen() {
               await budgetAPI.deleteBudget(userId, category);
             } catch {}
           }
+          showToast('Budgets cleared successfully', 'success');
           await fetchData(false);
           handleTabPress(0);
         },
@@ -253,6 +265,7 @@ export default function BudgetScreen() {
             style={styles.verticalScrollView}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}
           >
             {Object.keys(summary).length === 0 ? (
               <View style={styles.emptyContainer}>
@@ -439,6 +452,7 @@ export default function BudgetScreen() {
             style={styles.verticalScrollView}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           >
             <View style={styles.mainCard}>
               <Text style={styles.cardHeaderTitle}>Monthly Budgets</Text>
@@ -506,6 +520,7 @@ export default function BudgetScreen() {
           </ScrollView>
         </View>
       </ScrollView>
+      <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
     </KeyboardAvoidingView>
   );
 }
@@ -520,7 +535,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#F2F4F7',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
   },
   headerContainer: {
     backgroundColor: '#F2F4F7',

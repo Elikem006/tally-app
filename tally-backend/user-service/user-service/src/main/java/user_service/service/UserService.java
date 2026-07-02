@@ -21,9 +21,22 @@ public class UserService {
     private BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     public User registerUser(String name, String email, String password) {
-        if (userRepository.existsByEmail(email)) {
-            throw new RuntimeException("Email already registered");
+        // Password length validation
+        if (password.length() < 6) {
+            throw new RuntimeException("Password must be at least 6 characters");
         }
+
+        // Basic email format validation — must contain @ with a dot somewhere after it
+        int atIndex = email.indexOf('@');
+        if (atIndex < 1 || email.indexOf('.', atIndex) < 0) {
+            throw new RuntimeException("Please enter a valid email address");
+        }
+
+        // Duplicate email check
+        if (userRepository.existsByEmail(email)) {
+            throw new RuntimeException("An account with this email already exists");
+        }
+
         User user = new User();
         user.setName(name);
         user.setEmail(email);
@@ -46,7 +59,30 @@ public class UserService {
         response.put("userId", user.getId());
         response.put("name", user.getName());
         response.put("email", user.getEmail());
+        response.put("avatarType", user.getAvatarType());
+        response.put("avatarData", user.getAvatarData());
+        response.put("phoneNumber", user.getPhoneNumber() != null ? user.getPhoneNumber() : "");
 
         return response;
+    }
+
+    public User updateAvatar(Long userId, String avatarType, String avatarData) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        user.setAvatarType(avatarType);
+        user.setAvatarData(avatarData);
+        return userRepository.save(user);
+    }
+
+    public User getUserById(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+    }
+
+    public User updatePhoneNumber(Long userId, String phoneNumber) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        user.setPhoneNumber(phoneNumber);
+        return userRepository.save(user);
     }
 }

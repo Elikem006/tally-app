@@ -16,12 +16,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { authAPI } from '../../services/api';
 import { Feather, AntDesign, FontAwesome } from '@expo/vector-icons';
 
-// Global store for user session
+// Global store for user session (merged with main branch properties)
 export let currentUser = {
   token: '',
   userId: '1',
   userName: 'User',
   email: '',
+  avatarType: '',
+  avatarData: '',
+  phoneNumber: '',
 };
 
 export default function LoginScreen() {
@@ -44,11 +47,17 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const response = await authAPI.login(email, password);
-      const { token, userId, name, email: userEmail } = response.data;
+      const { token, userId, name, email: userEmail, avatarType, avatarData, phoneNumber } = response.data;
+      
+      // Update global session store
       currentUser.token = token;
       currentUser.userId = String(userId);
       currentUser.userName = name;
       currentUser.email = userEmail ?? email;
+      currentUser.avatarType = avatarType ?? '';
+      currentUser.avatarData = avatarData ?? '';
+      currentUser.phoneNumber = phoneNumber ?? '';
+
       setLoading(false);
       router.replace('/(tabs)');
     } catch (error: any) {

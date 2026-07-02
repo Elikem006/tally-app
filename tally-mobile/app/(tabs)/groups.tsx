@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -17,17 +18,18 @@ export default function GroupsScreen() {
   const insets = useSafeAreaInsets();
   const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [groupSummaries, setGroupSummaries] = useState<{ [key: string]: { total: number; memberCount: number } }>({});
 
   useFocusEffect(
     useCallback(() => {
-      fetchGroups();
+      fetchGroups(true);
     }, [])
   );
 
-  async function fetchGroups() {
-    setLoading(true);
+  async function fetchGroups(showLoading = true) {
+    if (showLoading) setLoading(true);
     setError(null);
     try {
       const userId = getUserId();
@@ -61,7 +63,13 @@ export default function GroupsScreen() {
     }
   }
 
-  if (loading) {
+  async function onRefresh() {
+    setRefreshing(true);
+    await fetchGroups(false);
+    setRefreshing(false);
+  }
+
+  if (loading && !refreshing) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#111111" />
@@ -69,20 +77,28 @@ export default function GroupsScreen() {
     );
   }
 
-  if (error) {
+  if (error && groups.length === 0) {
     return (
-      <View style={styles.centered}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.centered}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}
+      >
         <Text style={styles.errorIcon}>⚠️</Text>
         <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={fetchGroups}>
+        <TouchableOpacity style={styles.retryButton} onPress={() => fetchGroups(true)}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     );
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}
+    >
       {/* Light card container */}
       <View style={styles.mainCard}>
         <Text style={styles.cardHeaderTitle}>My Groups</Text>
@@ -104,9 +120,10 @@ export default function GroupsScreen() {
                 key={item.id}
                 style={styles.groupCard}
                 onPress={() =>
-                  router.push(
-                    `/group-detail?groupId=${item.id}&groupName=${item.name}`
-                  )
+                  router.push({
+                    pathname: "/group-detail",
+                    params: { groupId: String(item.id), groupName: item.name },
+                  })
                 }
                 activeOpacity={0.8}
               >

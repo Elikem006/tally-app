@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,22 +10,26 @@ import {
   Modal,
   TextInput,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { currentUser } from '../(auth)/login';
-import { expenseAPI } from '../../services/api';
+import { expenseAPI, authAPI } from '../../services/api';
 import { getUserId } from '../../services/storage';
+import Avatar from '../../components/Avatar';
+import Toast from '../../components/Toast';
+import { useToast } from '../../hooks/useToast';
 
 const CATEGORY_ICONS: { [key: string]: string } = {
-  Food: "🍔",
-  Transport: "🚗",
-  Entertainment: "🎮",
-  Utilities: "💡",
-  Other: "📦",
+  Food: '🍔',
+  Transport: '🚗',
+  Entertainment: '🎮',
+  Utilities: '💡',
+  Other: '📦',
 };
 
 export default function ProfileScreen() {
@@ -37,17 +41,35 @@ export default function ProfileScreen() {
   // Stats States
   const [stats, setStats] = useState<any>(null);
   const [loadingStats, setLoadingStats] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Avatar + Phone from main branch
+  const [avatarData, setAvatarData] = useState<string | null>(currentUser.avatarData || null);
+  const [phoneNumber, setPhoneNumber] = useState(currentUser.phoneNumber || "");
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [savingPhone, setSavingPhone] = useState(false);
+  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
 
   useEffect(() => {
     loadProfileImage();
-    fetchStats();
+    fetchStats(true);
   }, []);
+
+  // Refresh avatar state every time this screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      setAvatarData(currentUser.avatarData || null);
+    }, [])
+  );
 
   async function loadProfileImage() {
     try {
       const saved = await AsyncStorage.getItem(`profile_image_${currentUser.userId}`);
       if (saved) {
         setProfileImage(saved);
+      } else {
+        setProfileImage(null);
       }
     } catch (e) {
       console.log('Error loading profile image:', e);
@@ -58,12 +80,15 @@ export default function ProfileScreen() {
     try {
       await AsyncStorage.setItem(`profile_image_${currentUser.userId}`, uri);
       setProfileImage(uri);
+      showToast("Profile image updated!", "success");
     } catch (e) {
       console.log('Error saving profile image:', e);
     }
   }
 
-  async function fetchStats() {
+  async function fetchStats(showLoading = true) {
+    if (showLoading) setLoadingStats(true);
+    setError(null);
     try {
       const userId = getUserId();
       const [reportRes, expensesRes] = await Promise.all([
@@ -72,10 +97,10 @@ export default function ProfileScreen() {
       ]);
 
       const expenses: any[] = expensesRes.data || [];
-      const report = reportRes.data;
+      const report = reportRes.data || {};
 
       const totalExpenses = expenses.length;
-      const totalSpent = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+      const totalSpent = expenses.reduce((sum, e) => sum + parseFloat(e.amount || "0"), 0);
 
       // Most used category
       const categoryCounts: { [key: string]: number } = {};
@@ -91,10 +116,37 @@ export default function ProfileScreen() {
         thisMonthSpent: parseFloat(report.currentMonth) || 0,
         topCategory: report.highestCategory,
       });
-    } catch (error) {
-      console.log("Error fetching stats:", error);
+    } catch (err) {
+      console.log('Error fetching profile stats:', err);
+      setError("Failed to load statistics. Pull down to refresh.");
     } finally {
       setLoadingStats(false);
+    }
+  }
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await fetchStats(false);
+    await loadProfileImage();
+    setRefreshing(false);
+  }
+
+  async function handleSavePhone() {
+    const cleaned = phoneNumber.trim().replace(/\s/g, "");
+    if (cleaned.length !== 10) {
+      showToast("Enter a valid 10-digit phone number", "error");
+      return;
+    }
+    setSavingPhone(true);
+    try {
+      await authAPI.updatePhone(getUserId(), cleaned);
+      currentUser.phoneNumber = cleaned;
+      setEditingPhone(false);
+      showToast("Phone number saved!", "success");
+    } catch {
+      showToast("Failed to save phone number", "error");
+    } finally {
+      setSavingPhone(false);
     }
   }
 
@@ -152,13 +204,14 @@ export default function ProfileScreen() {
         text: 'Log Out',
         style: 'destructive',
         onPress: () => {
-          // Clear global user session
-          currentUser.token = '';
-          currentUser.userId = '';
-          currentUser.userName = '';
-          currentUser.email = '';
-          // Navigate back to login
-          router.replace('/(auth)/login');
+          currentUser.token = "";
+          currentUser.userId = "1";
+          currentUser.userName = "";
+          currentUser.email = "";
+          currentUser.avatarType = "";
+          currentUser.avatarData = "";
+          currentUser.phoneNumber = "";
+          router.replace("/(auth)/login");
         },
       },
     ]);
@@ -166,12 +219,16 @@ export default function ProfileScreen() {
 
   function triggerImageOptions() {
     Alert.alert(
-      'Profile Photo',
-      'Upload a profile picture from your device or links:',
+      'Profile Photo / Avatar',
+      'Choose how you want to update your profile photo:',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Choose from Gallery / Files 📁',
+          text: 'Design Custom Avatar (Presets) 🎨',
+          onPress: () => router.push("/avatar-builder"),
+        },
+        {
+          text: 'Choose from Gallery 📁',
           onPress: pickImageFromGallery,
         },
         {
@@ -179,7 +236,7 @@ export default function ProfileScreen() {
           onPress: takePhotoWithCamera,
         },
         {
-          text: 'Enter Image URL...',
+          text: 'Paste Photo URL...',
           onPress: () => {
             setInputUrl(profileImage || '');
             setShowUrlModal(true);
@@ -187,12 +244,13 @@ export default function ProfileScreen() {
         },
         profileImage
           ? {
-              text: 'Remove Photo',
+              text: 'Remove Custom Photo',
               style: 'destructive',
               onPress: async () => {
                 try {
                   await AsyncStorage.removeItem(`profile_image_${currentUser.userId}`);
                   setProfileImage(null);
+                  showToast("Profile image removed", "info");
                 } catch (e) {
                   console.log('Error removing photo:', e);
                 }
@@ -213,179 +271,254 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}>
-      {/* Light card container */}
-      <View style={styles.mainCard}>
-        <Text style={styles.cardHeaderTitle}>My Profile</Text>
+    <View style={styles.flex}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Light card container */}
+        <View style={styles.mainCard}>
+          <Text style={styles.cardHeaderTitle}>My Profile</Text>
 
-        {/* Avatar View with edit indicator */}
-        <View style={styles.avatarSection}>
+          {/* Avatar View with edit indicator */}
+          <View style={styles.avatarSection}>
+            <TouchableOpacity
+              style={styles.avatarWrapper}
+              onPress={triggerImageOptions}
+              activeOpacity={0.8}
+            >
+              {profileImage ? (
+                <Image source={{ uri: profileImage }} style={styles.avatarImage} />
+              ) : (
+                <View style={styles.avatarInnerWrapper}>
+                  <Avatar
+                    userId={Number(currentUser.userId)}
+                    name={currentUser.userName}
+                    size={96}
+                    avatarData={avatarData}
+                  />
+                </View>
+              )}
+              <View style={styles.cameraIconContainer}>
+                <Feather name="camera" size={14} color="#ffffff" />
+              </View>
+            </TouchableOpacity>
+
+            <Text style={styles.name}>{currentUser.userName}</Text>
+            <Text style={styles.subtitle}>Tally Member</Text>
+          </View>
+
+          {/* Stats section */}
+          <Text style={styles.label}>Your Stats</Text>
+          {loadingStats && !refreshing ? (
+            <ActivityIndicator size="small" color="#111111" style={{ marginVertical: 16 }} />
+          ) : error && !stats ? (
+            <Text style={styles.errorText}>{error}</Text>
+          ) : stats ? (
+            <View style={{ marginBottom: 16 }}>
+              {/* 3-card stat row */}
+              <View style={styles.statsRow}>
+                <View style={styles.statCard}>
+                  <Text style={styles.statNumber}>{stats.totalExpenses}</Text>
+                  <Text style={styles.statLabel}>Total Trx</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit>
+                    GHS {stats.totalSpent.toFixed(0)}
+                  </Text>
+                  <Text style={styles.statLabel}>Total Spent</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit>
+                    GHS {stats.thisMonthSpent.toFixed(0)}
+                  </Text>
+                  <Text style={styles.statLabel}>This Month</Text>
+                </View>
+              </View>
+
+              {/* Top category card */}
+              {stats.topCategory?.category && (
+                <View style={styles.topCategoryCard}>
+                  <Text style={{ fontSize: 28 }}>
+                    {CATEGORY_ICONS[stats.topCategory.category] || "📦"}
+                  </Text>
+                  <View>
+                    <Text style={styles.topCatName}>{stats.topCategory.category}</Text>
+                    <Text style={styles.topCatSub}>Your most spent category</Text>
+                  </View>
+                </View>
+              )}
+            </View>
+          ) : null}
+
+          {/* Navigation Action Links */}
+          <Text style={styles.label}>Actions</Text>
           <TouchableOpacity
-            style={styles.avatarWrapper}
-            onPress={triggerImageOptions}
+            style={styles.detailCapsule}
+            onPress={() => router.push('/(tabs)/reminders')}
             activeOpacity={0.8}
           >
-            {profileImage ? (
-              <Image source={{ uri: profileImage }} style={styles.avatarImage} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarText}>
-                  {currentUser.userName.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-            )}
-            <View style={styles.cameraIconContainer}>
-              <Feather name="camera" size={14} color="#ffffff" />
+            <View style={styles.actionLeft}>
+              <Feather name="bell" size={16} color="#111111" style={{ marginRight: 8 }} />
+              <Text style={styles.actionText}>Bill Reminders</Text>
             </View>
+            <Feather name="chevron-right" size={16} color="#8E9AA6" />
           </TouchableOpacity>
 
-          <Text style={styles.name}>{currentUser.userName}</Text>
-          <Text style={styles.subtitle}>Tally Member</Text>
-        </View>
-
-        {/* Stats section */}
-        <Text style={styles.label}>Your Stats</Text>
-        {loadingStats ? (
-          <ActivityIndicator size="small" color="#111111" style={{ marginVertical: 16 }} />
-        ) : stats ? (
-          <View style={{ marginBottom: 16 }}>
-            {/* 3-card stat row */}
-            <View style={styles.statsRow}>
-              <View style={styles.statCard}>
-                <Text style={styles.statNumber}>{stats.totalExpenses}</Text>
-                <Text style={styles.statLabel}>Total Trx</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit>
-                  GHS {stats.totalSpent.toFixed(0)}
-                </Text>
-                <Text style={styles.statLabel}>Total Spent</Text>
-              </View>
-              <View style={styles.statCard}>
-                <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit>
-                  GHS {stats.thisMonthSpent.toFixed(0)}
-                </Text>
-                <Text style={styles.statLabel}>This Month</Text>
-              </View>
+          <TouchableOpacity
+            style={styles.detailCapsule}
+            onPress={() => router.push('/(tabs)/report')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.actionLeft}>
+              <Feather name="trending-up" size={16} color="#111111" style={{ marginRight: 8 }} />
+              <Text style={styles.actionText}>Financial Reports</Text>
             </View>
+            <Feather name="chevron-right" size={16} color="#8E9AA6" />
+          </TouchableOpacity>
 
-            {/* Top category card */}
-            {stats.topCategory?.category && (
-              <View style={styles.topCategoryCard}>
-                <Text style={{ fontSize: 28 }}>
-                  {CATEGORY_ICONS[stats.topCategory.category] || "📦"}
-                </Text>
-                <View>
-                  <Text style={styles.topCatName}>{stats.topCategory.category}</Text>
-                  <Text style={styles.topCatSub}>Your most spent category</Text>
+          <TouchableOpacity
+            style={styles.detailCapsule}
+            onPress={() => router.push('/help')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.actionLeft}>
+              <Feather name="help-circle" size={16} color="#111111" style={{ marginRight: 8 }} />
+              <Text style={styles.actionText}>Help & Support</Text>
+            </View>
+            <Feather name="chevron-right" size={16} color="#8E9AA6" />
+          </TouchableOpacity>
+
+          {/* Profile Details Capsules */}
+          <Text style={styles.label}>Profile Details</Text>
+
+          <View style={styles.detailCapsule}>
+            <Text style={styles.detailLabel}>Name</Text>
+            <Text style={styles.detailValue}>{currentUser.userName}</Text>
+          </View>
+
+          <View style={styles.detailCapsule}>
+            <Text style={styles.detailLabel}>Email</Text>
+            <Text style={styles.detailValue}>{currentUser.email || 'N/A'}</Text>
+          </View>
+
+          <View style={styles.detailCapsule}>
+            <Text style={styles.detailLabel}>User ID</Text>
+            <Text style={styles.detailValue}>#{currentUser.userId}</Text>
+          </View>
+
+          {/* MoMo number capsule */}
+          <View style={[styles.detailCapsule, editingPhone && { height: 'auto', flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={styles.detailLabel}>MoMo Number</Text>
+              {!editingPhone && (
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={[styles.detailValue, { marginRight: 8 }]}>
+                    {currentUser.phoneNumber || 'Not set'}
+                  </Text>
+                  <TouchableOpacity onPress={() => setEditingPhone(true)}>
+                    <Text style={styles.editLinkText}>
+                      {currentUser.phoneNumber ? 'Edit' : '+ Add'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+            {editingPhone && (
+              <View style={styles.phoneInputRow}>
+                <TextInput
+                  style={styles.phoneInputSmall}
+                  value={phoneNumber}
+                  onChangeText={setPhoneNumber}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  placeholder="e.g. 0241234567"
+                  placeholderTextColor="#8E9AA6"
+                  autoFocus
+                />
+                <View style={styles.phoneActions}>
+                  <TouchableOpacity onPress={handleSavePhone} disabled={savingPhone} style={styles.phoneActionBtn}>
+                    {savingPhone ? (
+                      <ActivityIndicator size="small" color="#8B5CF6" />
+                    ) : (
+                      <Text style={styles.phoneActionBtnText}>Save</Text>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => { setEditingPhone(false); setPhoneNumber(currentUser.phoneNumber || ""); }} style={styles.phoneActionBtn}>
+                    <Text style={styles.phoneActionBtnCancel}>Cancel</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             )}
           </View>
-        ) : null}
 
-        {/* Navigation Action Links */}
-        <Text style={styles.label}>Actions</Text>
-        <TouchableOpacity
-          style={styles.detailCapsule}
-          onPress={() => router.push('/(tabs)/reminders')}
-          activeOpacity={0.8}
-        >
-          <View style={styles.actionLeft}>
-            <Feather name="bell" size={16} color="#111111" style={{ marginRight: 8 }} />
-            <Text style={styles.actionText}>Bill Reminders</Text>
+          <View style={styles.detailCapsule}>
+            <Text style={styles.detailLabel}>Account Type</Text>
+            <Text style={styles.detailValue}>Standard</Text>
           </View>
-          <Feather name="chevron-right" size={16} color="#8E9AA6" />
-        </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.detailCapsule}
-          onPress={() => router.push('/(tabs)/report')}
-          activeOpacity={0.8}
+          {/* Logout button */}
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
+            <Text style={styles.logoutText}>Log Out</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Cross-platform Modal for entering Image URL */}
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={showUrlModal}
+          onRequestClose={() => setShowUrlModal(false)}
         >
-          <View style={styles.actionLeft}>
-            <Feather name="trending-up" size={16} color="#111111" style={{ marginRight: 8 }} />
-            <Text style={styles.actionText}>Financial Reports</Text>
-          </View>
-          <Feather name="chevron-right" size={16} color="#8E9AA6" />
-        </TouchableOpacity>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContentCard}>
+              <Text style={styles.modalTitle}>Paste Image URL</Text>
+              <Text style={styles.modalSubtitle}>Provide a link to your online profile photo:</Text>
 
-        {/* Profile Details Capsules */}
-        <Text style={styles.label}>Profile Details</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="https://example.com/avatar.jpg"
+                placeholderTextColor="#8E9AA6"
+                value={inputUrl}
+                onChangeText={setInputUrl}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+              />
 
-        <View style={styles.detailCapsule}>
-          <Text style={styles.detailLabel}>Name</Text>
-          <Text style={styles.detailValue}>{currentUser.userName}</Text>
-        </View>
-
-        <View style={styles.detailCapsule}>
-          <Text style={styles.detailLabel}>Email</Text>
-          <Text style={styles.detailValue}>{currentUser.email || 'N/A'}</Text>
-        </View>
-
-        <View style={styles.detailCapsule}>
-          <Text style={styles.detailLabel}>User ID</Text>
-          <Text style={styles.detailValue}>#{currentUser.userId}</Text>
-        </View>
-
-        <View style={styles.detailCapsule}>
-          <Text style={styles.detailLabel}>Account Type</Text>
-          <Text style={styles.detailValue}>Standard</Text>
-        </View>
-
-        {/* Logout button */}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
-          <Text style={styles.logoutText}>Log Out</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Cross-platform Modal for entering Image URL */}
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={showUrlModal}
-        onRequestClose={() => setShowUrlModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContentCard}>
-            <Text style={styles.modalTitle}>Paste Image URL</Text>
-            <Text style={styles.modalSubtitle}>Provide a link to your online profile photo:</Text>
-
-            <TextInput
-              style={styles.modalInput}
-              placeholder="https://example.com/avatar.jpg"
-              placeholderTextColor="#8E9AA6"
-              value={inputUrl}
-              onChangeText={setInputUrl}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-            />
-
-            <View style={styles.modalBtnRow}>
-              <TouchableOpacity
-                style={[styles.modalBtn, styles.modalBtnCancel]}
-                onPress={() => setShowUrlModal(false)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.modalBtnCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalBtn, styles.modalBtnSave]}
-                onPress={handleSaveUrl}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.modalBtnSaveText}>Save</Text>
-              </TouchableOpacity>
+              <View style={styles.modalBtnRow}>
+                <TouchableOpacity
+                  style={[styles.modalBtn, styles.modalBtnCancel]}
+                  onPress={() => setShowUrlModal(false)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.modalBtnCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalBtn, styles.modalBtnSave]}
+                  onPress={handleSaveUrl}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.modalBtnSaveText}>Save</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
-    </ScrollView>
+        </Modal>
+      </ScrollView>
+
+      <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+    backgroundColor: '#F2F4F7',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F2F4F7',
@@ -432,20 +565,11 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 48,
   },
-  avatarPlaceholder: {
+  avatarInnerWrapper: {
     width: '100%',
     height: '100%',
     borderRadius: 48,
-    backgroundColor: '#F8F9FA',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#EAEBEF',
-  },
-  avatarText: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#111111',
+    overflow: 'hidden',
   },
   cameraIconContainer: {
     position: 'absolute',
@@ -463,6 +587,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+    elevation: 2,
   },
   name: {
     fontSize: 20,
@@ -484,123 +609,168 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     marginTop: 16,
   },
-  detailCapsule: {
+  
+  // Stats row styles
+  statsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-    marginBottom: 10,
+    gap: 12,
+    marginBottom: 12,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#F8F9FA',
     borderWidth: 1,
     borderColor: '#EAEBEF',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.02,
-    shadowRadius: 4,
-    elevation: 1,
+    borderRadius: 20,
+    padding: 14,
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111111',
+    marginBottom: 2,
+  },
+  statLabel: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#8E9AA6',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  topCategoryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+    borderRadius: 20,
+    padding: 16,
+  },
+  topCatName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111111',
+  },
+  topCatSub: {
+    fontSize: 11,
+    color: '#8E9AA6',
+    marginTop: 2,
+  },
+
+  // Detail capsules & Actions
+  detailCapsule: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
   },
   detailLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#8E9AA6',
     fontWeight: '500',
   },
   detailValue: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#111111',
     fontWeight: '700',
   },
-  // Stats styles
-  statsRow: {
-    flexDirection: "row",
-    gap: 8,
-    width: "100%",
-    marginBottom: 10,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: "#F8F9FA",
-    borderRadius: 20,
-    padding: 12,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#EAEBEF",
-  },
-  statNumber: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#8B5CF6",
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 11,
-    color: "#8E9AA6",
-    textAlign: "center",
-    fontWeight: "600",
-  },
-  topCategoryCard: {
-    width: "100%",
-    backgroundColor: "#F8F9FA",
-    borderRadius: 20,
-    padding: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    borderWidth: 1,
-    borderColor: "#EAEBEF",
-    marginBottom: 10,
-  },
-  topCatName: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#111111",
-    marginBottom: 2,
-  },
-  topCatSub: {
-    fontSize: 11,
-    color: "#8E9AA6",
-    fontWeight: "500",
+  editLinkText: {
+    color: '#8B5CF6',
+    fontSize: 13,
+    fontWeight: 'bold',
   },
   actionLeft: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   actionText: {
-    fontSize: 14,
-    color: "#111111",
-    fontWeight: "700",
+    fontSize: 13,
+    color: '#111111',
+    fontWeight: '700',
   },
+
+  // Phone input row styles
+  phoneInputRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+  },
+  phoneInputSmall: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 40,
+    color: '#111111',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  phoneActions: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  phoneActionBtn: {
+    height: 40,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  phoneActionBtnText: {
+    color: '#8B5CF6',
+    fontWeight: 'bold',
+    fontSize: 13,
+  },
+  phoneActionBtnCancel: {
+    color: '#8E9AA6',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+
+  // Logout button styles
   logoutButton: {
-    backgroundColor: '#FF3B3012',
     borderWidth: 1,
     borderColor: '#FF3B30',
-    borderRadius: 28,
+    backgroundColor: '#FF3B3010',
+    borderRadius: 24,
     padding: 16,
     alignItems: 'center',
     marginTop: 20,
   },
   logoutText: {
     color: '#FF3B30',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
   },
+
+  // Modal URL styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 17, 26, 0.4)',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    padding: 20,
   },
   modalContentCard: {
-    width: '100%',
     backgroundColor: '#ffffff',
     borderRadius: 28,
     padding: 24,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
-    shadowRadius: 24,
+    width: '100%',
+    maxWidth: 320,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
     elevation: 5,
   },
   modalTitle: {
@@ -608,49 +778,61 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#111111',
     marginBottom: 8,
+    textAlign: 'center',
   },
   modalSubtitle: {
     fontSize: 13,
     color: '#8E9AA6',
+    marginBottom: 16,
+    textAlign: 'center',
     lineHeight: 18,
-    marginBottom: 20,
   },
   modalInput: {
     backgroundColor: '#F8F9FA',
-    borderRadius: 16,
-    padding: 16,
-    color: '#111111',
-    fontSize: 14,
     borderWidth: 1,
     borderColor: '#EAEBEF',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    height: 52,
+    color: '#111111',
+    fontSize: 14,
     marginBottom: 20,
   },
   modalBtnRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 12,
+    gap: 10,
   },
   modalBtn: {
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
+    flex: 1,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
   modalBtnCancel: {
-    backgroundColor: '#F2F4F7',
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+    backgroundColor: '#ffffff',
   },
   modalBtnCancelText: {
     color: '#8E9AA6',
+    fontWeight: '600',
     fontSize: 14,
-    fontWeight: 'bold',
   },
   modalBtnSave: {
     backgroundColor: '#111111',
   },
   modalBtnSaveText: {
     color: '#ffffff',
-    fontSize: 14,
     fontWeight: 'bold',
+    fontSize: 14,
+  },
+  
+  // General
+  errorText: {
+    fontSize: 14,
+    color: '#8E9AA6',
+    textAlign: 'center',
+    marginVertical: 16,
   },
 });

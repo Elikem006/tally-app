@@ -1,12 +1,14 @@
 package user_service.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import user_service.model.Expense;
 import user_service.service.ExpenseService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -28,12 +30,12 @@ public class ExpenseController {
 
             if (userIdStr == null || amountStr == null || category == null || dateStr == null) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "userId, amount, category and date are required"));
+                        .body(Map.of("error", "userId, amount, category and date are required", "success", false));
             }
 
             if (category.isEmpty()) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "Category cannot be empty"));
+                        .body(Map.of("error", "Category cannot be empty", "success", false));
             }
 
             Long userId = Long.parseLong(userIdStr);
@@ -41,18 +43,19 @@ public class ExpenseController {
 
             if (amount.compareTo(BigDecimal.ZERO) <= 0) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "Amount must be greater than zero"));
+                        .body(Map.of("error", "Amount must be greater than zero", "success", false));
             }
 
             String description = request.get("description");
+            String paymentMethod = request.getOrDefault("paymentMethod", "CASH");
             LocalDate date = LocalDate.parse(dateStr);
 
-            Expense expense = expenseService.createExpense(userId, amount, category, description, date);
-            return ResponseEntity.ok(expense);
+            Expense expense = expenseService.createExpense(userId, amount, category, description, date, paymentMethod);
+            return ResponseEntity.status(HttpStatus.CREATED).body(expense);
 
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -69,7 +72,7 @@ public class ExpenseController {
             return ResponseEntity.ok(expenses);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -77,10 +80,10 @@ public class ExpenseController {
     public ResponseEntity<?> deleteExpense(@PathVariable Long expenseId) {
         try {
             expenseService.deleteExpense(expenseId);
-            return ResponseEntity.ok(Map.of("message", "Expense deleted successfully"));
+            return ResponseEntity.ok(Map.of("message", "Expense deleted successfully", "success", true));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -90,10 +93,13 @@ public class ExpenseController {
                                               @RequestParam(required = false) Integer year) {
         try {
             Map<String, Object> report = expenseService.getMonthlyReport(userId, month, year);
-            return ResponseEntity.ok(report);
+            // Copy to new map so we don't mutate the service-returned object
+            Map<String, Object> response = new HashMap<>(report);
+            response.put("success", true);
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 
@@ -103,7 +109,7 @@ public class ExpenseController {
             return ResponseEntity.ok(expenseService.getCombinedHistory(userId));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", e.getMessage(), "success", false));
         }
     }
 }

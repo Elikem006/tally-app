@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Alert,
   TextInput,
+  RefreshControl,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
@@ -69,21 +70,23 @@ export default function HistoryScreen() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [budgets, setBudgets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
 
   // Redesigned interactive states
   const [activeTimeFilter, setActiveTimeFilter] = useState<'today' | 'week' | 'month' | 'year'>('month');
+  const [momoOnly, setMomoOnly] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
-      fetchData();
+      fetchData(true);
     }, [])
   );
 
-  async function fetchData() {
-    setLoading(true);
+  async function fetchData(showLoading = true) {
+    if (showLoading) setLoading(true);
     setError(null);
     try {
       const userId = getUserId();
@@ -103,6 +106,12 @@ export default function HistoryScreen() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await fetchData(false);
+    setRefreshing(false);
   }
 
   async function handleDelete(item: any) {
@@ -131,7 +140,7 @@ export default function HistoryScreen() {
     );
   }
 
-  // Filter based on Time and Search Query (Timezone independent local dates)
+  // Filter based on Time, Search Query and MoMo status (Timezone independent local dates)
   const filteredExpenses = useMemo(() => {
     return expenses.filter((e) => {
       if (!e.date) return false;
@@ -180,9 +189,12 @@ export default function HistoryScreen() {
       const query = searchQuery.toLowerCase();
       const matchesSearch = desc.includes(query) || cat.includes(query) || tagsStr.includes(query);
 
-      return matchesTime && matchesSearch;
+      // 3. MoMo filter
+      const matchesMomo = !momoOnly || e.paymentMethod === "MOMO";
+
+      return matchesTime && matchesSearch && matchesMomo;
     });
-  }, [expenses, activeTimeFilter, searchQuery]);
+  }, [expenses, activeTimeFilter, searchQuery, momoOnly]);
 
   // Sum of limits of all user budgets
   const totalBudget = useMemo(() => {
@@ -251,7 +263,7 @@ export default function HistoryScreen() {
 
   const groupedExpenses = groupExpensesByDate(filteredExpenses);
 
-  if (loading) {
+  if (loading && !refreshing) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#111111" />
@@ -261,18 +273,27 @@ export default function HistoryScreen() {
 
   if (error) {
     return (
-      <View style={styles.centered}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.centered}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}
+      >
         <Text style={styles.errorIcon}>⚠️</Text>
         <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={fetchData}>
+        <TouchableOpacity style={styles.retryButton} onPress={() => fetchData(true)}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     );
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}
+      keyboardShouldPersistTaps="handled"
+    >
       <Text style={styles.cardHeaderTitle}>Analytics & History</Text>
 
       {/* 1. Time Filter Segmented Control */}
@@ -359,6 +380,30 @@ export default function HistoryScreen() {
           onFocus={() => setSearchFocused(true)}
           onBlur={() => setSearchFocused(false)}
         />
+        {searchQuery !== '' && (
+          <TouchableOpacity onPress={() => setSearchQuery('')} activeOpacity={0.7} style={styles.clearButton}>
+            <Feather name="x" size={16} color="#8E9AA6" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* 3.5 Standalone Filters */}
+      <View style={styles.filterOptionsRow}>
+        <TouchableOpacity
+          style={[
+            styles.momoFilterBtn,
+            momoOnly && styles.momoFilterBtnActive
+          ]}
+          onPress={() => setMomoOnly(!momoOnly)}
+          activeOpacity={0.8}
+        >
+          <Text style={[
+            styles.momoFilterBtnText,
+            momoOnly && styles.momoFilterBtnTextActive
+          ]}>
+            📱 MoMo Only
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* 4. List of Transactions */}
@@ -367,6 +412,7 @@ export default function HistoryScreen() {
           <Text style={styles.dateHeader}>{group.date}</Text>
           {group.items.map((item) => {
             const isShared = item.isShared || item.type === "shared";
+            const isMomo = item.paymentMethod === "MOMO";
             const { cleanDescription, tags } = parseTagsFromDescription(item.description);
             return (
               <TouchableOpacity
@@ -384,13 +430,22 @@ export default function HistoryScreen() {
                       <Text style={styles.expenseDescription} numberOfLines={1}>
                         {cleanDescription || item.category}
                       </Text>
-                      {isShared && (
-                        <View style={styles.sharedBadge}>
-                          <Text style={styles.sharedBadgeText}>Shared</Text>
-                        </View>
-                      )}
                     </View>
                     <Text style={styles.expenseCategory}>{item.category}</Text>
+                    
+                    <View style={styles.badgeRow}>
+                      {isShared && (
+                        <View style={styles.sharedBadge}>
+                          <Text style={styles.sharedBadgeText}>👥 Shared</Text>
+                        </View>
+                      )}
+                      <View style={[styles.paymentBadge, isMomo && styles.momoBadge]}>
+                        <Text style={[styles.paymentBadgeText, isMomo && styles.momoBadgeText]}>
+                          {isMomo ? "📱 MoMo" : "💵 Cash"}
+                        </Text>
+                      </View>
+                    </View>
+
                     {tags.length > 0 && (
                       <View style={styles.tagsContainer}>
                         {tags.map((tag) => (
@@ -482,34 +537,30 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   timeFilterText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
     color: '#8E9AA6',
   },
   timeFilterTextActive: {
     color: '#111111',
   },
-  // Two side-by-side gauges styles
+  // Gauges row styles
   gaugesRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 24,
     gap: 16,
+    marginBottom: 20,
   },
   gaugeCard: {
     flex: 1,
     backgroundColor: '#ffffff',
-    borderRadius: 24,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
+    borderRadius: 28,
+    padding: 16,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#EAEBEF',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.03,
-    shadowRadius: 10,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.04,
+    shadowRadius: 16,
+    elevation: 3,
   },
   gaugeWrapper: {
     position: 'relative',
@@ -517,76 +568,106 @@ const styles = StyleSheet.create({
     height: 72,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   gaugeIconContainer: {
     position: 'absolute',
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#ffffff',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F8F9FA',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1.5 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
-    bottom: 12,
   },
   gaugeLabel: {
-    fontSize: 10,
+    fontSize: 11,
+    fontWeight: 'bold',
     color: '#8E9AA6',
-    fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 4,
   },
   gaugeValue: {
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#111111',
   },
-  // Search container styles
+  // Search bar styles
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#ffffff',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    height: 48,
+    borderRadius: 24,
     borderWidth: 1,
     borderColor: '#EAEBEF',
-    marginBottom: 24,
+    paddingHorizontal: 16,
+    height: 48,
+    marginBottom: 12,
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.02,
-    shadowRadius: 4,
+    shadowRadius: 8,
     elevation: 1,
   },
   searchContainerFocused: {
     borderColor: '#111111',
   },
   searchIcon: {
-    marginRight: 8,
+    marginRight: 10,
   },
   searchBar: {
     flex: 1,
     color: '#111111',
-    fontSize: 14,
+    fontSize: 15,
     height: '100%',
   },
-  // List items styles
+  clearButton: {
+    padding: 4,
+  },
+  // Standalone MoMo filter row
+  filterOptionsRow: {
+    flexDirection: 'row',
+    marginHorizontal: 4,
+    marginBottom: 20,
+  },
+  momoFilterBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  momoFilterBtnActive: {
+    backgroundColor: '#F59E0B0a',
+    borderColor: '#F59E0B',
+  },
+  momoFilterBtnText: {
+    color: '#8E9AA6',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  momoFilterBtnTextActive: {
+    color: '#D97706',
+  },
+  // Date group list styles
   dateGroup: {
     marginBottom: 20,
   },
   dateHeader: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: 'bold',
     color: '#8E9AA6',
-    marginBottom: 10,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    marginBottom: 10,
     paddingLeft: 4,
   },
   expenseCard: {
@@ -595,99 +676,154 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: '#ffffff',
     borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    padding: 16,
     marginBottom: 8,
     borderWidth: 1,
     borderColor: '#EAEBEF',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.02,
-    shadowRadius: 4,
+    shadowRadius: 8,
     elevation: 1,
   },
   sharedCard: {
-    borderColor: '#8B5CF630',
+    borderColor: '#8B5CF640',
   },
   expenseLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     flex: 1,
+    marginRight: 16,
   },
   iconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#F8F9FA',
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 14,
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
   },
   icon: {
-    fontSize: 18,
+    fontSize: 20,
   },
   descRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 3,
-  },
-  sharedBadge: {
-    backgroundColor: "#8B5CF612",
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 1.5,
-    borderWidth: 1,
-    borderColor: "#8B5CF630",
-  },
-  sharedBadgeText: {
-    fontSize: 10,
-    color: "#8B5CF6",
-    fontWeight: "600",
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
   },
   expenseDescription: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#111111',
   },
   expenseCategory: {
     fontSize: 11,
     color: '#8E9AA6',
-    marginTop: 4,
+    marginBottom: 6,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 6,
+    flexWrap: 'wrap',
+  },
+  sharedBadge: {
+    backgroundColor: '#8B5CF610',
+    borderWidth: 1,
+    borderColor: '#8B5CF625',
+    borderRadius: 12,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+  },
+  sharedBadgeText: {
+    color: '#8B5CF6',
+    fontSize: 10,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  paymentBadge: {
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+    borderRadius: 12,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+  },
+  paymentBadgeText: {
+    color: '#8E9AA6',
+    fontSize: 10,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  momoBadge: {
+    backgroundColor: '#F59E0B10',
+    borderColor: '#F59E0B25',
+  },
+  momoBadgeText: {
+    color: '#D97706',
   },
   expenseRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
   },
   expenseAmount: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FF3B30',
-    marginRight: 4,
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#111111',
+    marginBottom: 6,
   },
   deleteBtn: {
-    padding: 6,
+    padding: 4,
   },
+  // Tags styles
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  tagPill: {
+    backgroundColor: '#F2F4F7',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+  },
+  tagText: {
+    fontSize: 10,
+    color: '#8E9AA6',
+    fontWeight: '500',
+  },
+  // Empty & Hint states
   emptyState: {
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 40,
   },
   emptyIcon: {
-    fontSize: 48,
-    marginBottom: 16,
+    fontSize: 36,
+    marginBottom: 10,
   },
   emptyText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#111111',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   emptySubtext: {
-    fontSize: 14,
+    fontSize: 13,
+    color: '#8E9AA6',
+  },
+  hint: {
+    fontSize: 11,
     color: '#8E9AA6',
     textAlign: 'center',
-    paddingHorizontal: 24,
+    marginTop: 10,
+    fontStyle: 'italic',
   },
   errorIcon: {
     fontSize: 48,
@@ -710,33 +846,5 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 15,
     fontWeight: 'bold',
-  },
-  tagsContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    marginTop: 6,
-  },
-  tagPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F2F4F7",
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderWidth: 1,
-    borderColor: "#EAEBEF",
-  },
-  tagText: {
-    fontSize: 11,
-    color: "#111111",
-    fontWeight: "500",
-  },
-  hint: {
-    textAlign: "center",
-    fontSize: 11,
-    color: "#8E9AA650",
-    paddingTop: 16,
-    paddingBottom: 16,
   },
 });

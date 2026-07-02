@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import user_service.model.Reminder;
 import user_service.repository.ReminderRepository;
+import user_service.repository.UserRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -14,9 +15,15 @@ public class ReminderService {
     @Autowired
     private ReminderRepository reminderRepository;
 
+    @Autowired
+    private UserRepository userRepository;
+
     public Reminder createReminder(Long userId, String title, BigDecimal amount,
                                    LocalDate dueDate, Boolean isRecurring,
                                    String recurrenceType) {
+        if (!userRepository.existsById(userId)) {
+            throw new RuntimeException("User not found: " + userId);
+        }
         Reminder reminder = new Reminder();
         reminder.setUserId(userId);
         reminder.setTitle(title);
@@ -49,6 +56,9 @@ public class ReminderService {
     }
 
     public void deleteReminder(Long reminderId) {
+        if (!reminderRepository.existsById(reminderId)) {
+            throw new RuntimeException("Reminder not found: " + reminderId);
+        }
         reminderRepository.deleteById(reminderId);
     }
 }

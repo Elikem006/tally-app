@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Dimensions,
+  RefreshControl,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -57,6 +58,8 @@ export default function ReportScreen() {
   const [selectedYear, setSelectedYear] = useState(todayYear);
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Chart data states
   const [expenses, setExpenses] = useState<any[]>([]);
@@ -69,30 +72,33 @@ export default function ReportScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchReport(selectedMonth, selectedYear);
-      fetchExpenses();
+      fetchReportAndExpenses(selectedMonth, selectedYear, true);
     }, [selectedMonth, selectedYear])
   );
 
-  async function fetchReport(month: number, year: number) {
-    setLoading(true);
+  async function fetchReportAndExpenses(month: number, year: number, showSpinner = true) {
+    if (showSpinner) setLoading(true);
+    setError(null);
     try {
-      const reportRes = await expenseAPI.getMonthlyReport(getUserId(), month + 1, year);
+      const userId = getUserId();
+      const [reportRes, expensesRes] = await Promise.all([
+        expenseAPI.getMonthlyReport(userId, month + 1, year),
+        expenseAPI.getCombinedHistory(userId),
+      ]);
       setReport(reportRes.data);
+      setExpenses(expensesRes.data || []);
     } catch (e) {
-      console.log("Error fetching report:", e);
+      console.log("Error loading reports data:", e);
+      setError("Failed to load reports. Pull down to refresh.");
     } finally {
       setLoading(false);
     }
   }
 
-  async function fetchExpenses() {
-    try {
-      const res = await expenseAPI.getCombinedHistory(getUserId());
-      setExpenses(res.data || []);
-    } catch (e) {
-      console.log("Error fetching expenses for chart:", e);
-    }
+  async function onRefresh() {
+    setRefreshing(true);
+    await fetchReportAndExpenses(selectedMonth, selectedYear, false);
+    setRefreshing(false);
   }
 
   function goToPreviousMonth() {
@@ -294,10 +300,23 @@ export default function ReportScreen() {
     </View>
   );
 
+  if (error && !report) {
+    return (
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.centered}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}
+      >
+        <Text style={styles.errorText}>{error}</Text>
+      </ScrollView>
+    );
+  }
+
   return (
     <ScrollView 
       style={styles.container} 
       contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}
     >
       <Text style={styles.cardHeaderTitle}>Monthly Report</Text>
 
@@ -385,7 +404,7 @@ export default function ReportScreen() {
       {/* Month Navigation Control */}
       {MonthNav}
 
-      {loading ? (
+      {loading && !refreshing ? (
         <View style={styles.loadingBox}>
           <ActivityIndicator size="large" color="#111111" />
         </View>
@@ -528,13 +547,27 @@ export default function ReportScreen() {
                       </View>
                       <View style={styles.perfBarRow}>
                         <View style={styles.barTrack}>
-                          <View style={[styles.barFill, { width: `${pct}%`, backgroundColor: color }]} />
+                          <View 
+                            style={[
+                              styles.barFill, 
+                              { 
+                                width: `${pct}%`,
+                                backgroundColor: color
+                              }
+                            ]} 
+                          />
                         </View>
-                        <Text style={[styles.perfPct, { color }]}>{pct.toFixed(0)}%</Text>
+                        <Text style={[styles.perfPct, { color }]}>
+                          {parseFloat(item.percentage).toFixed(0)}%
+                        </Text>
                       </View>
                       <View style={styles.perfAmounts}>
-                        <Text style={styles.perfSpent}>GHS {parseFloat(item.spent).toFixed(0)} spent</Text>
-                        <Text style={styles.perfLimit}>limit: GHS {parseFloat(item.limit).toFixed(0)}</Text>
+                        <Text style={styles.perfSpent}>
+                          Spent: GHS {parseFloat(item.spent).toFixed(0)}
+                        </Text>
+                        <Text style={styles.perfLimit}>
+                          Limit: GHS {parseFloat(item.limit).toFixed(0)}
+                        </Text>
                       </View>
                     </View>
                   );
@@ -544,25 +577,31 @@ export default function ReportScreen() {
           </>
         );
       })()}
-
-      <View style={{ height: 40 }} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: "#F2F4F7" 
+  container: {
+    flex: 1,
+    backgroundColor: '#F2F4F7',
   },
-  content: { 
+  centered: {
+    flex: 1,
+    backgroundColor: '#F2F4F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  content: {
     paddingHorizontal: 20,
+    paddingTop: 30,
     paddingBottom: 40,
   },
   cardHeaderTitle: {
     fontSize: 24,
-    fontWeight: "bold",
-    color: "#111111",
+    fontWeight: 'bold',
+    color: '#111111',
     marginBottom: 20,
     paddingLeft: 4,
   },
@@ -572,157 +611,142 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     backgroundColor: "#ffffff",
     borderRadius: 24,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    marginBottom: 20,
+    padding: 12,
     borderWidth: 1,
     borderColor: "#EAEBEF",
+    marginBottom: 16,
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.03,
+    shadowOpacity: 0.02,
     shadowRadius: 8,
-    elevation: 2,
+    elevation: 1,
   },
-  navArrow: { 
-    padding: 6,
-    borderRadius: 16,
+  navArrow: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "#F8F9FA",
     alignItems: "center",
     justifyContent: "center",
-  },
-  monthLabel: { 
-    fontSize: 16, 
-    fontWeight: "bold", 
-    color: "#111111" 
-  },
-  loadingBox: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 64,
-  },
-  emptyBox: {
-    backgroundColor: "#ffffff",
-    borderRadius: 24,
-    padding: 32,
-    alignItems: "center",
     borderWidth: 1,
     borderColor: "#EAEBEF",
   },
-  emptyText: { 
-    color: "#8E9AA6", 
-    fontSize: 15,
-    fontWeight: "500" 
+  monthLabel: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#111111",
   },
-  // Premium cards
   card: {
     backgroundColor: "#ffffff",
     borderRadius: 24,
     padding: 20,
-    marginBottom: 16,
     borderWidth: 1,
     borderColor: "#EAEBEF",
+    marginBottom: 16,
     shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.03,
     shadowRadius: 10,
     elevation: 2,
   },
   cardTitle: {
-    fontSize: 11,
-    color: "#8E9AA6",
+    fontSize: 13,
     fontWeight: "bold",
+    color: "#8E9AA6",
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: 12,
+    marginBottom: 14,
   },
-  bigAmount: { 
-    fontSize: 32, 
-    fontWeight: "bold", 
-    color: "#111111", 
-    marginBottom: 2 
+  bigAmount: {
+    fontSize: 32,
+    fontWeight: "bold",
+    color: "#111111",
+    marginBottom: 4,
   },
-  spentLabel: { 
-    fontSize: 13, 
-    color: "#8E9AA6", 
-    fontWeight: "500",
-    marginBottom: 16 
+  spentLabel: {
+    fontSize: 12,
+    color: "#8E9AA6",
+    marginBottom: 20,
   },
   comparisonRow: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "#F8F9FA",
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#EAEBEF",
     marginBottom: 16,
-    borderTopWidth: 1,
-    borderTopColor: "#EAEBEF",
-    paddingTop: 16,
   },
-  comparisonCol: { 
-    flex: 1, 
-    alignItems: "center" 
+  comparisonCol: {
+    flex: 1,
+    alignItems: "center",
   },
-  divider: { 
-    width: 1, 
-    height: 32, 
-    backgroundColor: "#EAEBEF" 
+  compLabel: {
+    fontSize: 10,
+    color: "#8E9AA6",
+    fontWeight: "bold",
+    textTransform: "uppercase",
+    marginBottom: 4,
   },
-  compLabel: { 
-    fontSize: 11, 
-    color: "#8E9AA6", 
-    fontWeight: "600",
-    marginBottom: 4 
+  compValue: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#111111",
   },
-  compValue: { 
-    fontSize: 15, 
-    fontWeight: "bold", 
-    color: "#111111" 
+  divider: {
+    width: 1,
+    height: 30,
+    backgroundColor: "#EAEBEF",
   },
-  changeBadge: { 
-    borderRadius: 16, 
-    paddingVertical: 8, 
-    paddingHorizontal: 16, 
-    alignItems: "center" 
+  changeBadge: {
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: "center",
   },
-  changeText: { 
-    fontSize: 13, 
-    fontWeight: "700" 
+  changeText: {
+    fontSize: 12,
+    fontWeight: "bold",
   },
-  highlightRow: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    gap: 16 
+  highlightRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
   },
   iconBox: {
     width: 48,
     height: 48,
     borderRadius: 24,
     backgroundColor: "#F8F9FA",
-    alignItems: "center",
-    justifyContent: "center",
     borderWidth: 1,
     borderColor: "#EAEBEF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  highlightEmoji: {
+    fontSize: 24,
+  },
+  highlightCategory: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#111111",
+    marginBottom: 2,
+  },
+  highlightAmount: {
+    fontSize: 14,
+    color: "#8E9AA6",
+    fontWeight: "600",
   },
   iconBoxSmall: {
     width: 32,
     height: 32,
     borderRadius: 16,
     backgroundColor: "#F8F9FA",
-    alignItems: "center",
-    justifyContent: "center",
     borderWidth: 1,
     borderColor: "#EAEBEF",
-  },
-  highlightEmoji: { 
-    fontSize: 24 
-  },
-  highlightCategory: { 
-    fontSize: 16, 
-    fontWeight: "bold", 
-    color: "#111111", 
-    marginBottom: 4 
-  },
-  highlightAmount: { 
-    fontSize: 15, 
-    color: "#8E9AA6", 
-    fontWeight: "600" 
+    alignItems: "center",
+    justifyContent: "center",
   },
   breakdownRow: {
     flexDirection: "row",
@@ -832,7 +856,7 @@ const styles = StyleSheet.create({
   // Spending Curve Chart Styles
   chartCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 24,
+    borderRadius: 28,
     padding: 20,
     borderWidth: 1,
     borderColor: '#EAEBEF',
@@ -926,5 +950,25 @@ const styles = StyleSheet.create({
   },
   timelineMiniTextActive: {
     color: '#ffffff',
+  },
+  loadingBox: {
+    paddingVertical: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyBox: {
+    paddingVertical: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyText: {
+    fontSize: 14,
+    color: "#8E9AA6",
+    fontStyle: "italic",
+  },
+  errorText: {
+    color: "#FF3B30",
+    fontSize: 14,
+    textAlign: "center",
   },
 });
