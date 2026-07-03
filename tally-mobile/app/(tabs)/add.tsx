@@ -292,20 +292,7 @@ export default function AddScreen() {
     setMomoStatus("idle");
   }
 
-  // Get dynamic ring color based on budget consumption
-  const getRingColor = (cat: string) => {
-    const spentAmt = spent[cat] || 0;
-    const limitAmt = limits[cat] || 0;
 
-    if (limitAmt > 0) {
-      const ratio = spentAmt / limitAmt;
-      if (ratio > 1) return '#FF3B30'; // Red - over budget
-      if (ratio >= 0.8) return '#FF9500'; // Orange - warning
-      if (ratio >= 0.5) return '#FFCC00'; // Yellow - intermediate
-      return '#34C759'; // Green - healthy
-    }
-    return spentAmt > 0 ? '#34C759' : '#C8D2DC'; // Neutral fallback
-  };
 
   if (fetching) {
     return (
@@ -365,7 +352,6 @@ export default function AddScreen() {
                   <Text style={styles.categoryAmountText}>
                     GHS {(spent[cat] || 0).toFixed(2)}
                   </Text>
-                  <View style={[styles.circleRing, { borderColor: getRingColor(cat) }]} />
                 </View>
               </TouchableOpacity>
             ))}
@@ -717,12 +703,7 @@ const styles = StyleSheet.create({
     color: '#111111',
     marginRight: 6,
   },
-  circleRing: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    borderWidth: 3,
-  },
+
   descriptionBox: {
     backgroundColor: '#F8F9FA',
     borderRadius: 16,
