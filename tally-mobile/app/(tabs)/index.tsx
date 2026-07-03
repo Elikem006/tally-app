@@ -92,6 +92,7 @@ export default function HomeScreen() {
   const [momoStatus, setMomoStatus] = useState<"loading" | "available" | "unavailable">("loading");
   const [momoBalanceLoading, setMomoBalanceLoading] = useState(false);
   const [momoMonthlySpent, setMomoMonthlySpent] = useState("0.00");
+  const [hideMomoBalance, setHideMomoBalance] = useState(false);
 
   // Quick add state
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -106,6 +107,11 @@ export default function HomeScreen() {
       loadProfileImage();
       consumeMomoRefresh();
       getUnreadCount().then(setUnreadCount);
+      AsyncStorage.getItem('hide_momo_balance').then((val) => {
+        if (val !== null) {
+          setHideMomoBalance(val === 'true');
+        }
+      });
     }, [])
   );
 
@@ -120,6 +126,16 @@ export default function HomeScreen() {
       }
     } catch (e) {
       console.log('Error loading profile image on home screen:', e);
+    }
+  }
+
+  async function toggleHideMomoBalance() {
+    try {
+      const newVal = !hideMomoBalance;
+      setHideMomoBalance(newVal);
+      await AsyncStorage.setItem('hide_momo_balance', String(newVal));
+    } catch (e) {
+      console.log('Error toggling hide momo balance:', e);
     }
   }
 
@@ -628,8 +644,23 @@ export default function HomeScreen() {
           momoStatus === "unavailable" && styles.momoCardUnavailable,
         ]}>
           <View style={styles.momoCardHeader}>
-            <Text style={styles.momoCardIcon}>📱</Text>
-            <Text style={styles.momoCardTitle}>MTN MoMo Sandbox Wallet</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+              <Text style={styles.momoCardIcon}>📱</Text>
+              <Text style={styles.momoCardTitle}>MTN MoMo Sandbox Wallet</Text>
+            </View>
+            {!momoBalanceLoading && momoStatus === "available" && (
+              <TouchableOpacity
+                onPress={toggleHideMomoBalance}
+                style={styles.hideMomoBtn}
+                activeOpacity={0.7}
+              >
+                <Feather
+                  name={hideMomoBalance ? "eye-off" : "eye"}
+                  size={18}
+                  color="#D97706"
+                />
+              </TouchableOpacity>
+            )}
           </View>
 
           {momoBalanceLoading && (
@@ -641,7 +672,9 @@ export default function HomeScreen() {
 
           {!momoBalanceLoading && momoStatus === "available" && (
             <View>
-              <Text style={styles.momoBalance}>EUR {momoBalance}</Text>
+              <Text style={styles.momoBalance}>
+                {hideMomoBalance ? "EUR ••••••" : `EUR ${momoBalance}`}
+              </Text>
               <Text style={styles.momoSpentSub}>
                 GHS {momoMonthlySpent} spent via MoMo this month
               </Text>
@@ -1262,6 +1295,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 12,
+  },
+  hideMomoBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#F59E0B10',
+    borderWidth: 1,
+    borderColor: '#F59E0B20',
   },
   momoCardIcon: {
     fontSize: 20,
