@@ -20,6 +20,7 @@ import { getUserId } from "../../services/storage";
 import { addHistoryItem } from "../../services/notificationHistory";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
+import { useTheme } from '../../hooks/useTheme';
 
 // Helper to check urgency (overdue or due within 2 days)
 const getUrgentStatus = (dueDateStr: string, isPaid: boolean): { urgent: boolean; label: string; color: string } | null => {
@@ -56,6 +57,7 @@ const getUrgentStatus = (dueDateStr: string, isPaid: boolean): { urgent: boolean
 
 export default function RemindersScreen() {
   const insets = useSafeAreaInsets();
+  const { colors, theme } = useTheme();
   const [reminders, setReminders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -193,7 +195,7 @@ export default function RemindersScreen() {
             await fetchReminders(false);
             showToast("Reminder deleted", "info");
           } catch (error) {
-            showToast("Failed to delete reminder", "error");
+showToast("Failed to delete reminder", "error");
           }
         },
       },
@@ -202,8 +204,8 @@ export default function RemindersScreen() {
 
   if (loading && !refreshing) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#111111" />
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -211,26 +213,26 @@ export default function RemindersScreen() {
   if (error && reminders.length === 0) {
     return (
       <ScrollView
-        style={styles.container}
+        style={[styles.container, { backgroundColor: colors.background }]}
         contentContainerStyle={styles.centered}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
-        <Text style={styles.errorText}>{error}</Text>
+        <Text style={[styles.errorText, { color: colors.textSecondary }]}>{error}</Text>
       </ScrollView>
     );
   }
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.background }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <View style={[styles.flex, { paddingTop: Math.max(insets.top, 20) }]}>
+      <View style={[styles.flex, { backgroundColor: colors.background, paddingTop: Math.max(insets.top, 20) }]}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Bill Reminders</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Bill Reminders</Text>
           <TouchableOpacity
-            style={styles.addBtn}
+            style={[styles.addBtn, { backgroundColor: colors.primary }]}
             onPress={() => setShowAddForm(!showAddForm)}
             activeOpacity={0.8}
           >
@@ -241,24 +243,24 @@ export default function RemindersScreen() {
         {showAddForm && (
           <ScrollView
             style={{ maxHeight: 350, marginHorizontal: 16, marginBottom: 16 }}
-            contentContainerStyle={[styles.formCard, { marginHorizontal: 0, marginBottom: 0 }]}
+            contentContainerStyle={[styles.formCard, { backgroundColor: colors.cardBg, borderColor: colors.border, marginHorizontal: 0, marginBottom: 0 }]}
             keyboardShouldPersistTaps="handled"
             automaticallyAdjustKeyboardInsets={true}
           >
-            <Text style={styles.formTitle}>New Reminder</Text>
+            <Text style={[styles.formTitle, { color: colors.text }]}>New Reminder</Text>
 
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
               placeholder="Bill Title (e.g. Rent, Electricity)"
-              placeholderTextColor="#8E9AA6"
+              placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
               value={title}
               onChangeText={setTitle}
             />
 
             <TextInput
-              style={styles.input}
+              style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
               placeholder="Amount GHS (optional)"
-              placeholderTextColor="#8E9AA6"
+              placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
               keyboardType="numeric"
               value={amount}
               onChangeText={setAmount}
@@ -267,8 +269,8 @@ export default function RemindersScreen() {
             <Text style={styles.label}>Due Date</Text>
             <View style={styles.datePickerRow}>
               {/* Day */}
-              <View style={styles.datePickerSection}>
-                <Text style={styles.datePickerLabel}>Day</Text>
+              <View style={[styles.datePickerSection, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                <Text style={[styles.datePickerLabel, { color: colors.textSecondary }]}>Day</Text>
                 <ScrollView
                   style={styles.datePickerScroll}
                   showsVerticalScrollIndicator={false}
@@ -277,10 +279,10 @@ export default function RemindersScreen() {
                   {DAYS.map((day) => (
                     <TouchableOpacity
                       key={day}
-                      style={[styles.datePickerItem, selectedDay === day && styles.datePickerItemSelected]}
+                      style={[styles.datePickerItem, selectedDay === day && { backgroundColor: colors.primary }]}
                       onPress={() => setSelectedDay(day)}
                     >
-                      <Text style={[styles.datePickerItemText, selectedDay === day && styles.datePickerItemTextSelected]}>
+                      <Text style={[styles.datePickerItemText, { color: colors.text }, selectedDay === day && { color: '#ffffff', fontWeight: 'bold' }]}>
                         {day}
                       </Text>
                     </TouchableOpacity>
@@ -288,8 +290,8 @@ export default function RemindersScreen() {
                 </ScrollView>
               </View>
               {/* Month */}
-              <View style={[styles.datePickerSection, { flex: 2 }]}>
-                <Text style={styles.datePickerLabel}>Month</Text>
+              <View style={[styles.datePickerSection, { flex: 2, backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                <Text style={[styles.datePickerLabel, { color: colors.textSecondary }]}>Month</Text>
                 <ScrollView
                   style={styles.datePickerScroll}
                   showsVerticalScrollIndicator={false}
@@ -298,13 +300,13 @@ export default function RemindersScreen() {
                   {MONTHS.map((month) => (
                     <TouchableOpacity
                       key={month.value}
-                      style={[styles.datePickerItem, selectedMonth === month.value && styles.datePickerItemSelected]}
+                      style={[styles.datePickerItem, selectedMonth === month.value && { backgroundColor: colors.primary }]}
                       onPress={() => {
                         setSelectedMonth(month.value);
                         if (parseInt(selectedDay) > month.days) setSelectedDay("01");
                       }}
                     >
-                      <Text style={[styles.datePickerItemText, selectedMonth === month.value && styles.datePickerItemTextSelected]}>
+                      <Text style={[styles.datePickerItemText, { color: colors.text }, selectedMonth === month.value && { color: '#ffffff', fontWeight: 'bold' }]}>
                         {month.label}
                       </Text>
                     </TouchableOpacity>
@@ -312,8 +314,8 @@ export default function RemindersScreen() {
                 </ScrollView>
               </View>
               {/* Year */}
-              <View style={styles.datePickerSection}>
-                <Text style={styles.datePickerLabel}>Year</Text>
+              <View style={[styles.datePickerSection, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                <Text style={[styles.datePickerLabel, { color: colors.textSecondary }]}>Year</Text>
                 <ScrollView
                   style={styles.datePickerScroll}
                   showsVerticalScrollIndicator={false}
@@ -322,10 +324,10 @@ export default function RemindersScreen() {
                   {YEARS.map((year) => (
                     <TouchableOpacity
                       key={year}
-                      style={[styles.datePickerItem, selectedYear === year && styles.datePickerItemSelected]}
+                      style={[styles.datePickerItem, selectedYear === year && { backgroundColor: colors.primary }]}
                       onPress={() => setSelectedYear(year)}
                     >
-                      <Text style={[styles.datePickerItemText, selectedYear === year && styles.datePickerItemTextSelected]}>
+                      <Text style={[styles.datePickerItemText, { color: colors.text }, selectedYear === year && { color: '#ffffff', fontWeight: 'bold' }]}>
                         {year}
                       </Text>
                     </TouchableOpacity>
@@ -334,27 +336,27 @@ export default function RemindersScreen() {
               </View>
             </View>
             {selectedDay && selectedMonth && selectedYear && (
-              <Text style={styles.selectedDateText}>
+              <Text style={[styles.selectedDateText, { color: colors.textSecondary }]}>
                 📅 Selected: {selectedDay} {MONTHS.find((m) => m.value === selectedMonth)?.label} {selectedYear}
               </Text>
             )}
 
             {/* Recurring toggle */}
             <View style={styles.toggleRow}>
-              <Text style={styles.toggleLabel}>Is this a monthly recurring bill?</Text>
+              <Text style={[styles.toggleLabel, { color: colors.text }]}>Is this a monthly recurring bill?</Text>
               <TouchableOpacity
-                style={[styles.toggleBtn, isRecurring && styles.toggleBtnActive]}
+                style={[styles.toggleBtn, { backgroundColor: colors.neutralBg }, isRecurring && { backgroundColor: colors.primary }]}
                 onPress={() => setIsRecurring(!isRecurring)}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.toggleBtnText, isRecurring && styles.toggleBtnTextActive]}>
+                <Text style={[styles.toggleBtnText, { color: colors.textSecondary }, isRecurring && { color: "#ffffff", fontWeight: "bold" }]}>
                   {isRecurring ? "Monthly ✓" : "Once"}
                 </Text>
               </TouchableOpacity>
             </View>
 
             <TouchableOpacity
-              style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
+              style={[styles.saveBtn, { backgroundColor: colors.primary }, saving && styles.saveBtnDisabled]}
               onPress={handleAddReminder}
               disabled={saving}
               activeOpacity={0.8}
@@ -365,7 +367,7 @@ export default function RemindersScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.cancelBtn}
+              style={[styles.cancelBtn, { backgroundColor: colors.neutralBg }]}
               onPress={() => {
                 setShowAddForm(false);
                 setTitle("");
@@ -377,7 +379,7 @@ export default function RemindersScreen() {
               }}
               activeOpacity={0.8}
             >
-              <Text style={styles.cancelBtnText}>Cancel</Text>
+              <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
             </TouchableOpacity>
           </ScrollView>
         )}
@@ -386,8 +388,8 @@ export default function RemindersScreen() {
         {reminders.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyIcon}>🔔</Text>
-            <Text style={styles.emptyText}>No reminders yet</Text>
-            <Text style={styles.emptySubtext}>
+            <Text style={[styles.emptyText, { color: colors.text }]}>No reminders yet</Text>
+            <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
               Add bills to get notified when they're due
             </Text>
           </View>
@@ -397,27 +399,31 @@ export default function RemindersScreen() {
             keyExtractor={(item) => String(item.id)}
             contentContainerStyle={styles.list}
             keyboardShouldPersistTaps="handled"
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
             renderItem={({ item }) => {
               const isPaid = item.isPaid || item.paid || false;
               const urgentStatus = getUrgentStatus(item.dueDate, isPaid);
 
               return (
-                <View style={[styles.card, isPaid && styles.cardPaid]}>
+                <View style={[
+                  styles.card,
+                  { backgroundColor: colors.cardBg, borderColor: colors.border },
+                  isPaid && { borderColor: colors.positive + '40', opacity: 0.8 }
+                ]}>
                   <View style={styles.cardBody}>
                     {/* Left Icon */}
-                    <View style={[styles.iconBox, isPaid && styles.iconBoxPaid]}>
+                    <View style={[styles.iconBox, { backgroundColor: colors.neutralBg }, isPaid && { backgroundColor: colors.positive + '15' }]}>
                       <Feather 
                         name={isPaid ? "check-circle" : "file-text"} 
                         size={20} 
-                        color={isPaid ? "#34C759" : "#111111"} 
+                        color={isPaid ? colors.positive : colors.text} 
                       />
                     </View>
 
                     {/* Info details */}
                     <View style={styles.cardInfo}>
                       <View style={styles.titleRow}>
-                        <Text style={styles.reminderTitle} numberOfLines={1}>
+                        <Text style={[styles.reminderTitle, { color: colors.text }]} numberOfLines={1}>
                           {item.title}
                         </Text>
                         {urgentStatus?.urgent && (
@@ -431,19 +437,19 @@ export default function RemindersScreen() {
 
                       <View style={styles.metaRow}>
                         {item.dueDate && (
-                          <Text style={styles.reminderDue}>
+                          <Text style={[styles.reminderDue, { color: colors.textSecondary }]}>
                             Due: {item.dueDate}
                           </Text>
                         )}
                         {item.isRecurring && (
-                          <Text style={styles.recurringTag}>
+                          <Text style={[styles.recurringTag, { color: colors.textSecondary }]}>
                             • {item.recurrenceType || "Recurring"}
                           </Text>
                         )}
                       </View>
 
                       {item.amount != null && item.amount !== "" && (
-                        <Text style={styles.reminderAmount}>
+                        <Text style={[styles.reminderAmount, { color: colors.text }]}>
                           GHS {parseFloat(item.amount).toFixed(2)}
                         </Text>
                       )}
@@ -460,12 +466,12 @@ export default function RemindersScreen() {
                       </TouchableOpacity>
 
                       {isPaid ? (
-                        <View style={styles.paidBadge}>
-                          <Text style={styles.paidBadgeText}>✓ Paid</Text>
+                        <View style={[styles.paidBadge, { backgroundColor: colors.positive + '15' }]}>
+                          <Text style={[styles.paidBadgeText, { color: colors.positive }]}>✓ Paid</Text>
                         </View>
                       ) : (
                         <TouchableOpacity
-                          style={styles.markPaidBtn}
+                          style={[styles.markPaidBtn, { backgroundColor: colors.primary }]}
                           onPress={() => handleMarkPaid(String(item.id))}
                           activeOpacity={0.8}
                         >

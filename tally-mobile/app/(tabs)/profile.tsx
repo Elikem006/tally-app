@@ -23,6 +23,7 @@ import { getUserId, safeStorage, currentUser } from '../../services/storage';
 import Avatar from '../../components/Avatar';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
+import { useTheme } from '../../hooks/useTheme';
 
 const CATEGORY_ICONS: { [key: string]: string } = {
   Food: '🍔',
@@ -34,6 +35,7 @@ const CATEGORY_ICONS: { [key: string]: string } = {
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const { themeMode, setThemeMode, colors, theme } = useTheme();
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [showUrlModal, setShowUrlModal] = useState(false);
   const [inputUrl, setInputUrl] = useState('');
@@ -272,19 +274,19 @@ export default function ProfileScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.flex}
+      style={[styles.flex, { backgroundColor: colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView
-        style={styles.container}
+        style={[styles.container, { backgroundColor: colors.background }]}
         contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
         keyboardShouldPersistTaps="handled"
         automaticallyAdjustKeyboardInsets={true}
       >
-        {/* Light card container */}
-        <View style={styles.mainCard}>
-          <Text style={styles.cardHeaderTitle}>My Profile</Text>
+        {/* Card container */}
+        <View style={[styles.mainCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+          <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>My Profile</Text>
 
           {/* Avatar View with edit indicator */}
           <View style={styles.avatarSection}>
@@ -310,47 +312,47 @@ export default function ProfileScreen() {
               </View>
             </TouchableOpacity>
 
-            <Text style={styles.name}>{currentUser.userName}</Text>
-            <Text style={styles.subtitle}>Tally Member</Text>
+            <Text style={[styles.name, { color: colors.text }]}>{currentUser.userName}</Text>
+            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Tally Member</Text>
           </View>
 
           {/* Stats section */}
-          <Text style={styles.label}>Your Stats</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Your Stats</Text>
           {loadingStats && !refreshing ? (
-            <ActivityIndicator size="small" color="#111111" style={{ marginVertical: 16 }} />
+            <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 16 }} />
           ) : error && !stats ? (
             <Text style={styles.errorText}>{error}</Text>
           ) : stats ? (
             <View style={{ marginBottom: 16 }}>
               {/* 3-card stat row */}
               <View style={styles.statsRow}>
-                <View style={styles.statCard}>
-                  <Text style={styles.statNumber}>{stats.totalExpenses}</Text>
-                  <Text style={styles.statLabel}>Total Trx</Text>
+                <View style={[styles.statCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                  <Text style={[styles.statNumber, { color: colors.text }]}>{stats.totalExpenses}</Text>
+                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total Trx</Text>
                 </View>
-                <View style={styles.statCard}>
-                  <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit>
+                <View style={[styles.statCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                  <Text style={[styles.statNumber, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>
                     GHS {stats.totalSpent.toFixed(0)}
                   </Text>
-                  <Text style={styles.statLabel}>Total Spent</Text>
+                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total Spent</Text>
                 </View>
-                <View style={styles.statCard}>
-                  <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit>
+                <View style={[styles.statCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                  <Text style={[styles.statNumber, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>
                     GHS {stats.thisMonthSpent.toFixed(0)}
                   </Text>
-                  <Text style={styles.statLabel}>This Month</Text>
+                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>This Month</Text>
                 </View>
               </View>
 
               {/* Top category card */}
               {stats.topCategory?.category && (
-                <View style={styles.topCategoryCard}>
+                <View style={[styles.topCategoryCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
                   <Text style={{ fontSize: 28 }}>
                     {CATEGORY_ICONS[stats.topCategory.category] || "📦"}
                   </Text>
                   <View>
-                    <Text style={styles.topCatName}>{stats.topCategory.category}</Text>
-                    <Text style={styles.topCatSub}>Your most spent category</Text>
+                    <Text style={[styles.topCatName, { color: colors.text }]}>{stats.topCategory.category}</Text>
+                    <Text style={[styles.topCatSub, { color: colors.textSecondary }]}>Your most spent category</Text>
                   </View>
                 </View>
               )}
@@ -358,72 +360,103 @@ export default function ProfileScreen() {
           ) : null}
 
           {/* Navigation Action Links */}
-          <Text style={styles.label}>Actions</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Actions</Text>
           <TouchableOpacity
-            style={styles.detailCapsule}
+            style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
             onPress={() => router.push('/(tabs)/reminders')}
             activeOpacity={0.8}
           >
             <View style={styles.actionLeft}>
-              <Feather name="bell" size={16} color="#111111" style={{ marginRight: 8 }} />
-              <Text style={styles.actionText}>Bill Reminders</Text>
+              <Feather name="bell" size={16} color={colors.text} style={{ marginRight: 8 }} />
+              <Text style={[styles.actionText, { color: colors.text }]}>Bill Reminders</Text>
             </View>
-            <Feather name="chevron-right" size={16} color="#8E9AA6" />
+            <Feather name="chevron-right" size={16} color={colors.textSecondary} />
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.detailCapsule}
+            style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
             onPress={() => router.push('/(tabs)/report')}
             activeOpacity={0.8}
           >
             <View style={styles.actionLeft}>
-              <Feather name="trending-up" size={16} color="#111111" style={{ marginRight: 8 }} />
-              <Text style={styles.actionText}>Financial Reports</Text>
+              <Feather name="trending-up" size={16} color={colors.text} style={{ marginRight: 8 }} />
+              <Text style={[styles.actionText, { color: colors.text }]}>Financial Reports</Text>
             </View>
-            <Feather name="chevron-right" size={16} color="#8E9AA6" />
+            <Feather name="chevron-right" size={16} color={colors.textSecondary} />
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.detailCapsule}
+            style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
             onPress={() => router.push('/help')}
             activeOpacity={0.8}
           >
             <View style={styles.actionLeft}>
-              <Feather name="help-circle" size={16} color="#111111" style={{ marginRight: 8 }} />
-              <Text style={styles.actionText}>Help & Support</Text>
+              <Feather name="help-circle" size={16} color={colors.text} style={{ marginRight: 8 }} />
+              <Text style={[styles.actionText, { color: colors.text }]}>Help & Support</Text>
             </View>
-            <Feather name="chevron-right" size={16} color="#8E9AA6" />
+            <Feather name="chevron-right" size={16} color={colors.textSecondary} />
           </TouchableOpacity>
 
+          {/* Preferences / Theme Selector */}
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Preferences</Text>
+          <View style={[styles.themeSelectorCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+            <Text style={[styles.themeSelectorTitle, { color: colors.text }]}>App Theme</Text>
+            <View style={[styles.themeSelectorRow, { backgroundColor: colors.neutralBg }]}>
+              {(['light', 'dark', 'system'] as const).map((mode) => {
+                const isActive = themeMode === mode;
+                const labelMap = { light: '☀️ Light', dark: '🌙 Dark', system: '⚙️ System' };
+                return (
+                  <TouchableOpacity
+                    key={mode}
+                    style={[
+                      styles.themeBtn,
+                      isActive && { backgroundColor: colors.cardBg }
+                    ]}
+                    onPress={() => setThemeMode(mode)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[
+                      styles.themeBtnText,
+                      { color: colors.textSecondary },
+                      isActive && { color: colors.text, fontWeight: 'bold' }
+                    ]}>
+                      {labelMap[mode]}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
           {/* Profile Details Capsules */}
-          <Text style={styles.label}>Profile Details</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Profile Details</Text>
 
-          <View style={styles.detailCapsule}>
-            <Text style={styles.detailLabel}>Name</Text>
-            <Text style={styles.detailValue}>{currentUser.userName}</Text>
+          <View style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+            <Text style={[styles.detailLabel, { color: colors.text }]}>Name</Text>
+            <Text style={[styles.detailValue, { color: colors.textSecondary }]}>{currentUser.userName}</Text>
           </View>
 
-          <View style={styles.detailCapsule}>
-            <Text style={styles.detailLabel}>Email</Text>
-            <Text style={styles.detailValue}>{currentUser.email || 'N/A'}</Text>
+          <View style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+            <Text style={[styles.detailLabel, { color: colors.text }]}>Email</Text>
+            <Text style={[styles.detailValue, { color: colors.textSecondary }]}>{currentUser.email || 'N/A'}</Text>
           </View>
 
-          <View style={styles.detailCapsule}>
-            <Text style={styles.detailLabel}>User ID</Text>
-            <Text style={styles.detailValue}>#{currentUser.userId}</Text>
+          <View style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+            <Text style={[styles.detailLabel, { color: colors.text }]}>User ID</Text>
+            <Text style={[styles.detailValue, { color: colors.textSecondary }]}>#{currentUser.userId}</Text>
           </View>
 
           {/* MoMo number capsule */}
-          <View style={[styles.detailCapsule, editingPhone && { height: 'auto', flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
+          <View style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }, editingPhone && { height: 'auto', flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={styles.detailLabel}>MoMo Number</Text>
+              <Text style={[styles.detailLabel, { color: colors.text }]}>MoMo Number</Text>
               {!editingPhone && (
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={[styles.detailValue, { marginRight: 8 }]}>
+                  <Text style={[styles.detailValue, { marginRight: 8, color: colors.textSecondary }]}>
                     {currentUser.phoneNumber || 'Not set'}
                   </Text>
                   <TouchableOpacity onPress={() => setEditingPhone(true)}>
-                    <Text style={styles.editLinkText}>
+                    <Text style={[styles.editLinkText, { color: colors.primary }]}>
                       {currentUser.phoneNumber ? 'Edit' : '+ Add'}
                     </Text>
                   </TouchableOpacity>
@@ -433,21 +466,21 @@ export default function ProfileScreen() {
             {editingPhone && (
               <View style={styles.phoneInputRow}>
                 <TextInput
-                  style={styles.phoneInputSmall}
+                  style={[styles.phoneInputSmall, { backgroundColor: colors.cardBg, borderColor: colors.border, color: colors.text }]}
                   value={phoneNumber}
                   onChangeText={setPhoneNumber}
                   keyboardType="phone-pad"
                   maxLength={10}
                   placeholder="e.g. 0241234567"
-                  placeholderTextColor="#8E9AA6"
+                  placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
                   autoFocus
                 />
                 <View style={styles.phoneActions}>
                   <TouchableOpacity onPress={handleSavePhone} disabled={savingPhone} style={styles.phoneActionBtn}>
                     {savingPhone ? (
-                      <ActivityIndicator size="small" color="#8B5CF6" />
+                      <ActivityIndicator size="small" color={colors.primary} />
                     ) : (
-                      <Text style={styles.phoneActionBtnText}>Save</Text>
+                      <Text style={[styles.phoneActionBtnText, { color: colors.primary }]}>Save</Text>
                     )}
                   </TouchableOpacity>
                   <TouchableOpacity onPress={() => { setEditingPhone(false); setPhoneNumber(currentUser.phoneNumber || ""); }} style={styles.phoneActionBtn}>
@@ -458,9 +491,9 @@ export default function ProfileScreen() {
             )}
           </View>
 
-          <View style={styles.detailCapsule}>
-            <Text style={styles.detailLabel}>Account Type</Text>
-            <Text style={styles.detailValue}>Standard</Text>
+          <View style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+            <Text style={[styles.detailLabel, { color: colors.text }]}>Account Type</Text>
+            <Text style={[styles.detailValue, { color: colors.textSecondary }]}>Standard</Text>
           </View>
 
           {/* Logout button */}
@@ -477,14 +510,14 @@ export default function ProfileScreen() {
           onRequestClose={() => setShowUrlModal(false)}
         >
           <View style={styles.modalOverlay}>
-            <View style={styles.modalContentCard}>
-              <Text style={styles.modalTitle}>Paste Image URL</Text>
-              <Text style={styles.modalSubtitle}>Provide a link to your online profile photo:</Text>
+            <View style={[styles.modalContentCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Paste Image URL</Text>
+              <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>Provide a link to your online profile photo:</Text>
 
               <TextInput
-                style={styles.modalInput}
+                style={[styles.modalInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
                 placeholder="https://example.com/avatar.jpg"
-                placeholderTextColor="#8E9AA6"
+                placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
                 value={inputUrl}
                 onChangeText={setInputUrl}
                 autoCapitalize="none"
@@ -494,18 +527,18 @@ export default function ProfileScreen() {
 
               <View style={styles.modalBtnRow}>
                 <TouchableOpacity
-                  style={[styles.modalBtn, styles.modalBtnCancel]}
+                  style={[styles.modalBtn, { backgroundColor: colors.neutralBg }]}
                   onPress={() => setShowUrlModal(false)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.modalBtnCancelText}>Cancel</Text>
+                  <Text style={[styles.modalBtnCancelText, { color: colors.textSecondary }]}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.modalBtn, styles.modalBtnSave]}
+                  style={[styles.modalBtn, { backgroundColor: colors.primary }]}
                   onPress={handleSaveUrl}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.modalBtnSaveText}>Save</Text>
+                  <Text style={[styles.modalBtnSaveText, { color: '#ffffff' }]}>Save</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -519,6 +552,43 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
+  themeSelectorCard: {
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    marginBottom: 20,
+  },
+  themeSelectorTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 12,
+  },
+  themeSelectorRow: {
+    flexDirection: 'row',
+    borderRadius: 12,
+    padding: 4,
+  },
+  themeBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+  },
+  themeBtnActive: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  themeBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  themeBtnTextActive: {
+    fontWeight: 'bold',
+  },
   flex: {
     flex: 1,
     backgroundColor: '#F2F4F7',

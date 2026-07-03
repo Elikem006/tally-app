@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { expenseAPI, remindersAPI, budgetAPI, momoAPI } from '../../services/api';
 import { getUserId, getUserName, safeStorage } from '../../services/storage';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useTheme } from '../../hooks/useTheme';
 import { Svg, Path } from 'react-native-svg';
 import {
   addHistoryItem,
@@ -104,6 +105,7 @@ const EyelashOpenIcon = ({ size = 20, color = "#D97706" }) => (
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const { colors, theme } = useTheme();
   const [expenses, setExpenses] = useState<any[]>([]);
   const [budgets, setBudgets] = useState<any[]>([]);
   const [upcomingReminders, setUpcomingReminders] = useState<any[]>([]);
@@ -200,7 +202,8 @@ export default function HomeScreen() {
           const d = new Date(e.date);
           return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
         })
-        .reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0);
+        .filter((e: any) => parseFloat(e.amount || "0") < 0)
+        .reduce((sum: number, e: any) => sum + Math.abs(parseFloat(e.amount || "0")), 0);
       setMomoMonthlySpent(momoTotal.toFixed(2));
 
       // Fetch wallet balance
@@ -338,7 +341,12 @@ export default function HomeScreen() {
   }
 
   // Calculate Dynamic Spending & Budget sums
-  const totalSpent = expenses.reduce((sum, e) => sum + parseFloat(e.amount || '0'), 0);
+  const totalSpent = expenses
+    .filter(e => parseFloat(e.amount || '0') < 0)
+    .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || '0')), 0);
+  const totalIncome = expenses
+    .filter(e => parseFloat(e.amount || '0') > 0)
+    .reduce((sum, e) => sum + parseFloat(e.amount || '0'), 0);
   const totalBudget = budgets.reduce((sum, b) => sum + parseFloat(b.monthlyLimit || '0'), 0);
   const remaining = totalBudget - totalSpent;
 
@@ -348,10 +356,13 @@ export default function HomeScreen() {
   const integerPart = parseFloat(parts[0]).toLocaleString();
   const decimalPart = parts[1];
 
-  // Group expenses dynamically by Category
+  // Group expenses dynamically by Category (spending only)
   const categoryTotals = expenses.reduce((acc: { [key: string]: number }, e) => {
     const category = e.category || 'Other';
-    acc[category] = (acc[category] || 0) + parseFloat(e.amount || '0');
+    const numAmt = parseFloat(e.amount || '0');
+    if (numAmt < 0) {
+      acc[category] = (acc[category] || 0) + Math.abs(numAmt);
+    }
     return acc;
   }, {});
 
@@ -394,8 +405,8 @@ export default function HomeScreen() {
         const dateKey = `${year}-${month}-${day}`;
         
         const daySpend = expenses
-          .filter(e => e.date === dateKey)
-          .reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+          .filter(e => e.date === dateKey && parseFloat(e.amount || '0') < 0)
+          .reduce((s, e) => s + Math.abs(parseFloat(e.amount) || 0), 0);
         
         sum += daySpend;
         chartBars.push({ day: dayLabel, spend: daySpend });
@@ -419,8 +430,8 @@ export default function HomeScreen() {
         const weekSpend = expenses.filter(e => {
           if (!e.date) return false;
           const ed = parseLocalDate(e.date);
-          return ed >= start && ed <= end;
-        }).reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+          return ed >= start && ed <= end && parseFloat(e.amount || '0') < 0;
+        }).reduce((s, e) => s + Math.abs(parseFloat(e.amount) || 0), 0);
 
         sum += weekSpend;
         chartBars.push({ day: `W${4 - i}`, spend: weekSpend });
@@ -441,8 +452,8 @@ export default function HomeScreen() {
         const monthSpend = expenses.filter(e => {
           if (!e.date) return false;
           const ed = parseLocalDate(e.date);
-          return ed.getFullYear() === yr && (ed.getMonth() + 1) === mo;
-        }).reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+          return ed.getFullYear() === yr && (ed.getMonth() + 1) === mo && parseFloat(e.amount || '0') < 0;
+        }).reduce((s, e) => s + Math.abs(parseFloat(e.amount) || 0), 0);
 
         sum += monthSpend;
         chartBars.push({ day: label, spend: monthSpend });
@@ -458,8 +469,8 @@ export default function HomeScreen() {
       const yearSpend = expenses.filter(e => {
         if (!e.date) return false;
         const ed = parseLocalDate(e.date);
-        return ed.getFullYear() === yr;
-      }).reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+        return ed.getFullYear() === yr && parseFloat(e.amount || '0') < 0;
+      }).reduce((s, e) => s + Math.abs(parseFloat(e.amount) || 0), 0);
 
       sum += yearSpend;
       chartBars.push({ day: String(yr), spend: yearSpend });
@@ -509,10 +520,10 @@ export default function HomeScreen() {
     }
   }
 
-  if (loading && !refreshing) {
+  if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#111111" />
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -520,13 +531,13 @@ export default function HomeScreen() {
   if (error && expenses.length === 0) {
     return (
       <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.centered}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}
+        style={[styles.container, { backgroundColor: colors.background }]}
+        contentContainerStyle={[styles.centered, { backgroundColor: colors.background }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
         <Text style={styles.errorIcon}>⚠️</Text>
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => fetchData(true)}>
+        <Text style={[styles.errorText, { color: colors.textSecondary }]}>{error}</Text>
+        <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={() => fetchData(true)}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -534,27 +545,27 @@ export default function HomeScreen() {
   }
 
   return (
-    <View style={styles.wrapper}>
+    <View style={[styles.wrapper, { backgroundColor: colors.background }]}>
       <ScrollView
-        style={styles.container}
+        style={[styles.container, { backgroundColor: colors.background }]}
         contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 24) }]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
         keyboardShouldPersistTaps="handled"
       >
         {/* Header Row */}
         <View style={styles.headerRow}>
           <View>
-            <Text style={styles.welcomeText}>Welcome back 👋</Text>
-            <Text style={styles.greetingText}>Good day, {userName}</Text>
+            <Text style={[styles.welcomeText, { color: colors.textSecondary }]}>Welcome back 👋</Text>
+            <Text style={[styles.greetingText, { color: colors.text }]}>Good day, {userName}</Text>
           </View>
           <View style={styles.headerRightActions}>
             {/* Notification bell */}
             <TouchableOpacity
-              style={styles.headerActionButton}
+              style={[styles.headerActionButton, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
               onPress={() => router.push('/notification-history')}
               activeOpacity={0.8}
             >
-              <Feather name="bell" size={20} color="#111111" />
+              <Feather name="bell" size={20} color={colors.text} />
               {unreadCount > 0 && (
                 <View style={styles.bellBadge}>
                   <Text style={styles.bellBadgeText}>
@@ -566,24 +577,24 @@ export default function HomeScreen() {
 
             {/* Reminders icon */}
             <TouchableOpacity
-              style={styles.headerActionButton}
+              style={[styles.headerActionButton, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
               onPress={() => router.push('/(tabs)/reminders')}
               activeOpacity={0.8}
             >
-              <Feather name="calendar" size={20} color="#111111" />
+              <Feather name="calendar" size={20} color={colors.text} />
             </TouchableOpacity>
 
             {/* Profile Avatar */}
             <TouchableOpacity
-              style={styles.avatarButton}
+              style={[styles.avatarButton, { borderColor: colors.border }]}
               onPress={() => router.push('/(tabs)/profile')}
               activeOpacity={0.8}
             >
               {profileImage ? (
                 <Image source={{ uri: profileImage }} style={styles.avatarImage} />
               ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Text style={styles.avatarText}>
+                <View style={[styles.avatarPlaceholder, { backgroundColor: colors.neutralBg }]}>
+                  <Text style={[styles.avatarText, { color: colors.textSecondary }]}>
                     {userName.charAt(0).toUpperCase()}
                   </Text>
                 </View>
@@ -636,12 +647,19 @@ export default function HomeScreen() {
             <Text style={styles.amountFraction}>.{decimalPart}</Text>
           </View>
 
-          <View style={styles.trendRow}>
+          <View style={[styles.trendRow, { gap: 8 }]}>
             <View style={styles.trendBadge}>
               <Text style={styles.trendText}>
                 {expenses.length} transaction{expenses.length !== 1 ? 's' : ''}
               </Text>
             </View>
+            {totalIncome > 0 && (
+              <View style={[styles.trendBadge, { backgroundColor: colors.positive + '20' }]}>
+                <Text style={[styles.trendText, { color: colors.positive, fontWeight: 'bold' }]}>
+                  +GHS {totalIncome.toFixed(2)}
+                </Text>
+              </View>
+            )}
           </View>
 
           {totalBudget > 0 && (
@@ -910,8 +928,13 @@ export default function HomeScreen() {
                       )}
                     </View>
                   </View>
-                  <Text style={styles.expenseAmount}>
-                    -GHS {parseFloat(item.amount || '0').toFixed(2)}
+                  <Text style={[
+                    styles.expenseAmount,
+                    { color: parseFloat(item.amount || '0') >= 0 ? colors.positive : colors.negative }
+                  ]}>
+                    {parseFloat(item.amount || '0') >= 0 
+                      ? `+GHS ${parseFloat(item.amount || '0').toFixed(2)}` 
+                      : `-GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`}
                   </Text>
                 </View>
               );

@@ -19,6 +19,7 @@ import { addHistoryItem } from '../../services/notificationHistory';
 import { signalMomoRefresh } from '../../services/momoRefresh';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
+import { useTheme } from '../../hooks/useTheme';
 
 const CATEGORIES = ['Food', 'Transport', 'Entertainment', 'Utilities', 'Other'];
 
@@ -38,6 +39,8 @@ let lastUsedPaymentMethod: "CASH" | "MOMO" = "CASH";
 
 export default function AddScreen() {
   const insets = useSafeAreaInsets();
+  const { colors, theme } = useTheme();
+  const [transactionType, setTransactionType] = useState<'expense' | 'income'>('expense');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(lastUsedCategory);
@@ -155,31 +158,34 @@ export default function AddScreen() {
       const today = new Date().toISOString().split('T')[0];
       const userId = getUserId();
       const fullDescription = [description.trim(), ...tags].filter(Boolean).join(" ");
-      await expenseAPI.createExpense(userId, amount, selectedCategory, fullDescription, today, "CASH");
+      const finalAmtStr = String(transactionType === 'income' ? Math.abs(parseFloat(amount)) : -Math.abs(parseFloat(amount)));
+      await expenseAPI.createExpense(userId, finalAmtStr, selectedCategory, fullDescription, today, "CASH");
       
       const parsed = parseFloat(amount);
       await addHistoryItem({
-        type: "expense_added",
-        title: "Expense recorded",
-        body: `GHS ${parsed.toFixed(2)} added to ${selectedCategory}${description ? ` — ${description}` : ""}.`,
+        type: transactionType === 'income' ? "income_added" : "expense_added",
+        title: transactionType === 'income' ? "Income recorded" : "Expense recorded",
+        body: `${transactionType === 'income' ? '+' : '-'}GHS ${parsed.toFixed(2)} added to ${selectedCategory}${description ? ` — ${description}` : ""}.`,
         data: { screen: "history" },
       });
 
-      showToast("Expense added successfully!", "success");
+      showToast(transactionType === 'income' ? "Income added successfully!" : "Expense added successfully!", "success");
 
       // Update spent values locally for responsive UI feedback
-      const addedAmt = parseFloat(amount) || 0;
-      setSpent(prev => ({
-        ...prev,
-        [selectedCategory]: (prev[selectedCategory] || 0) + addedAmt
-      }));
+      if (transactionType === 'expense') {
+        const addedAmt = parseFloat(amount) || 0;
+        setSpent(prev => ({
+          ...prev,
+          [selectedCategory]: (prev[selectedCategory] || 0) + addedAmt
+        }));
+      }
 
       setAmount('');
       setDescription('');
       setTags([]);
       setTagInput("");
     } catch (error: any) {
-      const message = error.response?.data?.error || 'Failed to add expense.';
+      const message = error.response?.data?.error || (transactionType === 'income' ? 'Failed to add income.' : 'Failed to add expense.');
       showToast(message, "error");
     } finally {
       setLoading(false);
@@ -234,12 +240,13 @@ export default function AddScreen() {
         return;
       }
 
-      // SUCCESSFUL or PENDING — record the expense
+      // SUCCESSFUL or PENDING — record the transaction
       const today = new Date().toISOString().split("T")[0];
       const parsed = parseFloat(amount);
+      const finalAmtStr = String(transactionType === 'income' ? Math.abs(parsed) : -Math.abs(parsed));
       await expenseAPI.createExpense(
         userId,
-        amount,
+        finalAmtStr,
         selectedCategory,
         fullDescription,
         today,
@@ -247,18 +254,20 @@ export default function AddScreen() {
       );
 
       await addHistoryItem({
-        type: "expense_added",
-        title: "MoMo payment recorded",
-        body: `GHS ${parsed.toFixed(2)} paid via MoMo for ${selectedCategory}${description ? ` — ${description}` : ""}.`,
+        type: transactionType === 'income' ? "income_added" : "expense_added",
+        title: transactionType === 'income' ? "MoMo deposit recorded" : "MoMo payment recorded",
+        body: `${transactionType === 'income' ? '+' : '-'}GHS ${parsed.toFixed(2)} via MoMo for ${selectedCategory}${description ? ` — ${description}` : ""}.`,
         data: { screen: "history" },
       });
 
       // Update spent values locally for responsive UI feedback
-      const addedAmt = parseFloat(amount) || 0;
-      setSpent(prev => ({
-        ...prev,
-        [selectedCategory]: (prev[selectedCategory] || 0) + addedAmt
-      }));
+      if (transactionType === 'expense') {
+        const addedAmt = parseFloat(amount) || 0;
+        setSpent(prev => ({
+          ...prev,
+          [selectedCategory]: (prev[selectedCategory] || 0) + addedAmt
+        }));
+      }
 
       setMomoStatus("done");
       // Tell Home screen to re-fetch wallet balance on next focus
@@ -295,33 +304,72 @@ export default function AddScreen() {
 
   if (fetching) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#111111" />
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
     <KeyboardAvoidingView
-      style={styles.flex}
+      style={[styles.flex, { backgroundColor: colors.background }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={true}>
-        {/* Light card container */}
-        <View style={styles.mainCard}>
-          <Text style={styles.cardHeaderTitle}>Add Expense</Text>
+      <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={true}>
+        {/* Card container */}
+        <View style={[styles.mainCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+          <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>
+            {transactionType === 'income' ? 'Add Income' : 'Add Expense'}
+          </Text>
+
+          {/* Segmented Control for Expense vs Income */}
+          <View style={[styles.typeSelectorRow, { backgroundColor: colors.neutralBg }]}>
+            <TouchableOpacity
+              style={[
+                styles.typeBtn,
+                transactionType === 'expense' && { backgroundColor: colors.negative },
+              ]}
+              onPress={() => setTransactionType('expense')}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.typeBtnText,
+                { color: colors.textSecondary },
+                transactionType === 'expense' && { color: '#ffffff' },
+              ]}>
+                💸 Expense
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.typeBtn,
+                transactionType === 'income' && { backgroundColor: colors.positive },
+              ]}
+              onPress={() => setTransactionType('income')}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.typeBtnText,
+                { color: colors.textSecondary },
+                transactionType === 'income' && { color: '#ffffff' },
+              ]}>
+                💰 Income
+              </Text>
+            </TouchableOpacity>
+          </View>
 
           {/* Enter Amount box styled for the theme */}
-          <Text style={styles.label}>Amount (GHS)</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Amount (GHS)</Text>
           <View style={[
             styles.amountBox,
-            amountFocused && styles.amountBoxFocused
+            { backgroundColor: colors.inputBg, borderColor: colors.border },
+            amountFocused && { borderColor: colors.primary }
           ]}>
-            <Text style={styles.amountPrefix}>GHS</Text>
+            <Text style={[styles.amountPrefix, { color: colors.text }]}>GHS</Text>
             <TextInput
-              style={styles.amountInput}
+              style={[styles.amountInput, { color: colors.text }]}
               placeholder="0.00"
-              placeholderTextColor="#C8D2DC"
+              placeholderTextColor={theme === 'dark' ? '#4B5563' : '#C8D2DC'}
               value={amount}
               onChangeText={setAmount}
               keyboardType="decimal-pad"
@@ -331,24 +379,25 @@ export default function AddScreen() {
           </View>
 
           {/* Categories capsule selection list */}
-          <Text style={styles.label}>Select Category</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Select Category</Text>
           <View style={styles.categoryList}>
             {CATEGORIES.map((cat) => (
               <TouchableOpacity
                 key={cat}
                 style={[
                   styles.categoryCapsule,
-                  selectedCategory === cat && styles.categoryCapsuleActive,
+                  { backgroundColor: colors.inputBg, borderColor: colors.border },
+                  selectedCategory === cat && { borderColor: colors.primary, borderWidth: 1.5 },
                 ]}
                 onPress={() => handleCategorySelect(cat)}
                 activeOpacity={0.8}
               >
                 <View style={styles.categoryLeft}>
                   <Text style={styles.categoryEmoji}>{CATEGORY_ICONS[cat]}</Text>
-                  <Text style={styles.categoryNameText}>{cat}</Text>
+                  <Text style={[styles.categoryNameText, { color: colors.text }]}>{cat}</Text>
                 </View>
                 <View style={styles.categoryRight}>
-                  <Text style={styles.categoryAmountText}>
+                  <Text style={[styles.categoryAmountText, { color: colors.textSecondary }]}>
                     GHS {(spent[cat] || 0).toFixed(2)}
                   </Text>
                 </View>
@@ -356,18 +405,19 @@ export default function AddScreen() {
             ))}
           </View>
           {showHint && (
-            <Text style={styles.lastUsedHint}>
-              ↩ Remembered from last expense
+            <Text style={[styles.lastUsedHint, { color: colors.textSecondary }]}>
+              ↩ Remembered from last {transactionType === 'income' ? 'income' : 'expense'}
             </Text>
           )}
 
           {/* Payment Method Selector */}
-          <Text style={styles.label}>Payment Method</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Payment Method</Text>
           <View style={styles.paymentMethodRow}>
             <TouchableOpacity
               style={[
                 styles.paymentChip,
-                paymentMethod === "CASH" && styles.paymentChipActive
+                { backgroundColor: colors.inputBg, borderColor: colors.border },
+                paymentMethod === "CASH" && { backgroundColor: colors.primary + '15', borderColor: colors.primary, borderWidth: 1.5 }
               ]}
               onPress={() => handlePaymentMethodSelect("CASH")}
               activeOpacity={0.7}
@@ -375,7 +425,8 @@ export default function AddScreen() {
               <Text style={styles.paymentChipIcon}>💵</Text>
               <Text style={[
                 styles.paymentChipText,
-                paymentMethod === "CASH" && styles.paymentChipTextActive
+                { color: colors.textSecondary },
+                paymentMethod === "CASH" && { color: colors.primary, fontWeight: 'bold' }
               ]}>
                 Cash
               </Text>
@@ -383,7 +434,8 @@ export default function AddScreen() {
             <TouchableOpacity
               style={[
                 styles.paymentChip,
-                paymentMethod === "MOMO" && styles.paymentChipActiveMomo
+                { backgroundColor: colors.inputBg, borderColor: colors.border },
+                paymentMethod === "MOMO" && { backgroundColor: colors.accent + '15', borderColor: colors.accent, borderWidth: 1.5 }
               ]}
               onPress={() => handlePaymentMethodSelect("MOMO")}
               activeOpacity={0.7}
@@ -391,7 +443,8 @@ export default function AddScreen() {
               <Text style={styles.paymentChipIcon}>📱</Text>
               <Text style={[
                 styles.paymentChipText,
-                paymentMethod === "MOMO" && styles.paymentChipTextMomo
+                { color: colors.textSecondary },
+                paymentMethod === "MOMO" && { color: colors.accent, fontWeight: 'bold' }
               ]}>
                 MoMo
               </Text>
@@ -399,15 +452,16 @@ export default function AddScreen() {
           </View>
 
           {/* Description box */}
-          <Text style={styles.label}>Description (optional)</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Description (optional)</Text>
           <TextInput
             style={[
               styles.descriptionBox,
               styles.textArea,
-              descFocused && styles.descriptionBoxFocused
+              { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text },
+              descFocused && { borderColor: colors.primary }
             ]}
             placeholder="What was this for?"
-            placeholderTextColor="#8E9AA6"
+            placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
             value={description}
             onChangeText={setDescription}
             onFocus={() => setDescFocused(true)}
@@ -417,15 +471,16 @@ export default function AddScreen() {
           />
 
           {/* Tags Section */}
-          <Text style={styles.label}>Tags (optional)</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Tags (optional)</Text>
           <View style={styles.tagInputRow}>
             <TextInput
               style={[
                 styles.tagInputField,
-                tagFocused && styles.tagInputFieldFocused
+                { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text },
+                tagFocused && { borderColor: colors.primary }
               ]}
               placeholder="Add a tag e.g. #work #food"
-              placeholderTextColor="#8E9AA6"
+              placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
               value={tagInput}
               onChangeText={setTagInput}
               onFocus={() => setTagFocused(true)}
@@ -433,18 +488,18 @@ export default function AddScreen() {
               onSubmitEditing={handleAddTag}
               returnKeyType="done"
             />
-            <TouchableOpacity style={styles.tagAddButton} onPress={handleAddTag}>
-              <Text style={styles.tagAddText}>Add</Text>
+            <TouchableOpacity style={[styles.tagAddButton, { backgroundColor: colors.neutralBg }]} onPress={handleAddTag}>
+              <Text style={[styles.tagAddText, { color: colors.text }]}>Add</Text>
             </TouchableOpacity>
           </View>
 
           {tags.length > 0 && (
             <View style={styles.tagsContainer}>
               {tags.map((tag) => (
-                <View key={tag} style={styles.tagPill}>
-                  <Text style={styles.tagText}>{tag}</Text>
+                <View key={tag} style={[styles.tagPill, { backgroundColor: colors.neutralBg }]}>
+                  <Text style={[styles.tagText, { color: colors.textSecondary }]}>{tag}</Text>
                   <TouchableOpacity onPress={() => handleRemoveTag(tag)}>
-                    <Text style={styles.tagRemove}>✕</Text>
+                    <Text style={[styles.tagRemove, { color: colors.textSecondary }]}>✕</Text>
                   </TouchableOpacity>
                 </View>
               ))}
@@ -455,8 +510,8 @@ export default function AddScreen() {
           <TouchableOpacity
             style={[
               styles.button,
+              { backgroundColor: paymentMethod === "MOMO" ? "#D97706" : colors.primary },
               loading && styles.buttonDisabled,
-              paymentMethod === "MOMO" && styles.buttonMomo,
             ]}
             onPress={handleAddExpense}
             disabled={loading}
@@ -466,7 +521,9 @@ export default function AddScreen() {
               <ActivityIndicator color="#ffffff" />
             ) : (
               <Text style={styles.buttonText}>
-                {paymentMethod === "MOMO" ? "Pay with MoMo →" : "⊕ Add Expense"}
+                {paymentMethod === "MOMO" 
+                  ? (transactionType === 'income' ? "Receive via MoMo →" : "Pay with MoMo →") 
+                  : (transactionType === 'income' ? "⊕ Add Income" : "⊕ Add Expense")}
               </Text>
             )}
           </TouchableOpacity>
@@ -489,25 +546,29 @@ export default function AddScreen() {
             activeOpacity={1}
             onPress={closeMomoModal}
           />
-          <View style={styles.modalCard}>
+          <View style={[styles.modalCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
             {/* Header */}
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Pay with MoMo 📱</Text>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                {transactionType === 'income' ? 'Receive with MoMo 📱' : 'Pay with MoMo 📱'}
+              </Text>
               {!momoLoading && (
                 <TouchableOpacity onPress={closeMomoModal} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                  <Text style={styles.modalClose}>✕</Text>
+                  <Text style={[styles.modalClose, { color: colors.textSecondary }]}>✕</Text>
                 </TouchableOpacity>
               )}
             </View>
 
             {/* Amount box */}
-            <View style={styles.momoAmountBox}>
-              <Text style={styles.momoAmountLabel}>You are paying</Text>
-              <Text style={styles.momoAmountValue}>
+            <View style={[styles.momoAmountBox, { backgroundColor: colors.neutralBg }]}>
+              <Text style={[styles.momoAmountLabel, { color: colors.textSecondary }]}>
+                {transactionType === 'income' ? 'You are receiving' : 'You are paying'}
+              </Text>
+              <Text style={[styles.momoAmountValue, { color: colors.text }]}>
                 GHS {parseFloat(amount || "0").toFixed(2)}
               </Text>
               {(description || selectedCategory) && (
-                <Text style={styles.momoAmountDesc}>
+                <Text style={[styles.momoAmountDesc, { color: colors.textSecondary }]}>
                   {description || selectedCategory}
                 </Text>
               )}
@@ -516,11 +577,11 @@ export default function AddScreen() {
             {/* Phone input — only shown while idle */}
             {momoStatus === "idle" && (
               <>
-                <Text style={styles.momoPhoneLabel}>MoMo Number</Text>
+                <Text style={[styles.momoPhoneLabel, { color: colors.textSecondary }]}>MoMo Number</Text>
                 <TextInput
-                  style={styles.momoPhoneInput}
+                  style={[styles.momoPhoneInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
                   placeholder="e.g. 0241234567"
-                  placeholderTextColor="#8E9AA6"
+                  placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
                   value={momoPhone}
                   onChangeText={setMomoPhone}
                   keyboardType="phone-pad"
@@ -543,10 +604,10 @@ export default function AddScreen() {
                 {momoStatus === "done" && (
                   <Text style={styles.momoStatusIcon}>✅</Text>
                 )}
-                <Text style={styles.momoStatusText}>
-                  {momoStatus === "sending" && "Sending payment request to your MoMo number..."}
-                  {momoStatus === "confirming" && "Confirming payment..."}
-                  {momoStatus === "done" && "Payment confirmed!"}
+                <Text style={[styles.momoStatusText, { color: colors.text }]}>
+                  {momoStatus === "sending" && (transactionType === 'income' ? "Sending request to your MoMo number..." : "Sending payment request to your MoMo number...")}
+                  {momoStatus === "confirming" && "Confirming transaction..."}
+                  {momoStatus === "done" && (transactionType === 'income' ? "Funds received confirmed!" : "Payment confirmed!")}
                 </Text>
               </View>
             )}
@@ -555,16 +616,18 @@ export default function AddScreen() {
             {momoStatus === "idle" && (
               <View style={styles.modalButtons}>
                 <TouchableOpacity
-                  style={styles.modalCancelBtn}
+                  style={[styles.modalCancelBtn, { backgroundColor: colors.neutralBg }]}
                   onPress={closeMomoModal}
                 >
-                  <Text style={styles.modalCancelText}>Cancel</Text>
+                  <Text style={[styles.modalCancelText, { color: colors.textSecondary }]}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.modalPayBtn}
+                  style={[styles.modalPayBtn, { backgroundColor: '#D97706' }]}
                   onPress={handleMomoPayment}
                 >
-                  <Text style={styles.modalPayText}>Pay Now</Text>
+                  <Text style={styles.modalPayText}>
+                    {transactionType === 'income' ? "Request Money" : "Pay Now"}
+                  </Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -616,6 +679,23 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#111111',
     marginBottom: 20,
+  },
+  typeSelectorRow: {
+    flexDirection: 'row',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 16,
+  },
+  typeBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+  },
+  typeBtnText: {
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   label: {
     fontSize: 11,

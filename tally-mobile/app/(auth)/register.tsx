@@ -15,9 +15,11 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { authAPI } from '../../services/api';
 import { Feather, AntDesign, FontAwesome } from '@expo/vector-icons';
+import { useTheme } from '../../hooks/useTheme';
 
 export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
+  const { colors, theme } = useTheme();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -58,29 +60,30 @@ export default function RegisterScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScrollView contentContainerStyle={[styles.scrollContainer, { paddingTop: Math.max(insets.top, 40), paddingBottom: Math.max(insets.bottom, 40) }]} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={true}>
-        <View style={styles.card}>
-          <Text style={styles.brandTitle}>💰 Tally</Text>
-          <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>Join Tally to start tracking your expenses</Text>
+      <ScrollView contentContainerStyle={[styles.scrollContainer, { backgroundColor: colors.background, paddingTop: Math.max(insets.top, 40), paddingBottom: Math.max(insets.bottom, 40) }]} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={true}>
+        <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+          <Text style={[styles.brandTitle, { color: colors.primary }]}>💰 Tally</Text>
+          <Text style={[styles.title, { color: colors.text }]}>Create Account</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Join Tally to start tracking your expenses</Text>
 
           <View style={styles.form}>
             {/* Full Name Field */}
-            <Text style={styles.label}>Full Name</Text>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>Full Name</Text>
             <View
               style={[
                 styles.inputContainer,
-                nameFocused && styles.inputFocused,
+                { backgroundColor: colors.inputBg, borderColor: colors.border },
+                nameFocused && { borderColor: colors.primary },
               ]}
             >
-              <Feather name="user" size={18} color="#8E9AA6" style={styles.inputIcon} />
+              <Feather name="user" size={18} color={colors.textSecondary} style={styles.inputIcon} />
               <TextInput
-                style={styles.input}
+                style={[styles.input, { color: colors.text }]}
                 placeholder="Enter your full name"
-                placeholderTextColor="#C8D2DC"
+                placeholderTextColor={theme === 'dark' ? '#4B5563' : '#C8D2DC'}
                 value={name}
                 onChangeText={setName}
                 autoCapitalize="words"
@@ -90,18 +93,19 @@ export default function RegisterScreen() {
             </View>
 
             {/* Email Field */}
-            <Text style={styles.label}>Email Address</Text>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>Email Address</Text>
             <View
               style={[
                 styles.inputContainer,
-                emailFocused && styles.inputFocused,
+                { backgroundColor: colors.inputBg, borderColor: colors.border },
+                emailFocused && { borderColor: colors.primary },
               ]}
             >
-              <Feather name="at-sign" size={18} color="#8E9AA6" style={styles.inputIcon} />
+              <Feather name="at-sign" size={18} color={colors.textSecondary} style={styles.inputIcon} />
               <TextInput
-                style={styles.input}
+                style={[styles.input, { color: colors.text }]}
                 placeholder="Enter your email"
-                placeholderTextColor="#C8D2DC"
+                placeholderTextColor={theme === 'dark' ? '#4B5563' : '#C8D2DC'}
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
@@ -112,18 +116,19 @@ export default function RegisterScreen() {
             </View>
 
             {/* Password Field */}
-            <Text style={styles.label}>Password</Text>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>Password</Text>
             <View
               style={[
                 styles.inputContainer,
-                passwordFocused && styles.inputFocused,
+                { backgroundColor: colors.inputBg, borderColor: colors.border },
+                passwordFocused && { borderColor: colors.primary },
               ]}
             >
-              <Feather name="lock" size={18} color="#8E9AA6" style={styles.inputIcon} />
+              <Feather name="lock" size={18} color={colors.textSecondary} style={styles.inputIcon} />
               <TextInput
-                style={styles.input}
+                style={[styles.input, { color: colors.text }]}
                 placeholder="Enter your password (min 6 chars)"
-                placeholderTextColor="#C8D2DC"
+                placeholderTextColor={theme === 'dark' ? '#4B5563' : '#C8D2DC'}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
@@ -138,14 +143,14 @@ export default function RegisterScreen() {
                 <Feather
                   name={showPassword ? 'eye' : 'eye-off'}
                   size={18}
-                  color="#8E9AA6"
+                  color={colors.textSecondary}
                 />
               </TouchableOpacity>
             </View>
 
             {/* Sign Up / Create Account Button */}
             <TouchableOpacity
-              style={[styles.button, loading && styles.buttonDisabled, { marginTop: 24 }]}
+              style={[styles.button, { backgroundColor: colors.primary }, loading && styles.buttonDisabled, { marginTop: 24 }]}
               onPress={handleRegister}
               disabled={loading}
               activeOpacity={0.85}
@@ -159,37 +164,37 @@ export default function RegisterScreen() {
 
             {/* Sign In Link */}
             <View style={styles.linkContainer}>
-              <Text style={styles.linkText}>Already have an account? </Text>
+              <Text style={[styles.linkText, { color: colors.textSecondary }]}>Already have an account? </Text>
               <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
-                <Text style={styles.linkBold}>Sign In</Text>
+                <Text style={[styles.linkBold, { color: colors.primary }]}>Sign In</Text>
               </TouchableOpacity>
             </View>
 
             {/* Or With divider */}
             <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or sign up with</Text>
-              <View style={styles.dividerLine} />
+              <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+              <Text style={[styles.dividerText, { color: colors.textSecondary }]}>or sign up with</Text>
+              <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
             </View>
 
             {/* Social Buttons */}
             <View style={styles.socialRow}>
               <TouchableOpacity
-                style={styles.socialButton}
+                style={[styles.socialButton, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
                 activeOpacity={0.7}
                 onPress={() => Alert.alert('Google Login', 'Integration coming soon!')}
               >
                 <AntDesign name="google" size={16} color="#4285F4" />
-                <Text style={styles.socialButtonText}>Google</Text>
+                <Text style={[styles.socialButtonText, { color: colors.text }]}>Google</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.socialButton}
+                style={[styles.socialButton, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
                 activeOpacity={0.7}
                 onPress={() => Alert.alert('Apple Login', 'Integration coming soon!')}
               >
-                <FontAwesome name="apple" size={16} color="#111111" />
-                <Text style={styles.socialButtonText}>Apple</Text>
+                <FontAwesome name="apple" size={16} color={theme === 'dark' ? '#ffffff' : '#111111'} />
+                <Text style={[styles.socialButtonText, { color: colors.text }]}>Apple</Text>
               </TouchableOpacity>
             </View>
           </View>

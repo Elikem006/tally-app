@@ -15,6 +15,7 @@ import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Toast from "../components/Toast";
 import { useToast } from "../hooks/useToast";
+import { useTheme } from '../hooks/useTheme';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -82,6 +83,7 @@ const FAQS = [
 
 export default function HelpScreen() {
   const insets = useSafeAreaInsets();
+  const { colors, theme } = useTheme();
   const [expandedFaq, setExpandedFaq] = useState<string | null>(null);
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
 
@@ -99,92 +101,92 @@ export default function HelpScreen() {
   }
 
   return (
-    <View style={styles.flex}>
+    <View style={[styles.flex, { backgroundColor: colors.background }]}>
       {/* Top Header Row with Back Button */}
-      <View style={[styles.headerBar, { paddingTop: Math.max(insets.top, 16) }]}>
+      <View style={[styles.headerBar, { backgroundColor: colors.cardBg, borderColor: colors.border, paddingTop: Math.max(insets.top, 16) }]}>
         <TouchableOpacity
-          style={styles.backBtn}
+          style={[styles.backBtn, { backgroundColor: colors.neutralBg }]}
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
-          <Feather name="arrow-left" size={20} color="#111111" />
+          <Feather name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerBarTitle}>Help & Support</Text>
+        <Text style={[styles.headerBarTitle, { color: colors.text }]}>Help & Support</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView 
-        style={styles.container} 
+        style={[styles.container, { backgroundColor: colors.background }]} 
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
         {/* Intro */}
-        <View style={styles.introCard}>
+        <View style={[styles.introCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
           <Text style={styles.headerEmoji}>❓</Text>
-          <Text style={styles.introTitle}>How can we help?</Text>
-          <Text style={styles.introSub}>Everything you need to know about Tally app</Text>
+          <Text style={[styles.introTitle, { color: colors.text }]}>How can we help?</Text>
+          <Text style={[styles.introSub, { color: colors.textSecondary }]}>Everything you need to know about Tally app</Text>
         </View>
 
         {/* Getting Started */}
-        <Text style={styles.sectionTitle}>Getting Started</Text>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Getting Started</Text>
         {QUICK_START.map((item) => (
-          <View key={item.title} style={styles.card}>
+          <View key={item.title} style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
             <View style={styles.quickRow}>
-              <View style={styles.iconCircle}>
+              <View style={[styles.iconCircle, { backgroundColor: colors.neutralBg }]}>
                 <Text style={styles.quickIcon}>{item.icon}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.quickTitle}>{item.title}</Text>
-                <Text style={styles.quickDesc}>{item.desc}</Text>
+                <Text style={[styles.quickTitle, { color: colors.text }]}>{item.title}</Text>
+                <Text style={[styles.quickDesc, { color: colors.textSecondary }]}>{item.desc}</Text>
               </View>
             </View>
           </View>
         ))}
 
         {/* FAQ */}
-        <Text style={styles.sectionTitle}>Frequently Asked Questions</Text>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Frequently Asked Questions</Text>
         {FAQS.map((faq) => {
           const isOpen = expandedFaq === faq.q;
           return (
-            <View key={faq.q} style={styles.card}>
+            <View key={faq.q} style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
               <TouchableOpacity
                 style={styles.faqQuestion}
                 onPress={() => toggleFaq(faq.q)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.faqQuestionText}>{faq.q}</Text>
-                <Feather name={isOpen ? "chevron-up" : "chevron-down"} size={16} color="#8E9AA6" />
+                <Text style={[styles.faqQuestionText, { color: colors.text }]}>{faq.q}</Text>
+                <Feather name={isOpen ? "chevron-up" : "chevron-down"} size={16} color={colors.textSecondary} />
               </TouchableOpacity>
               {isOpen && (
-                <Text style={styles.faqAnswer}>{faq.a}</Text>
+                <Text style={[styles.faqAnswer, { color: colors.textSecondary }]}>{faq.a}</Text>
               )}
             </View>
           );
         })}
 
         {/* Contact */}
-        <Text style={styles.sectionTitle}>Contact Support</Text>
-        <View style={styles.card}>
-          <Text style={styles.contactLabel}>Customer Support Email</Text>
-          <Text style={styles.contactEmail}>support@tally.app</Text>
-          <TouchableOpacity style={styles.contactButton} onPress={handleEmail} activeOpacity={0.8}>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Contact Support</Text>
+        <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+          <Text style={[styles.contactLabel, { color: colors.text }]}>Customer Support Email</Text>
+          <Text style={[styles.contactEmail, { color: colors.primary }]}>support@tally.app</Text>
+          <TouchableOpacity style={[styles.contactButton, { backgroundColor: colors.primary }]} onPress={handleEmail} activeOpacity={0.8}>
             <Text style={styles.contactButtonText}>✉️  Send Email</Text>
           </TouchableOpacity>
         </View>
 
         {/* About */}
-        <Text style={styles.sectionTitle}>About</Text>
-        <View style={styles.card}>
+        <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>About</Text>
+        <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
           <View style={styles.aboutRow}>
-            <Text style={styles.aboutLabel}>App version</Text>
-            <Text style={styles.aboutValue}>1.0.0</Text>
+            <Text style={[styles.aboutLabel, { color: colors.textSecondary }]}>App version</Text>
+            <Text style={[styles.aboutValue, { color: colors.text }]}>1.0.0</Text>
           </View>
           <View style={[styles.aboutRow, { marginTop: 10 }]}>
-            <Text style={styles.aboutLabel}>Built by</Text>
-            <Text style={styles.aboutValue}>Tally Team — KNUST</Text>
+            <Text style={[styles.aboutLabel, { color: colors.textSecondary }]}>Built by</Text>
+            <Text style={[styles.aboutValue, { color: colors.text }]}>Tally Team — KNUST</Text>
           </View>
-          <TouchableOpacity style={styles.rateButton} onPress={handleRate} activeOpacity={0.8}>
-            <Text style={styles.rateButtonText}>⭐  Rate the App</Text>
+          <TouchableOpacity style={[styles.rateButton, { backgroundColor: colors.neutralBg }]} onPress={handleRate} activeOpacity={0.8}>
+            <Text style={[styles.rateButtonText, { color: colors.text }]}>⭐  Rate the App</Text>
           </TouchableOpacity>
         </View>
 

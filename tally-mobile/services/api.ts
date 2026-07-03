@@ -29,10 +29,10 @@ const getRelativeDateStr = (daysAgo: number) => {
 };
 
 let mockExpenses = [
-  { id: 1, userId: "1", amount: "55.00", category: "Food", description: "Lunch at cafeteria", date: getRelativeDateStr(0), paymentMethod: "CASH" },
-  { id: 2, userId: "1", amount: "120.00", category: "Transport", description: "Weekly fuel", date: getRelativeDateStr(2), paymentMethod: "CASH" },
-  { id: 3, userId: "1", amount: "80.00", category: "Entertainment", description: "Movie ticket & popcorn", date: getRelativeDateStr(10), paymentMethod: "CASH" },
-  { id: 4, userId: "1", amount: "210.00", category: "Utilities", description: "Water and electricity", date: getRelativeDateStr(45), paymentMethod: "CASH" }
+  { id: 1, userId: "1", amount: "-55.00", category: "Food", description: "Lunch at cafeteria", date: getRelativeDateStr(0), paymentMethod: "CASH" },
+  { id: 2, userId: "1", amount: "-120.00", category: "Transport", description: "Weekly fuel", date: getRelativeDateStr(2), paymentMethod: "CASH" },
+  { id: 3, userId: "1", amount: "-80.00", category: "Entertainment", description: "Movie ticket & popcorn", date: getRelativeDateStr(10), paymentMethod: "CASH" },
+  { id: 4, userId: "1", amount: "-210.00", category: "Utilities", description: "Water and electricity", date: getRelativeDateStr(45), paymentMethod: "CASH" }
 ];
 
 let mockBudgets = [

@@ -20,6 +20,7 @@ import { getUserId } from '../../services/storage';
 import { notifyBudgetWarning } from '../../services/notifications';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
+import { useTheme } from '../../hooks/useTheme';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -35,6 +36,7 @@ const CATEGORY_ICONS: { [key: string]: string } = {
 
 export default function BudgetScreen() {
   const insets = useSafeAreaInsets();
+  const { colors, theme } = useTheme();
   const [activeTab, setActiveTab] = useState(0); // 0 = Overview, 1 = Setup
   const scrollViewRef = useRef<ScrollView>(null);
   
@@ -202,18 +204,18 @@ export default function BudgetScreen() {
 
   if (fetching) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#111111" />
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.centered}>
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
         <Text style={styles.errorIcon}>⚠️</Text>
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => fetchData(true)}>
+        <Text style={[styles.errorText, { color: colors.textSecondary }]}>{error}</Text>
+        <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={() => fetchData(true)}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
       </View>
@@ -222,27 +224,27 @@ export default function BudgetScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.flex}
+      style={[styles.flex, { backgroundColor: colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       {/* Premium segmented control header */}
-      <View style={[styles.headerContainer, { paddingTop: Math.max(insets.top, 12) }]}>
-        <View style={styles.tabHeaderContainer}>
+      <View style={[styles.headerContainer, { backgroundColor: colors.cardBg, borderColor: colors.border, paddingTop: Math.max(insets.top, 12) }]}>
+        <View style={[styles.tabHeaderContainer, { backgroundColor: colors.neutralBg }]}>
           <TouchableOpacity
-            style={[styles.tabHeaderButton, activeTab === 0 && styles.tabHeaderButtonActive]}
+            style={[styles.tabHeaderButton, activeTab === 0 && { backgroundColor: colors.cardBg }]}
             onPress={() => handleTabPress(0)}
             activeOpacity={0.7}
           >
-            <Text style={[styles.tabHeaderButtonText, activeTab === 0 && styles.tabHeaderButtonTextActive]}>
+            <Text style={[styles.tabHeaderButtonText, { color: colors.textSecondary }, activeTab === 0 && { color: colors.text, fontWeight: 'bold' }]}>
               Overview
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.tabHeaderButton, activeTab === 1 && styles.tabHeaderButtonActive]}
+            style={[styles.tabHeaderButton, activeTab === 1 && { backgroundColor: colors.cardBg }]}
             onPress={() => handleTabPress(1)}
             activeOpacity={0.7}
           >
-            <Text style={[styles.tabHeaderButtonText, activeTab === 1 && styles.tabHeaderButtonTextActive]}>
+            <Text style={[styles.tabHeaderButtonText, { color: colors.textSecondary }, activeTab === 1 && { color: colors.text, fontWeight: 'bold' }]}>
               Setup
             </Text>
           </TouchableOpacity>
@@ -262,29 +264,29 @@ export default function BudgetScreen() {
         {/* Slide 0: Overview */}
         <View style={{ width: screenWidth }}>
           <ScrollView
-            style={styles.verticalScrollView}
+            style={[styles.verticalScrollView, { backgroundColor: colors.background }]}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
           >
             {Object.keys(summary).length === 0 ? (
               <View style={styles.emptyContainer}>
-                <View style={styles.emptyIconCircle}>
+                <View style={[styles.emptyIconCircle, { backgroundColor: colors.neutralBg }]}>
                   <Text style={styles.emptyIcon}>📊</Text>
                 </View>
-                <Text style={styles.emptyText}>No budgets set yet</Text>
-                <Text style={styles.emptySubtext}>Set your monthly limits first to track overview statistics</Text>
+                <Text style={[styles.emptyText, { color: colors.text }]}>No budgets set yet</Text>
+                <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Set your monthly limits first to track overview statistics</Text>
                 <TouchableOpacity
-                  style={styles.setupLinkButton}
+                  style={[styles.setupLinkButton, { backgroundColor: colors.primary }]}
                   onPress={() => handleTabPress(1)}
                 >
                   <Text style={styles.setupLinkButtonText}>Set Up Budgets</Text>
                 </TouchableOpacity>
               </View>
             ) : (
-              <View style={styles.mainCard}>
-                <Text style={styles.cardHeaderTitle}>Budget Overview</Text>
-                <Text style={styles.subtitle}>Your spending this month vs your limits</Text>
+              <View style={[styles.mainCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+                <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>Budget Overview</Text>
+                <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Your spending this month vs your limits</Text>
 
                 {/* ── Budget Analysis Insights ── */}
                 {report && (() => {
@@ -302,9 +304,9 @@ export default function BudgetScreen() {
                   return (
                     <View style={styles.insightsBlock}>
                       {/* Monthly Summary */}
-                      <View style={styles.insightCard}>
-                        <Text style={styles.insightLabel}>Monthly Summary</Text>
-                        <Text style={styles.insightAmount}>GHS {currentTotal.toFixed(2)}</Text>
+                      <View style={[styles.insightCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                        <Text style={[styles.insightLabel, { color: colors.textSecondary }]}>Monthly Summary</Text>
+                        <Text style={[styles.insightAmount, { color: colors.text }]}>GHS {currentTotal.toFixed(2)}</Text>
                         {hasLastMonth ? (
                           <View style={styles.changeRow}>
                             <Text style={[styles.changeArrow, { color: isUp ? "#FF3B30" : "#34C759" }]}>
@@ -315,26 +317,26 @@ export default function BudgetScreen() {
                             </Text>
                           </View>
                         ) : (
-                          <Text style={styles.firstMonth}>First month of tracking</Text>
+                          <Text style={[styles.firstMonth, { color: colors.textSecondary }]}>First month of tracking</Text>
                         )}
                       </View>
 
                       {/* Top Category */}
                       {highCat && highCat.category && (
-                        <View style={styles.insightCard}>
-                          <Text style={styles.insightLabel}>Top Spending Category</Text>
+                        <View style={[styles.insightCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                          <Text style={[styles.insightLabel, { color: colors.textSecondary }]}>Top Spending Category</Text>
                           <View style={styles.topCatRow}>
                             <Text style={styles.topCatEmoji}>
                               {CATEGORY_ICONS[highCat.category] || "📦"}
                             </Text>
                             <View>
-                              <Text style={styles.topCatName}>{highCat.category}</Text>
-                              <Text style={styles.topCatAmount}>
+                              <Text style={[styles.topCatName, { color: colors.text }]}>{highCat.category}</Text>
+                              <Text style={[styles.topCatAmount, { color: colors.textSecondary }]}>
                                 GHS {parseFloat(highCat.amount).toFixed(2)}
                               </Text>
                             </View>
                           </View>
-                          <Text style={styles.insightHint}>
+                          <Text style={[styles.insightHint, { color: colors.textSecondary }]}>
                             You spent the most on {highCat.category} this month.
                           </Text>
                         </View>
@@ -342,12 +344,12 @@ export default function BudgetScreen() {
 
                       {/* Budget Health */}
                       {perf.length > 0 && (
-                        <View style={styles.insightCard}>
-                          <Text style={styles.insightLabel}>Budget Health</Text>
+                        <View style={[styles.insightCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                          <Text style={[styles.insightLabel, { color: colors.textSecondary }]}>Budget Health</Text>
                           <Text style={[styles.healthScore, { color: healthColor }]}>
                             {goodCount}/{perf.length} categories on track
                           </Text>
-                          <Text style={styles.insightHint}>
+                          <Text style={[styles.insightHint, { color: colors.textSecondary }]}>
                             {hasOver
                               ? "You've exceeded your budget in some categories."
                               : hasWarning
@@ -357,7 +359,7 @@ export default function BudgetScreen() {
                         </View>
                       )}
 
-                      <Text style={styles.sectionDivider}>Your Budgets</Text>
+                      <Text style={[styles.sectionDivider, { color: colors.textSecondary }]}>Your Budgets</Text>
                     </View>
                   );
                 })()}
@@ -367,13 +369,13 @@ export default function BudgetScreen() {
                   const barColor = getBarColor(data.isOverBudget, data.isNearLimit);
 
                   return (
-                    <View key={category} style={styles.categoryCard}>
+                    <View key={category} style={[styles.categoryCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
                       <View style={styles.cardHeader}>
                         <View style={styles.cardLeft}>
-                          <View style={styles.iconCircle}>
+                          <View style={[styles.iconCircle, { backgroundColor: colors.neutralBg }]}>
                             <Text style={styles.icon}>{CATEGORY_ICONS[category] || '📦'}</Text>
                           </View>
-                          <Text style={styles.categoryTitle}>{category}</Text>
+                          <Text style={[styles.categoryTitle, { color: colors.text }]}>{category}</Text>
                         </View>
                         
                         {data.isOverBudget && (
@@ -389,7 +391,7 @@ export default function BudgetScreen() {
                       </View>
 
                       <View style={styles.progressContainer}>
-                        <View style={styles.progressBackground}>
+                        <View style={[styles.progressBackground, { backgroundColor: colors.border }]}>
                           <View
                             style={[
                               styles.progressBar,
@@ -406,17 +408,18 @@ export default function BudgetScreen() {
                       </View>
 
                       <View style={styles.amountRow}>
-                        <Text style={styles.spentText}>
+                        <Text style={[styles.spentText, { color: colors.textSecondary }]}>
                           GHS {parseFloat(data.spent || 0).toFixed(2)} spent
                         </Text>
-                        <Text style={styles.limitText}>
+                        <Text style={[styles.limitText, { color: colors.textSecondary }]}>
                           of GHS {parseFloat(data.limit || 0).toFixed(2)}
                         </Text>
                       </View>
 
                       <Text style={[
                         styles.remaining,
-                        data.isOverBudget && styles.remainingOver
+                        { color: colors.textSecondary },
+                        data.isOverBudget && { color: colors.negative }
                       ]}>
                         {data.isOverBudget
                           ? `GHS ${(parseFloat(data.spent || 0) - parseFloat(data.limit || 0)).toFixed(2)} over budget`
@@ -427,15 +430,15 @@ export default function BudgetScreen() {
                 })}
 
                 <TouchableOpacity
-                  style={styles.reportButton}
+                  style={[styles.reportButton, { borderColor: colors.border }]}
                   onPress={() => router.push("/(tabs)/report")}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.reportButtonText}>📈 View Monthly Report</Text>
+                  <Text style={[styles.reportButtonText, { color: colors.primary }]}>📈 View Monthly Report</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.editButton}
+                  style={[styles.editButton, { backgroundColor: colors.primary }]}
                   onPress={() => handleTabPress(1)}
                   activeOpacity={0.85}
                 >
@@ -449,14 +452,14 @@ export default function BudgetScreen() {
         {/* Slide 1: Setup */}
         <View style={{ width: screenWidth }}>
           <ScrollView
-            style={styles.verticalScrollView}
+            style={[styles.verticalScrollView, { backgroundColor: colors.background }]}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            <View style={styles.mainCard}>
-              <Text style={styles.cardHeaderTitle}>Monthly Budgets</Text>
-              <Text style={styles.subtitle}>Set how much you want to spend per category this month</Text>
+            <View style={[styles.mainCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+              <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>Monthly Budgets</Text>
+              <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Set how much you want to spend per category this month</Text>
 
               <View style={styles.categoryList}>
                 {CATEGORIES.map((category) => {
@@ -464,14 +467,14 @@ export default function BudgetScreen() {
                   const isInputFocused = focusedInput === category;
 
                   return (
-                    <View key={category} style={styles.categoryCapsule}>
+                    <View key={category} style={[styles.categoryCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
                       <View style={[styles.categoryLeft, { flex: 1, marginRight: 12 }]}>
-                        <View style={styles.categoryIconCircle}>
+                        <View style={[styles.categoryIconCircle, { backgroundColor: colors.neutralBg }]}>
                           <Text style={styles.categoryIcon}>{CATEGORY_ICONS[category]}</Text>
                         </View>
                         <View style={{ flex: 1 }}>
-                          <Text style={styles.categoryLabelName}>{category}</Text>
-                          <Text style={styles.categorySpentText} numberOfLines={1}>
+                          <Text style={[styles.categoryLabelName, { color: colors.text }]}>{category}</Text>
+                          <Text style={[styles.categorySpentText, { color: colors.textSecondary }]} numberOfLines={1}>
                             Spent: GHS {(Number(categorySpent) || 0).toFixed(2)}
                           </Text>
                         </View>
@@ -479,13 +482,14 @@ export default function BudgetScreen() {
 
                       <View style={[
                         styles.inputContainer,
-                        isInputFocused && styles.inputContainerFocused
+                        { backgroundColor: colors.cardBg, borderColor: colors.border },
+                        isInputFocused && { borderColor: colors.primary }
                       ]}>
-                        <Text style={styles.currency}>GHS</Text>
+                        <Text style={[styles.currency, { color: colors.textSecondary }]}>GHS</Text>
                         <TextInput
-                          style={styles.input}
+                          style={[styles.input, { color: colors.text }]}
                           placeholder="0.00"
-                          placeholderTextColor="#C8D2DC"
+                          placeholderTextColor={theme === 'dark' ? '#4B5563' : '#C8D2DC'}
                           value={limits[category]}
                           onChangeText={(text) =>
                             setLimits((prev) => ({ ...prev, [category]: text }))
@@ -500,12 +504,12 @@ export default function BudgetScreen() {
                 })}
               </View>
 
-              <TouchableOpacity style={styles.resetButton} onPress={resetAll}>
-                <Text style={styles.resetButtonText}>Reset All Budgets</Text>
+              <TouchableOpacity style={[styles.resetButton, { backgroundColor: colors.neutralBg }]} onPress={resetAll}>
+                <Text style={[styles.resetButtonText, { color: colors.text }]}>Reset All Budgets</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.button, loading && styles.buttonDisabled]}
+                style={[styles.button, { backgroundColor: colors.primary }, loading && styles.buttonDisabled]}
                 onPress={handleSave}
                 disabled={loading}
                 activeOpacity={0.85}

@@ -13,6 +13,7 @@ export type NotifType =
   | "budget_over"
   | "budget_near"
   | "expense_added"
+  | "income_added"
   | "reminder_due"
   | "shared_expense"
   | "settle_up"

@@ -13,9 +13,11 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { groupAPI } from '../../services/api';
 import { getUserId } from '../../services/storage';
+import { useTheme } from '../../hooks/useTheme';
 
 export default function GroupsScreen() {
   const insets = useSafeAreaInsets();
+  const { colors, theme } = useTheme();
   const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -71,8 +73,8 @@ export default function GroupsScreen() {
 
   if (loading && !refreshing) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#111111" />
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -80,13 +82,13 @@ export default function GroupsScreen() {
   if (error && groups.length === 0) {
     return (
       <ScrollView
-        style={styles.container}
+        style={[styles.container, { backgroundColor: colors.background }]}
         contentContainerStyle={styles.centered}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
         <Text style={styles.errorIcon}>⚠️</Text>
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => fetchGroups(true)}>
+        <Text style={[styles.errorText, { color: colors.textSecondary }]}>{error}</Text>
+        <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={() => fetchGroups(true)}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -95,21 +97,21 @@ export default function GroupsScreen() {
 
   return (
     <ScrollView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
     >
-      {/* Light card container */}
-      <View style={styles.mainCard}>
-        <Text style={styles.cardHeaderTitle}>My Groups</Text>
+      {/* Card container */}
+      <View style={[styles.mainCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+        <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>My Groups</Text>
 
         {groups.length === 0 ? (
           <View style={styles.emptyState}>
-            <View style={styles.emptyIconCircle}>
+            <View style={[styles.emptyIconCircle, { backgroundColor: colors.neutralBg }]}>
               <Text style={styles.emptyIcon}>👥</Text>
             </View>
-            <Text style={styles.emptyText}>No groups yet</Text>
-            <Text style={styles.emptySubtext}>
+            <Text style={[styles.emptyText, { color: colors.text }]}>No groups yet</Text>
+            <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
               Create a group to start splitting and tracking shared expenses with friends
             </Text>
           </View>
@@ -118,7 +120,7 @@ export default function GroupsScreen() {
             {groups.map((item) => (
               <TouchableOpacity
                 key={item.id}
-                style={styles.groupCard}
+                style={[styles.groupCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
                 onPress={() =>
                   router.push({
                     pathname: "/group-detail",
@@ -128,30 +130,30 @@ export default function GroupsScreen() {
                 activeOpacity={0.8}
               >
                 <View style={styles.groupLeft}>
-                  <View style={styles.groupAvatar}>
-                    <Text style={styles.groupAvatarText}>
+                  <View style={[styles.groupAvatar, { backgroundColor: colors.neutralBg }]}>
+                    <Text style={[styles.groupAvatarText, { color: colors.textSecondary }]}>
                       {item.name.charAt(0).toUpperCase()}
                     </Text>
                   </View>
                   <View style={styles.groupInfo}>
-                    <Text style={styles.groupName}>{item.name}</Text>
+                    <Text style={[styles.groupName, { color: colors.text }]}>{item.name}</Text>
                     {groupSummaries[String(item.id)] ? (
-                      <Text style={styles.groupSub}>
+                      <Text style={[styles.groupSub, { color: colors.textSecondary }]}>
                         👥 {groupSummaries[String(item.id)].memberCount} members • GHS {groupSummaries[String(item.id)].total.toFixed(2)} total
                       </Text>
                     ) : (
-                      <Text style={styles.groupSub}>Loading details...</Text>
+                      <Text style={[styles.groupSub, { color: colors.textSecondary }]}>Loading details...</Text>
                     )}
                   </View>
                 </View>
-                <Feather name="chevron-right" size={18} color="#8E9AA6" style={styles.arrow} />
+                <Feather name="chevron-right" size={18} color={colors.textSecondary} style={styles.arrow} />
               </TouchableOpacity>
             ))}
           </View>
         )}
 
         <TouchableOpacity
-          style={styles.createButton}
+          style={[styles.createButton, { backgroundColor: colors.primary }]}
           onPress={() => router.push('/create-group')}
           activeOpacity={0.85}
         >

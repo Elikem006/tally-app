@@ -22,6 +22,7 @@ import { notifyNewSharedExpense } from "../services/notifications";
 import Avatar from "../components/Avatar";
 import Toast from "../components/Toast";
 import { useToast } from "../hooks/useToast";
+import { useTheme } from '../hooks/useTheme';
 
 function timeAgo(createdAt: string) {
   if (!createdAt) return "";
@@ -36,6 +37,7 @@ function timeAgo(createdAt: string) {
 
 export default function GroupDetailScreen() {
   const insets = useSafeAreaInsets();
+  const { colors, theme } = useTheme();
   const { groupId, groupName } = useLocalSearchParams();
   
   const [details, setDetails] = useState<any>(null);
@@ -244,8 +246,8 @@ export default function GroupDetailScreen() {
 
   if (loading && !refreshing) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#111111" />
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -253,13 +255,13 @@ export default function GroupDetailScreen() {
   if (error && !details) {
     return (
       <ScrollView
-        style={styles.container}
+        style={[styles.container, { backgroundColor: colors.background }]}
         contentContainerStyle={styles.centered}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
         <Text style={styles.errorIcon}>⚠️</Text>
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => fetchDetails(true)}>
+        <Text style={[styles.errorText, { color: colors.textSecondary }]}>{error}</Text>
+        <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={() => fetchDetails(true)}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -268,27 +270,25 @@ export default function GroupDetailScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.flex}
+      style={[styles.flex, { backgroundColor: colors.background }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView 
-        style={styles.container} 
+        style={[styles.container, { backgroundColor: colors.background }]} 
         contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
         keyboardShouldPersistTaps="handled"
         automaticallyAdjustKeyboardInsets={true}
       >
-        {/* Light card container */}
-        <View style={styles.mainCard}>
-          <Text style={styles.cardHeaderTitle}>{groupName}</Text>
-
-          {/* Recent Activity Section */}
+        {/* Card container */}
+        <View style={[styles.mainCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+          <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>{groupName}</Text>
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Recent Activity</Text>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Recent Activity</Text>
             {(() => {
               const expenses = details?.expenses || [];
               if (expenses.length === 0) {
-                return <Text style={styles.emptyText}>No activity yet</Text>;
+                return <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No activity yet</Text>;
               }
               const sorted = [...expenses]
                 .sort((a, b) => {
@@ -299,7 +299,7 @@ export default function GroupDetailScreen() {
                 .slice(0, 5);
 
               return sorted.map((expense: any) => (
-                <View key={expense.id} style={styles.activityItem}>
+                <View key={expense.id} style={[styles.activityItem, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
                   <Avatar
                     userId={expense.paidBy}
                     name={expense.paidByName || String(expense.paidBy)}
@@ -308,13 +308,13 @@ export default function GroupDetailScreen() {
                     style={{ marginRight: 12 }}
                   />
                   <View style={styles.activityContent}>
-                    <Text style={styles.activityText}>
+                    <Text style={[styles.activityText, { color: colors.text }]}>
                       <Text style={{ fontWeight: "700" }}>{expense.paidByName || `User #${expense.paidBy}`}</Text> paid <Text style={{ fontWeight: "700" }}>GHS {parseFloat(expense.amount).toFixed(2)}</Text> for {expense.description}
                     </Text>
-                    <Text style={styles.activityTime}>{timeAgo(expense.createdAt)}</Text>
+                    <Text style={[styles.activityTime, { color: colors.textSecondary }]}>{timeAgo(expense.createdAt)}</Text>
                   </View>
-                  <View style={styles.activityBadge}>
-                    <Text style={styles.activityBadgeText}>Shared</Text>
+                  <View style={[styles.activityBadge, { backgroundColor: colors.neutralBg }]}>
+                    <Text style={[styles.activityBadgeText, { color: colors.textSecondary }]}>Shared</Text>
                   </View>
                 </View>
               ));
@@ -323,9 +323,9 @@ export default function GroupDetailScreen() {
 
           {/* Members Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Members</Text>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Members</Text>
             {details?.members?.map((member: any) => (
-              <View key={member.id} style={styles.memberRow}>
+              <View key={member.id} style={[styles.memberRow, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
                 <Avatar
                   userId={member.userId}
                   name={member.name || String(member.userId)}
@@ -334,10 +334,10 @@ export default function GroupDetailScreen() {
                   style={{ marginRight: 12 }}
                 />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.memberText} numberOfLines={1}>
+                  <Text style={[styles.memberText, { color: colors.text }]} numberOfLines={1}>
                     {member.name || `User #${member.userId}`}
                   </Text>
-                  <Text style={styles.memberSubText}>ID: #{member.userId}</Text>
+                  <Text style={[styles.memberSubText, { color: colors.textSecondary }]}>ID: #{member.userId}</Text>
                 </View>
               </View>
             ))}
@@ -345,14 +345,14 @@ export default function GroupDetailScreen() {
 
           {/* Solo empty state */}
           {details?.members?.length === 1 && (
-            <View style={styles.soloMemberCard}>
+            <View style={[styles.soloMemberCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
               <Text style={styles.soloMemberEmoji}>👥</Text>
-              <Text style={styles.soloMemberTitle}>You're the only member here</Text>
-              <Text style={styles.soloMemberSub}>
+              <Text style={[styles.soloMemberTitle, { color: colors.text }]}>You're the only member here</Text>
+              <Text style={[styles.soloMemberSub, { color: colors.textSecondary }]}>
                 Add members to start splitting expenses with friends.
               </Text>
               <TouchableOpacity
-                style={styles.soloAddButton}
+                style={[styles.soloAddButton, { backgroundColor: colors.primary }]}
                 onPress={() => setShowAddMember(true)}
                 activeOpacity={0.8}
               >
@@ -363,15 +363,16 @@ export default function GroupDetailScreen() {
 
           {/* Add Member Form */}
           {showAddMember && (
-            <View style={styles.formSection}>
-              <Text style={styles.formTitle}>Add Member by User ID</Text>
+            <View style={[styles.formSection, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+              <Text style={[styles.formTitle, { color: colors.text }]}>Add Member by User ID</Text>
               <TextInput
                 style={[
                   styles.input,
-                  memberInputFocused && styles.inputFocused
+                  { backgroundColor: colors.cardBg, borderColor: colors.border, color: colors.text },
+                  memberInputFocused && { borderColor: colors.primary }
                 ]}
                 placeholder="Enter User ID (e.g. 2)"
-                placeholderTextColor="#8E9AA6"
+                placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
                 value={memberUserId}
                 onChangeText={setMemberUserId}
                 onFocus={() => setMemberInputFocused(true)}
@@ -379,7 +380,7 @@ export default function GroupDetailScreen() {
                 keyboardType="numeric"
               />
               <TouchableOpacity
-                style={[styles.button, addingMember && styles.buttonDisabled]}
+                style={[styles.button, { backgroundColor: colors.primary }, addingMember && styles.buttonDisabled]}
                 onPress={handleAddMember}
                 disabled={addingMember}
                 activeOpacity={0.85}
@@ -391,23 +392,23 @@ export default function GroupDetailScreen() {
                 )}
               </TouchableOpacity>
               <TouchableOpacity style={styles.cancelLinkButton} onPress={() => setShowAddMember(false)} activeOpacity={0.7}>
-                <Text style={styles.cancelLinkText}>Cancel</Text>
+                <Text style={[styles.cancelLinkText, { color: colors.textSecondary }]}>Cancel</Text>
               </TouchableOpacity>
             </View>
           )}
 
           {!showAddMember && details?.members?.length > 1 && (
-            <TouchableOpacity style={styles.outlineAddButton} onPress={() => setShowAddMember(true)} activeOpacity={0.8}>
-              <Text style={styles.outlineAddButtonText}>+ Add Member</Text>
+            <TouchableOpacity style={[styles.outlineAddButton, { borderColor: colors.border }]} onPress={() => setShowAddMember(true)} activeOpacity={0.8}>
+              <Text style={[styles.outlineAddButtonText, { color: colors.primary }]}>+ Add Member</Text>
             </TouchableOpacity>
           )}
 
           {/* Balances Section */}
           {balances.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Balances</Text>
+              <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Balances</Text>
               {balances.map((b: any, index: number) => (
-                <View key={index} style={styles.balanceRow}>
+                <View key={index} style={[styles.balanceRow, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
                   <View style={{ flexDirection: "row", alignItems: "center", flex: 1, marginRight: 10 }}>
                     <Avatar
                       userId={b.userId}
@@ -417,10 +418,10 @@ export default function GroupDetailScreen() {
                       style={{ marginRight: 10 }}
                     />
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.balanceText} numberOfLines={1}>
+                      <Text style={[styles.balanceText, { color: colors.text }]} numberOfLines={1}>
                         {b.name || `User #${b.userId}`}
                       </Text>
-                      <Text style={styles.balanceSub}>
+                      <Text style={[styles.balanceSub, { color: colors.textSecondary }]}>
                         {b.owes ? "Owes money" : "Is owed money"}
                       </Text>
                     </View>
@@ -430,15 +431,15 @@ export default function GroupDetailScreen() {
                       style={[
                         styles.balanceBadge,
                         {
-                          backgroundColor: b.owes ? "#FF3B3012" : "#34C75912",
-                          borderColor: b.owes ? "#FF3B3030" : "#34C75930",
+                          backgroundColor: b.owes ? colors.negative + "12" : colors.positive + "12",
+                          borderColor: b.owes ? colors.negative + "30" : colors.positive + "30",
                         },
                       ]}
                     >
                       <Text
                         style={[
                           styles.balanceAmount,
-                          { color: b.owes ? "#FF3B30" : "#34C759" },
+                          { color: b.owes ? colors.negative : colors.positive },
                         ]}
                       >
                         {b.owes ? "Owes" : "Owed"} GHS {Math.abs(parseFloat(b.balance)).toFixed(2)}
@@ -446,7 +447,7 @@ export default function GroupDetailScreen() {
                     </View>
                     {b.owes && String(b.userId) === String(currentUser.userId) && (
                       <TouchableOpacity
-                        style={styles.settleButton}
+                        style={[styles.settleButton, { backgroundColor: colors.primary }]}
                         onPress={() =>
                           handleSettleUp(
                             b.userId,
@@ -466,26 +467,26 @@ export default function GroupDetailScreen() {
           )}
 
           {balances.length === 0 && (details?.members?.length ?? 0) > 1 && (
-            <View style={styles.settledUpContainer}>
-              <Text style={styles.settledUpText}>Everyone is settled up! 🎉</Text>
+            <View style={[styles.settledUpContainer, { backgroundColor: colors.positive + '15' }]}>
+              <Text style={[styles.settledUpText, { color: colors.positive }]}>Everyone is settled up! 🎉</Text>
             </View>
           )}
 
           {/* Shared Expenses List */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Shared Expenses</Text>
+            <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Shared Expenses</Text>
             {details?.expenses?.length === 0 ? (
-              <Text style={styles.emptyText}>No shared expenses yet</Text>
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No shared expenses yet</Text>
             ) : (
               details?.expenses?.map((expense: any) => (
-                <View key={expense.id} style={styles.sharedExpenseRow}>
+                <View key={expense.id} style={[styles.sharedExpenseRow, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
                   <View style={{ flex: 1, marginRight: 10 }}>
-                    <Text style={styles.expenseName} numberOfLines={1}>{expense.description}</Text>
-                    <Text style={styles.expenseSub}>
+                    <Text style={[styles.expenseName, { color: colors.text }]} numberOfLines={1}>{expense.description}</Text>
+                    <Text style={[styles.expenseSub, { color: colors.textSecondary }]}>
                       Paid by {expense.paidByName || `User #${expense.paidBy}`} • Split equally
                     </Text>
                   </View>
-                  <Text style={styles.expenseAmount}>
+                  <Text style={[styles.expenseAmount, { color: colors.text }]}>
                     GHS {parseFloat(expense.amount).toFixed(2)}
                   </Text>
                 </View>
@@ -495,15 +496,16 @@ export default function GroupDetailScreen() {
 
           {/* Add Expense Form (if toggled open) */}
           {showAddExpense && (
-            <View style={styles.formSection}>
-              <Text style={styles.formTitle}>Add Shared Expense</Text>
+            <View style={[styles.formSection, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+              <Text style={[styles.formTitle, { color: colors.text }]}>Add Shared Expense</Text>
               <TextInput
                 style={[
                   styles.input,
-                  descFocused && styles.inputFocused
+                  { backgroundColor: colors.cardBg, borderColor: colors.border, color: colors.text },
+                  descFocused && { borderColor: colors.primary }
                 ]}
                 placeholder="Description (e.g. Dinner)"
-                placeholderTextColor="#8E9AA6"
+                placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
                 value={expenseDescription}
                 onChangeText={setExpenseDescription}
                 onFocus={() => setDescFocused(true)}
@@ -512,10 +514,11 @@ export default function GroupDetailScreen() {
               <TextInput
                 style={[
                   styles.input,
-                  amtFocused && styles.inputFocused
+                  { backgroundColor: colors.cardBg, borderColor: colors.border, color: colors.text },
+                  amtFocused && { borderColor: colors.primary }
                 ]}
                 placeholder="Amount (GHS)"
-                placeholderTextColor="#8E9AA6"
+                placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
                 value={expenseAmount}
                 onChangeText={setExpenseAmount}
                 onFocus={() => setAmtFocused(true)}
@@ -523,7 +526,7 @@ export default function GroupDetailScreen() {
                 keyboardType="decimal-pad"
               />
               <TouchableOpacity
-                style={[styles.button, addingExpense && styles.buttonDisabled]}
+                style={[styles.button, { backgroundColor: colors.primary }, addingExpense && styles.buttonDisabled]}
                 onPress={handleAddExpense}
                 disabled={addingExpense}
                 activeOpacity={0.85}
@@ -535,14 +538,14 @@ export default function GroupDetailScreen() {
                 )}
               </TouchableOpacity>
               <TouchableOpacity style={styles.cancelLinkButton} onPress={() => setShowAddExpense(false)} activeOpacity={0.7}>
-                <Text style={styles.cancelLinkText}>Cancel</Text>
+                <Text style={[styles.cancelLinkText, { color: colors.textSecondary }]}>Cancel</Text>
               </TouchableOpacity>
             </View>
           )}
 
           {!showAddExpense && details?.members?.length > 1 && (
             <TouchableOpacity
-              style={styles.addButton}
+              style={[styles.addButton, { backgroundColor: colors.primary }]}
               onPress={() => setShowAddExpense(true)}
               activeOpacity={0.85}
             >
@@ -551,12 +554,12 @@ export default function GroupDetailScreen() {
           )}
 
           <View style={styles.actionSection}>
-            <TouchableOpacity style={styles.deleteGroupBtn} onPress={handleDeleteGroup} activeOpacity={0.8}>
-              <Text style={styles.deleteGroupText}>Delete Group</Text>
+            <TouchableOpacity style={[styles.deleteGroupBtn, { backgroundColor: colors.neutralBg }]} onPress={handleDeleteGroup} activeOpacity={0.8}>
+              <Text style={[styles.deleteGroupText, { color: colors.negative }]}>Delete Group</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
-              <Text style={styles.backButtonText}>← Back to Groups</Text>
+            <TouchableOpacity style={[styles.backButton, { backgroundColor: colors.neutralBg }]} onPress={() => router.back()} activeOpacity={0.7}>
+              <Text style={[styles.backButtonText, { color: colors.text }]}>← Back to Groups</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -574,9 +577,9 @@ export default function GroupDetailScreen() {
             behavior={Platform.OS === "ios" ? "padding" : undefined}
             style={{ width: "100%", alignItems: "center" }}
           >
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Pay with MoMo</Text>
-              <Text style={styles.modalSubtitle}>
+            <View style={[styles.modalCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>Pay with MoMo</Text>
+              <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>
                 Settling{" "}
                 <Text style={{ color: "#D97706", fontWeight: "bold" }}>
                   GHS {settlingAmount.toFixed(2)}
@@ -585,9 +588,9 @@ export default function GroupDetailScreen() {
               </Text>
 
               <TextInput
-                style={styles.modalInput}
+                style={[styles.modalInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
                 placeholder="Enter MoMo number e.g. 0241234567"
-                placeholderTextColor="#8E9AA6"
+                placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
                 value={momoPhone}
                 onChangeText={setMomoPhone}
                 keyboardType="phone-pad"
@@ -596,7 +599,7 @@ export default function GroupDetailScreen() {
               />
 
               <TouchableOpacity
-                style={[styles.payButton, momoLoading && { opacity: 0.6 }]}
+                style={[styles.payButton, { backgroundColor: "#D97706" }, momoLoading && { opacity: 0.6 }]}
                 onPress={handleMomoPayment}
                 disabled={momoLoading}
                 activeOpacity={0.8}
@@ -609,12 +612,12 @@ export default function GroupDetailScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.skipButton}
+                style={[styles.skipButton, { backgroundColor: colors.neutralBg }]}
                 onPress={handleSkipAndSettle}
                 disabled={momoLoading}
                 activeOpacity={0.8}
               >
-                <Text style={styles.skipButtonText}>Skip &amp; Settle Manually</Text>
+                <Text style={[styles.skipButtonText, { color: colors.text }]}>Skip &amp; Settle Manually</Text>
               </TouchableOpacity>
 
               {!momoLoading && (
@@ -623,7 +626,7 @@ export default function GroupDetailScreen() {
                   onPress={() => setShowMomoModal(false)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.cancelLinkText}>Cancel</Text>
+                  <Text style={[styles.cancelLinkText, { color: colors.textSecondary }]}>Cancel</Text>
                 </TouchableOpacity>
               )}
             </View>

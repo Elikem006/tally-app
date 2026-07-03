@@ -14,9 +14,11 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { groupAPI } from '../services/api';
 import { getUserId } from '../services/storage';
+import { useTheme } from '../hooks/useTheme';
 
 export default function CreateGroupScreen() {
   const insets = useSafeAreaInsets();
+  const { colors, theme } = useTheme();
   const [groupName, setGroupName] = useState('');
   const [loading, setLoading] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
@@ -43,25 +45,26 @@ export default function CreateGroupScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.keyboardContainer}
+      style={[styles.keyboardContainer, { backgroundColor: colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View style={[styles.container, { paddingTop: Math.max(insets.top, 20), paddingBottom: Math.max(insets.bottom, 20) }]}>
-        {/* Light card container */}
-        <View style={styles.mainCard}>
-          <Text style={styles.cardHeaderTitle}>Create a Group</Text>
-          <Text style={styles.subtitle}>
+      <View style={[styles.container, { backgroundColor: colors.background, paddingTop: Math.max(insets.top, 20), paddingBottom: Math.max(insets.bottom, 20) }]}>
+        {/* Card container */}
+        <View style={[styles.mainCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+          <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>Create a Group</Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             Give your group a name — like "KNUST Friends" or "Roommates"
           </Text>
 
-          <Text style={styles.label}>Group Name</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Group Name</Text>
           <TextInput
             style={[
               styles.input,
-              inputFocused && styles.inputFocused
+              { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text },
+              inputFocused && { borderColor: colors.primary }
             ]}
             placeholder="Enter group name"
-            placeholderTextColor="#8E9AA6"
+            placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
             value={groupName}
             onChangeText={setGroupName}
             onFocus={() => setInputFocused(true)}
@@ -70,7 +73,7 @@ export default function CreateGroupScreen() {
           />
 
           <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
+            style={[styles.button, { backgroundColor: colors.primary }, loading && styles.buttonDisabled]}
             onPress={handleCreateGroup}
             disabled={loading}
             activeOpacity={0.85}
@@ -83,11 +86,11 @@ export default function CreateGroupScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.cancelButton}
+            style={[styles.cancelButton, { backgroundColor: colors.neutralBg }]}
             onPress={() => router.back()}
             activeOpacity={0.7}
           >
-            <Text style={styles.cancelText}>Cancel</Text>
+            <Text style={[styles.cancelText, { color: colors.textSecondary }]}>Cancel</Text>
           </TouchableOpacity>
         </View>
       </View>

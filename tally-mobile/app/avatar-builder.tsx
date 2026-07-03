@@ -14,8 +14,10 @@ import { authAPI } from "../services/api";
 import { getUserId, currentUser } from "../services/storage";
 import Toast from "../components/Toast";
 import { useToast } from "../hooks/useToast";
+import { useTheme } from '../hooks/useTheme';
 
 export default function AvatarBuilderScreen() {
+  const { colors, theme } = useTheme();
   const [photoUri,    setPhotoUri]    = useState<string | null>(
     currentUser.avatarType === "photo" && currentUser.avatarData ? currentUser.avatarData : null
   );
@@ -91,43 +93,43 @@ export default function AvatarBuilderScreen() {
   const displayUri = photoBase64 ?? (photoUri?.startsWith("data:image") ? photoUri : null);
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Edit Profile Photo</Text>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <Text style={[styles.title, { color: colors.text }]}>Edit Profile Photo</Text>
 
       {/* Photo preview circle */}
-      <View style={styles.previewContainer}>
+      <View style={[styles.previewContainer, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
         {displayUri ? (
           <Image source={{ uri: displayUri }} style={styles.photo} />
         ) : (
           <View style={styles.placeholder}>
             <Text style={styles.cameraIcon}>📷</Text>
-            <Text style={styles.placeholderText}>No photo yet</Text>
+            <Text style={[styles.placeholderText, { color: colors.textSecondary }]}>No photo yet</Text>
           </View>
         )}
       </View>
 
       {/* Picker buttons */}
-      <TouchableOpacity style={styles.pickerBtn} onPress={() => pickImage(true)}>
-        <Text style={styles.pickerBtnText}>📷  Take Photo</Text>
+      <TouchableOpacity style={[styles.pickerBtn, { backgroundColor: colors.inputBg, borderColor: colors.border }]} onPress={() => pickImage(true)}>
+        <Text style={[styles.pickerBtnText, { color: colors.text }]}>📷  Take Photo</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.pickerBtn} onPress={() => pickImage(false)}>
-        <Text style={styles.pickerBtnText}>🖼️  Choose from Gallery</Text>
+      <TouchableOpacity style={[styles.pickerBtn, { backgroundColor: colors.inputBg, borderColor: colors.border }]} onPress={() => pickImage(false)}>
+        <Text style={[styles.pickerBtnText, { color: colors.text }]}>🖼️  Choose from Gallery</Text>
       </TouchableOpacity>
 
       {/* Save */}
       <TouchableOpacity
-        style={[styles.saveBtn, saving && { opacity: 0.7 }]}
+        style={[styles.saveBtn, { backgroundColor: colors.primary }, saving && { opacity: 0.7 }]}
         onPress={handleSave}
         disabled={saving}
       >
         {saving
-          ? <ActivityIndicator color="#000" />
+          ? <ActivityIndicator color="#ffffff" />
           : <Text style={styles.saveBtnText}>Save Photo</Text>}
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()}>
-        <Text style={styles.cancelBtnText}>Cancel</Text>
+      <TouchableOpacity style={[styles.cancelBtn, { backgroundColor: colors.neutralBg }]} onPress={() => router.back()}>
+        <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
       </TouchableOpacity>
       <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
     </View>

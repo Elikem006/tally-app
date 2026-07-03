@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Svg, Path } from 'react-native-svg';
 import { expenseAPI, budgetAPI } from '../../services/api';
 import { getUserId } from '../../services/storage';
+import { useTheme } from '../../hooks/useTheme';
 
 const CATEGORY_ICONS: { [key: string]: string } = {
   Food: '🍔',
@@ -67,6 +68,7 @@ function parseTagsFromDescription(description: string | null | undefined): {
 
 export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
+  const { colors, theme } = useTheme();
   const [expenses, setExpenses] = useState<any[]>([]);
   const [budgets, setBudgets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -217,7 +219,9 @@ export default function HistoryScreen() {
   }, [totalBudget, activeTimeFilter]);
 
   const totalSpent = useMemo(() => {
-    return filteredExpenses.reduce((sum, e) => sum + parseFloat(e.amount || '0'), 0);
+    return filteredExpenses
+      .filter(e => parseFloat(e.amount || '0') < 0)
+      .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || '0')), 0);
   }, [filteredExpenses]);
 
   // Progress values for gauges (safe division)
@@ -265,8 +269,8 @@ export default function HistoryScreen() {
 
   if (loading && !refreshing) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#111111" />
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -274,13 +278,13 @@ export default function HistoryScreen() {
   if (error) {
     return (
       <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.centered}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}
+        style={[styles.container, { backgroundColor: colors.background }]}
+        contentContainerStyle={[styles.centered, { backgroundColor: colors.background }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
         <Text style={styles.errorIcon}>⚠️</Text>
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => fetchData(true)}>
+        <Text style={[styles.errorText, { color: colors.textSecondary }]}>{error}</Text>
+        <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={() => fetchData(true)}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -289,26 +293,24 @@ export default function HistoryScreen() {
 
   return (
     <ScrollView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={styles.cardHeaderTitle}>Analytics & History</Text>
-
-      {/* 1. Time Filter Segmented Control */}
-      <View style={styles.timeFilterContainer}>
+      <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>Analytics & History</Text>
+      <View style={[styles.timeFilterContainer, { backgroundColor: colors.neutralBg }]}>
         {(['today', 'week', 'month', 'year'] as const).map((filter) => {
           const labelMap = { today: 'Today', week: 'This Week', month: 'This Month', year: 'This Year' };
           const isActive = activeTimeFilter === filter;
           return (
             <TouchableOpacity
               key={filter}
-              style={[styles.timeFilterBtn, isActive && styles.timeFilterBtnActive]}
+              style={[styles.timeFilterBtn, isActive && { backgroundColor: colors.cardBg }]}
               onPress={() => setActiveTimeFilter(filter)}
               activeOpacity={0.8}
             >
-              <Text style={[styles.timeFilterText, isActive && styles.timeFilterTextActive]}>
+              <Text style={[styles.timeFilterText, { color: colors.textSecondary }, isActive && { color: colors.text, fontWeight: 'bold' }]}>
                 {labelMap[filter]}
               </Text>
             </TouchableOpacity>
@@ -319,10 +321,10 @@ export default function HistoryScreen() {
       {/* 2. Side-by-side Gauges: Total Spend and Balance */}
       <View style={styles.gaugesRow}>
         {/* Total Spending Gauge */}
-        <View style={styles.gaugeCard}>
+        <View style={[styles.gaugeCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
           <View style={styles.gaugeWrapper}>
             <Svg width={72} height={72} viewBox="0 0 72 72">
-              <Path d={getGaugePath(36, 36, 28, 1.0)} fill="none" stroke="#F2F4F7" strokeWidth="5.5" strokeLinecap="round" />
+              <Path d={getGaugePath(36, 36, 28, 1.0)} fill="none" stroke={colors.border} strokeWidth="5.5" strokeLinecap="round" />
               {totalSpent > 0 && scaledBudget > 0 && (
                 <Path
                   d={getGaugePath(36, 36, 28, spendProgress)}
@@ -337,15 +339,15 @@ export default function HistoryScreen() {
               <Feather name="upload" size={14} color="#FF9500" />
             </View>
           </View>
-          <Text style={styles.gaugeLabel}>Total Spend</Text>
-          <Text style={styles.gaugeValue}>GHS {totalSpent.toFixed(0)}</Text>
+          <Text style={[styles.gaugeLabel, { color: colors.textSecondary }]}>Total Spend</Text>
+          <Text style={[styles.gaugeValue, { color: colors.text }]}>GHS {totalSpent.toFixed(0)}</Text>
         </View>
 
         {/* Balance Gauge */}
-        <View style={styles.gaugeCard}>
+        <View style={[styles.gaugeCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
           <View style={styles.gaugeWrapper}>
             <Svg width={72} height={72} viewBox="0 0 72 72">
-              <Path d={getGaugePath(36, 36, 28, 1.0)} fill="none" stroke="#F2F4F7" strokeWidth="5.5" strokeLinecap="round" />
+              <Path d={getGaugePath(36, 36, 28, 1.0)} fill="none" stroke={colors.border} strokeWidth="5.5" strokeLinecap="round" />
               {totalBudget > 0 && (
                 <Path
                   d={getGaugePath(36, 36, 28, balanceProgress)}
@@ -360,21 +362,22 @@ export default function HistoryScreen() {
               <Feather name="pie-chart" size={14} color="#34C759" />
             </View>
           </View>
-          <Text style={styles.gaugeLabel}>Balance</Text>
-          <Text style={styles.gaugeValue}>GHS {totalBudget.toFixed(0)}</Text>
+          <Text style={[styles.gaugeLabel, { color: colors.textSecondary }]}>Balance</Text>
+          <Text style={[styles.gaugeValue, { color: colors.text }]}>GHS {totalBudget.toFixed(0)}</Text>
         </View>
       </View>
 
       {/* 3. Search Bar */}
       <View style={[
         styles.searchContainer,
-        searchFocused && styles.searchContainerFocused
+        { backgroundColor: colors.inputBg, borderColor: colors.border },
+        searchFocused && { borderColor: colors.primary }
       ]}>
         <Feather name="search" size={18} color="#8E9AA6" style={styles.searchIcon} />
         <TextInput
-          style={styles.searchBar}
+          style={[styles.searchBar, { color: colors.text }]}
           placeholder="Search filtered list..."
-          placeholderTextColor="#8E9AA6"
+          placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
           value={searchQuery}
           onChangeText={setSearchQuery}
           onFocus={() => setSearchFocused(true)}
@@ -386,20 +389,21 @@ export default function HistoryScreen() {
           </TouchableOpacity>
         )}
       </View>
-
       {/* 3.5 Standalone Filters */}
       <View style={styles.filterOptionsRow}>
         <TouchableOpacity
           style={[
             styles.momoFilterBtn,
-            momoOnly && styles.momoFilterBtnActive
+            { backgroundColor: colors.neutralBg, borderColor: colors.border },
+            momoOnly && { backgroundColor: colors.accent + '20', borderColor: colors.accent }
           ]}
           onPress={() => setMomoOnly(!momoOnly)}
           activeOpacity={0.8}
         >
           <Text style={[
             styles.momoFilterBtnText,
-            momoOnly && styles.momoFilterBtnTextActive
+            { color: colors.textSecondary },
+            momoOnly && { color: colors.accent, fontWeight: 'bold' }
           ]}>
             📱 MoMo Only
           </Text>
@@ -409,7 +413,7 @@ export default function HistoryScreen() {
       {/* 4. List of Transactions */}
       {groupedExpenses.map((group) => (
         <View key={group.date} style={styles.dateGroup}>
-          <Text style={styles.dateHeader}>{group.date}</Text>
+          <Text style={[styles.dateHeader, { color: colors.textSecondary }]}>{group.date}</Text>
           {group.items.map((item) => {
             const isShared = item.isShared || item.type === "shared";
             const isMomo = item.paymentMethod === "MOMO";
@@ -417,30 +421,34 @@ export default function HistoryScreen() {
             return (
               <TouchableOpacity
                 key={item.id}
-                style={[styles.expenseCard, isShared && styles.sharedCard]}
+                style={[
+                  styles.expenseCard,
+                  { backgroundColor: colors.cardBg, borderColor: colors.border },
+                  isShared && { borderColor: colors.primary, borderWidth: 1.5 }
+                ]}
                 onLongPress={() => handleDelete(item)}
                 activeOpacity={0.9}
               >
                 <View style={styles.expenseLeft}>
-                  <View style={styles.iconBox}>
+                  <View style={[styles.iconBox, { backgroundColor: colors.neutralBg }]}>
                     <Text style={styles.icon}>{CATEGORY_ICONS[isShared ? 'Shared' : item.category] || '📦'}</Text>
                   </View>
                   <View style={{ flex: 1 }}>
                     <View style={styles.descRow}>
-                      <Text style={styles.expenseDescription} numberOfLines={1}>
+                      <Text style={[styles.expenseDescription, { color: colors.text }]} numberOfLines={1}>
                         {cleanDescription || item.category}
                       </Text>
                     </View>
-                    <Text style={styles.expenseCategory}>{item.category}</Text>
+                    <Text style={[styles.expenseCategory, { color: colors.textSecondary }]}>{item.category}</Text>
                     
                     <View style={styles.badgeRow}>
                       {isShared && (
-                        <View style={styles.sharedBadge}>
-                          <Text style={styles.sharedBadgeText}>👥 Shared</Text>
+                        <View style={[styles.sharedBadge, { backgroundColor: colors.primary + '15' }]}>
+                          <Text style={[styles.sharedBadgeText, { color: colors.primary }]}>👥 Shared</Text>
                         </View>
                       )}
-                      <View style={[styles.paymentBadge, isMomo && styles.momoBadge]}>
-                        <Text style={[styles.paymentBadgeText, isMomo && styles.momoBadgeText]}>
+                      <View style={[styles.paymentBadge, { backgroundColor: colors.neutralBg }]}>
+                        <Text style={[styles.paymentBadgeText, { color: colors.textSecondary }]}>
                           {isMomo ? "📱 MoMo" : "💵 Cash"}
                         </Text>
                       </View>
@@ -449,8 +457,8 @@ export default function HistoryScreen() {
                     {tags.length > 0 && (
                       <View style={styles.tagsContainer}>
                         {tags.map((tag) => (
-                          <View key={tag} style={styles.tagPill}>
-                            <Text style={styles.tagText}>{tag}</Text>
+                          <View key={tag} style={[styles.tagPill, { backgroundColor: colors.neutralBg }]}>
+                            <Text style={[styles.tagText, { color: colors.textSecondary }]}>{tag}</Text>
                           </View>
                         ))}
                       </View>
@@ -458,8 +466,13 @@ export default function HistoryScreen() {
                   </View>
                 </View>
                 <View style={styles.expenseRight}>
-                  <Text style={styles.expenseAmount}>
-                    -GHS {parseFloat(item.amount || '0').toFixed(2)}
+                  <Text style={[
+                    styles.expenseAmount,
+                    { color: parseFloat(item.amount || '0') >= 0 ? colors.positive : colors.negative }
+                  ]}>
+                    {parseFloat(item.amount || '0') >= 0 
+                      ? `+GHS ${parseFloat(item.amount || '0').toFixed(2)}` 
+                      : `-GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`}
                   </Text>
                   <TouchableOpacity
                     style={styles.deleteBtn}
@@ -478,12 +491,12 @@ export default function HistoryScreen() {
       {filteredExpenses.length === 0 && (
         <View style={styles.emptyState}>
           <Text style={styles.emptyIcon}>🔍</Text>
-          <Text style={styles.emptyText}>No transactions found</Text>
-          <Text style={styles.emptySubtext}>Try changing your filter settings or search query</Text>
+          <Text style={[styles.emptyText, { color: colors.text }]}>No transactions found</Text>
+          <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Try changing your filter settings or search query</Text>
         </View>
       )}
 
-      <Text style={styles.hint}>Tip: You can also long press a transaction to delete it</Text>
+      <Text style={[styles.hint, { color: colors.textSecondary }]}>Tip: You can also long press a transaction to delete it</Text>
     </ScrollView>
   );
 }

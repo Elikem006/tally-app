@@ -3,9 +3,11 @@ import { Redirect } from "expo-router";
 import { currentUser } from "../../services/storage";
 import { TouchableOpacity, StyleSheet, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { useTheme } from "../../hooks/useTheme";
 
 export default function TabLayout() {
   const isLoggedIn = currentUser.token !== "";
+  const { colors } = useTheme();
 
   if (!isLoggedIn) {
     return <Redirect href="/(auth)/login" />;
@@ -14,12 +16,12 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#111111',
-        tabBarInactiveTintColor: '#8E9AA6',
+        tabBarActiveTintColor: colors.text,
+        tabBarInactiveTintColor: colors.textSecondary,
         tabBarShowLabel: false, // Hide labels for clean modern look
         tabBarStyle: {
-          backgroundColor: '#ffffff',
-          borderTopColor: '#EAEBEF',
+          backgroundColor: colors.cardBg,
+          borderTopColor: colors.border,
         },
         headerShown: false,
       }}
@@ -49,7 +51,7 @@ export default function TabLayout() {
                 onLongPress={props.onLongPress || undefined}
                 accessibilityState={props.accessibilityState || undefined}
                 accessibilityRole={props.accessibilityRole}
-                style={styles.customAddButton}
+                style={[styles.customAddButton, { backgroundColor: colors.primary, borderColor: colors.cardBg }]}
                 activeOpacity={0.85}
               >
                 <Feather name="plus" size={24} color="#ffffff" />
@@ -97,14 +99,15 @@ export default function TabLayout() {
 }
 
 function TabIcon({ name, focused }: { name: keyof typeof Feather.glyphMap; focused: boolean }) {
+  const { colors } = useTheme();
   return (
     <View style={styles.iconContainer}>
       <Feather 
         name={name} 
         size={22} 
-        color={focused ? '#111111' : '#8E9AA6'} 
+        color={focused ? colors.text : colors.textSecondary} 
       />
-      {focused && <View style={styles.activeDot} />}
+      {focused && <View style={[styles.activeDot, { backgroundColor: colors.text }]} />}
     </View>
   );
 }
