@@ -672,7 +672,7 @@ export default function HomeScreen() {
           {!momoBalanceLoading && momoStatus === "available" && (
             <View>
               <Text style={styles.momoBalance}>
-                {hideMomoBalance ? "EUR ••••••" : `EUR ${momoBalance}`}
+                {hideMomoBalance ? "GHS ••••••" : `GHS ${momoBalance}`}
               </Text>
               <Text style={styles.momoSpentSub}>
                 GHS {momoMonthlySpent} spent via MoMo this month
