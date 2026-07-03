@@ -238,9 +238,13 @@ export default function RemindersScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Add Form */}
         {showAddForm && (
-          <View style={styles.formCard}>
+          <ScrollView
+            style={{ maxHeight: 350, marginHorizontal: 16, marginBottom: 16 }}
+            contentContainerStyle={[styles.formCard, { marginHorizontal: 0, marginBottom: 0 }]}
+            keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets={true}
+          >
             <Text style={styles.formTitle}>New Reminder</Text>
 
             <TextInput
@@ -375,7 +379,7 @@ export default function RemindersScreen() {
             >
               <Text style={styles.cancelBtnText}>Cancel</Text>
             </TouchableOpacity>
-          </View>
+          </ScrollView>
         )}
 
         {/* Reminders list */}

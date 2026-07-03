@@ -306,7 +306,7 @@ export default function AddScreen() {
       style={styles.flex}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]} keyboardShouldPersistTaps="handled">
+      <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={true}>
         {/* Light card container */}
         <View style={styles.mainCard}>
           <Text style={styles.cardHeaderTitle}>Add Expense</Text>

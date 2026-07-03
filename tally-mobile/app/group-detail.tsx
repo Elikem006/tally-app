@@ -276,6 +276,7 @@ export default function GroupDetailScreen() {
         contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}
         keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets={true}
       >
         {/* Light card container */}
         <View style={styles.mainCard}>
