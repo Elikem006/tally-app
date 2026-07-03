@@ -17,9 +17,8 @@ import {
 } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { expenseAPI, remindersAPI, budgetAPI, momoAPI } from '../../services/api';
-import { getUserId, getUserName } from '../../services/storage';
+import { getUserId, getUserName, safeStorage } from '../../services/storage';
 import { Feather } from '@expo/vector-icons';
 import { Svg, Path } from 'react-native-svg';
 import {
@@ -107,7 +106,7 @@ export default function HomeScreen() {
       loadProfileImage();
       consumeMomoRefresh();
       getUnreadCount().then(setUnreadCount);
-      AsyncStorage.getItem('hide_momo_balance').then((val) => {
+      safeStorage.getItem('hide_momo_balance').then((val) => {
         if (val !== null) {
           setHideMomoBalance(val === 'true');
         }
@@ -118,7 +117,7 @@ export default function HomeScreen() {
   async function loadProfileImage() {
     try {
       const userId = getUserId();
-      const saved = await AsyncStorage.getItem(`profile_image_${userId}`);
+      const saved = await safeStorage.getItem(`profile_image_${userId}`);
       if (saved) {
         setProfileImage(saved);
       } else {
@@ -133,7 +132,7 @@ export default function HomeScreen() {
     try {
       const newVal = !hideMomoBalance;
       setHideMomoBalance(newVal);
-      await AsyncStorage.setItem('hide_momo_balance', String(newVal));
+      await safeStorage.setItem('hide_momo_balance', String(newVal));
     } catch (e) {
       console.log('Error toggling hide momo balance:', e);
     }

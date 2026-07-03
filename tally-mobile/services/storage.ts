@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { currentUser } from "../app/(auth)/login";
 
 export function getUserId(): string {
@@ -11,3 +12,36 @@ export function getUserName(): string {
 export function getToken(): string {
   return currentUser.token || "";
 }
+
+export const safeStorage = {
+  async getItem(key: string): Promise<string | null> {
+    try {
+      const val = await AsyncStorage.getItem(key);
+      return val;
+    } catch (e) {
+      // Fallback to localStorage on Web / simulator native module mismatch
+      if (typeof window !== 'undefined' && window.localStorage) {
+        return window.localStorage.getItem(key);
+      }
+      return null;
+    }
+  },
+  async setItem(key: string, value: string): Promise<void> {
+    try {
+      await AsyncStorage.setItem(key, value);
+    } catch (e) {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(key, value);
+      }
+    }
+  },
+  async removeItem(key: string): Promise<void> {
+    try {
+      await AsyncStorage.removeItem(key);
+    } catch (e) {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  }
+};

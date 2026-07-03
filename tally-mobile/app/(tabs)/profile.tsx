@@ -15,11 +15,10 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { currentUser } from '../(auth)/login';
 import { expenseAPI, authAPI } from '../../services/api';
-import { getUserId } from '../../services/storage';
+import { getUserId, safeStorage } from '../../services/storage';
 import Avatar from '../../components/Avatar';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
@@ -65,7 +64,7 @@ export default function ProfileScreen() {
 
   async function loadProfileImage() {
     try {
-      const saved = await AsyncStorage.getItem(`profile_image_${currentUser.userId}`);
+      const saved = await safeStorage.getItem(`profile_image_${currentUser.userId}`);
       if (saved) {
         setProfileImage(saved);
       } else {
@@ -78,7 +77,7 @@ export default function ProfileScreen() {
 
   async function saveProfileImage(uri: string) {
     try {
-      await AsyncStorage.setItem(`profile_image_${currentUser.userId}`, uri);
+      await safeStorage.setItem(`profile_image_${currentUser.userId}`, uri);
       setProfileImage(uri);
       showToast("Profile image updated!", "success");
     } catch (e) {
@@ -248,7 +247,7 @@ export default function ProfileScreen() {
               style: 'destructive',
               onPress: async () => {
                 try {
-                  await AsyncStorage.removeItem(`profile_image_${currentUser.userId}`);
+                  await safeStorage.removeItem(`profile_image_${currentUser.userId}`);
                   setProfileImage(null);
                   showToast("Profile image removed", "info");
                 } catch (e) {
