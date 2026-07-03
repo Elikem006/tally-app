@@ -11,6 +11,8 @@ import {
   TextInput,
   ActivityIndicator,
   RefreshControl,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -269,12 +271,16 @@ export default function ProfileScreen() {
   }
 
   return (
-    <View style={styles.flex}>
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <ScrollView
         style={styles.container}
         contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#8B5CF6" colors={['#8B5CF6']} />}
         keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets={true}
       >
         {/* Light card container */}
         <View style={styles.mainCard}>
@@ -508,7 +514,7 @@ export default function ProfileScreen() {
       </ScrollView>
 
       <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
