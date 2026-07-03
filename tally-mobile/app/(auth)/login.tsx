@@ -16,16 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { authAPI } from '../../services/api';
 import { Feather, AntDesign, FontAwesome } from '@expo/vector-icons';
 
-// Global store for user session (merged with main branch properties)
-export let currentUser = {
-  token: '',
-  userId: '1',
-  userName: 'User',
-  email: '',
-  avatarType: '',
-  avatarData: '',
-  phoneNumber: '',
-};
+import { currentUser } from '../../services/storage';
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();

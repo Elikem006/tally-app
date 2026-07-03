@@ -596,8 +596,7 @@ api.interceptors.response.use(
       console.warn("[Tally API] 401 Unauthorized — clearing session and redirecting to login.");
       try {
         // Lazy require avoids circular dep at module load time
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { currentUser } = require("../app/(auth)/login");
+        const { currentUser } = require("./storage");
         currentUser.token = "";
         currentUser.userId = "1";
         currentUser.userName = "";

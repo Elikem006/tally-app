@@ -1,5 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { currentUser } from "../app/(auth)/login";
+
+// Global store for user session (moved from login.tsx to avoid circular dependencies)
+export let currentUser = {
+  token: '',
+  userId: '1',
+  userName: 'User',
+  email: '',
+  avatarType: '',
+  avatarData: '',
+  phoneNumber: '',
+};
 
 export function getUserId(): string {
   return currentUser.userId || "";

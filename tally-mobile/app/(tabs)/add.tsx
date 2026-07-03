@@ -14,8 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { expenseAPI, budgetAPI, momoAPI } from '../../services/api';
-import { getUserId } from '../../services/storage';
-import { currentUser } from '../(auth)/login';
+import { getUserId, currentUser } from '../../services/storage';
 import { addHistoryItem } from '../../services/notificationHistory';
 import { signalMomoRefresh } from '../../services/momoRefresh';
 import Toast from '../../components/Toast';

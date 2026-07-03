@@ -1,6 +1,6 @@
 import { Tabs } from "expo-router";
 import { Redirect } from "expo-router";
-import { currentUser } from "../(auth)/login";
+import { currentUser } from "../../services/storage";
 import { TouchableOpacity, StyleSheet, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 

@@ -11,8 +11,7 @@ import {
 import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { authAPI } from "../services/api";
-import { getUserId } from "../services/storage";
-import { currentUser } from "./(auth)/login";
+import { getUserId, currentUser } from "../services/storage";
 import Toast from "../components/Toast";
 import { useToast } from "../hooks/useToast";
 
