@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import {
   getUnreadCount,
 } from "../../services/notificationHistory";
 import { consumeMomoRefresh } from "../../services/momoRefresh";
+import { formatDate } from "../../services/format";
 
 const CATEGORY_ICONS: { [key: string]: string } = {
   Food: "🍔",
@@ -50,6 +51,7 @@ export default function HomeScreen() {
   const [momoStatus, setMomoStatus] = useState<"loading" | "available" | "unavailable">("loading");
   const [momoBalanceLoading, setMomoBalanceLoading] = useState(false);
   const [momoMonthlySpent, setMomoMonthlySpent] = useState("0.00");
+  const [cardMonthlySpent, setCardMonthlySpent] = useState("0.00");
 
   // Quick add state
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -57,6 +59,7 @@ export default function HomeScreen() {
   const [quickCategory, setQuickCategory] = useState("Food");
   const [quickDescription, setQuickDescription] = useState("");
   const [savingExpense, setSavingExpense] = useState(false);
+  const [quickAmountError, setQuickAmountError] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -110,19 +113,22 @@ export default function HomeScreen() {
       const response = await expenseAPI.getUserExpenses(userId);
       const expenseList = response.data;
       setExpenses(expenseList);
-      // Calculate MoMo spending for this month
+      // Calculate MoMo and card spending for this month
       const now = new Date();
-      const momoTotal = expenseList
-        .filter((e: any) => e.paymentMethod === "MOMO")
-        .filter((e: any) => {
-          const d = new Date(e.date);
-          return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-        })
-        .reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0);
-      setMomoMonthlySpent(momoTotal.toFixed(2));
+      const isThisMonth = (e: any) => {
+        const d = new Date(e.date);
+        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      };
+      const monthlyTotal = (method: string) =>
+        expenseList
+          .filter((e: any) => e.paymentMethod === method)
+          .filter(isThisMonth)
+          .reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0);
+      setMomoMonthlySpent(monthlyTotal("MOMO").toFixed(2));
+      setCardMonthlySpent(monthlyTotal("PAYSTACK").toFixed(2));
       setError(null);
     } catch (err) {
-      setError("Something went wrong. Pull down to refresh.");
+      setError("Could not load data. Pull down to refresh.");
     } finally {
       setLoading(false);
     }
@@ -131,14 +137,13 @@ export default function HomeScreen() {
     try {
       const remindersResponse = await remindersAPI.getUpcomingReminders(getUserId());
       setUpcomingReminders(remindersResponse.data);
-    } catch (error) {
-      console.log("Error fetching reminders:", error);
+    } catch {
+      // Non-critical — the reminders section simply stays empty
     }
 
     // Fetch budget alerts independently
     try {
       const userId = getUserId();
-      console.log("Fetching budget summary for userId:", userId);
       const budgetRes = await budgetAPI.getBudgetSummary(userId);
       const summary = budgetRes.data;
       const alerts = Object.entries(summary)
@@ -149,7 +154,6 @@ export default function HomeScreen() {
           isNearLimit: data.isNearLimit,
           percentage: data.percentage,
         }));
-      console.log("Budget alerts:", alerts);
       setBudgetAlerts(alerts);
 
       // Record each alert in the in-app notification history (once per day)
@@ -178,21 +182,22 @@ export default function HomeScreen() {
       }
       // Refresh badge
       getUnreadCount().then(setUnreadCount);
-    } catch (error) {
-      console.log("Error fetching budget alerts:", error);
+    } catch {
+      // Non-critical — budget alerts simply won't show this pass
     }
   }
 
   async function handleQuickAdd() {
     if (!quickAmount.trim()) {
-      Alert.alert("Missing amount", "Please enter an amount.");
+      setQuickAmountError("Please enter an amount");
       return;
     }
     const parsed = parseFloat(quickAmount);
     if (isNaN(parsed) || parsed <= 0) {
-      Alert.alert("Invalid amount", "Please enter a valid amount greater than 0.");
+      setQuickAmountError("Amount must be a number greater than 0");
       return;
     }
+    setQuickAmountError(null);
 
     setSavingExpense(true);
     try {
@@ -220,9 +225,8 @@ export default function HomeScreen() {
       // Refresh data
       await fetchExpenses();
       Alert.alert("✅ Added", `GHS ${parsed.toFixed(2)} in ${quickCategory} recorded.`);
-    } catch (error) {
+    } catch {
       Alert.alert("Error", "Could not save expense. Please try again.");
-      console.log("Quick add error:", error);
     } finally {
       setSavingExpense(false);
     }
@@ -264,8 +268,6 @@ export default function HomeScreen() {
     );
   }
 
-  console.log('budgetAlerts:', budgetAlerts);
-
   return (
     <View style={styles.wrapper}>
       <ScrollView
@@ -284,7 +286,7 @@ export default function HomeScreen() {
                   alert.isOverBudget ? styles.alertCardOver : styles.alertCardNear,
                 ]}
                 onPress={() => router.push('/(tabs)/budget-overview')}
-                activeOpacity={0.75}
+                activeOpacity={0.7}
               >
                 <Text style={styles.alertIcon}>{alert.isOverBudget ? "🚨" : "⚠️"}</Text>
                 <View style={{ flex: 1 }}>
@@ -327,16 +329,19 @@ export default function HomeScreen() {
           <Text style={styles.totalAmount}>GHS {totalSpent.toFixed(2)}</Text>
           <Text style={styles.totalSub}>{expenses.length} expenses recorded</Text>
         </View>
-        {/* MoMo Wallet Card */}
+        {/* Payment Methods Card */}
         <View style={[
           styles.momoCard,
           momoStatus === "unavailable" && styles.momoCardUnavailable,
         ]}>
           {/* Card header — always visible */}
           <View style={styles.momoCardHeader}>
-            <Text style={styles.momoCardIcon}>📱</Text>
-            <Text style={styles.momoCardTitle}>MTN MoMo Wallet</Text>
+            <Text style={styles.momoCardIcon}>💳</Text>
+            <Text style={styles.momoCardTitle}>Payment Methods</Text>
           </View>
+
+          {/* MoMo subsection */}
+          <Text style={styles.pmSubheader}>📱 MTN MoMo Wallet</Text>
 
           {/* State 1 — Loading */}
           {momoBalanceLoading && (
@@ -349,7 +354,7 @@ export default function HomeScreen() {
           {/* State 2 — Available */}
           {!momoBalanceLoading && momoStatus === "available" && (
             <View>
-              <Text style={styles.momoBalance}>EUR {momoBalance}</Text>
+              <Text style={styles.momoBalance}>GHS {momoBalance}</Text>
               <Text style={styles.momoSpentSub}>
                 GHS {momoMonthlySpent} spent via MoMo this month
               </Text>
@@ -387,6 +392,13 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
           )}
+
+          {/* Paystack subsection */}
+          <View style={styles.pmDivider} />
+          <Text style={styles.pmSubheader}>💳 Paystack (Card)</Text>
+          <Text style={styles.pmCardSpent}>
+            GHS {cardMonthlySpent} paid by card this month
+          </Text>
         </View>
 
         {Object.keys(categoryTotals).length > 0 && (
@@ -412,7 +424,7 @@ export default function HomeScreen() {
                   <Text style={styles.expenseName}>
                     {expense.description || expense.category}
                   </Text>
-                  <Text style={styles.expenseDate}>{expense.date}</Text>
+                  <Text style={styles.expenseDate}>{formatDate(expense.date)}</Text>
                 </View>
                 <Text style={styles.expenseAmount}>
                   GHS {parseFloat(expense.amount).toFixed(2)}
@@ -434,7 +446,7 @@ export default function HomeScreen() {
                     key={reminder.id}
                     style={[styles.reminderCard, isUrgent && styles.reminderCardUrgent]}
                     onPress={() => router.push('/(tabs)/reminders')}
-                    activeOpacity={0.75}
+                    activeOpacity={0.7}
                   >
                     <View style={styles.reminderIcon}>
                       <Text style={{ fontSize: 18 }}>🔔</Text>
@@ -442,7 +454,7 @@ export default function HomeScreen() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.reminderTitle}>{reminder.title}</Text>
                       {reminder.dueDate && (
-                        <Text style={styles.reminderDate}>Due: {reminder.dueDate}</Text>
+                        <Text style={styles.reminderDate}>Due: {formatDate(reminder.dueDate)}</Text>
                       )}
                     </View>
                     {reminder.isPaid ? (
@@ -472,6 +484,7 @@ export default function HomeScreen() {
             <TouchableOpacity
               style={styles.emptyButton}
               onPress={() => router.push("/(tabs)/add")}
+              activeOpacity={0.7}
             >
               <Text style={styles.emptyButtonText}>Add Your First Expense</Text>
             </TouchableOpacity>
@@ -486,7 +499,7 @@ export default function HomeScreen() {
       <TouchableOpacity
         style={styles.fab}
         onPress={() => setShowQuickAdd(true)}
-        activeOpacity={0.85}
+        activeOpacity={0.7}
       >
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
@@ -514,12 +527,18 @@ export default function HomeScreen() {
             <TextInput
               style={styles.amountInput}
               value={quickAmount}
-              onChangeText={setQuickAmount}
+              onChangeText={(text) => {
+                setQuickAmount(text);
+                if (quickAmountError) setQuickAmountError(null);
+              }}
               placeholder="0.00"
               placeholderTextColor="#8890A040"
               keyboardType="decimal-pad"
               autoFocus
             />
+            {quickAmountError && (
+              <Text style={styles.fieldError}>{quickAmountError}</Text>
+            )}
 
             {/* Category selector */}
             <ScrollView
@@ -536,6 +555,7 @@ export default function HomeScreen() {
                     quickCategory === cat && styles.categoryChipActive,
                   ]}
                   onPress={() => setQuickCategory(cat)}
+                  activeOpacity={0.7}
                 >
                   <Text style={styles.categoryChipIcon}>{CATEGORY_ICONS[cat]}</Text>
                   <Text style={[
@@ -566,7 +586,9 @@ export default function HomeScreen() {
                   setQuickAmount("");
                   setQuickCategory("Food");
                   setQuickDescription("");
+                  setQuickAmountError(null);
                 }}
+                activeOpacity={0.7}
               >
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
@@ -575,6 +597,7 @@ export default function HomeScreen() {
                 style={[styles.addBtn, savingExpense && { opacity: 0.7 }]}
                 onPress={handleQuickAdd}
                 disabled={savingExpense}
+                activeOpacity={0.7}
               >
                 {savingExpense ? (
                   <ActivityIndicator color="#000000" size="small" />
@@ -839,6 +862,24 @@ const styles = StyleSheet.create({
   momoCardTitleGrey: {
     color: "#8890A0",
   },
+  pmSubheader: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#8890A0",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  pmDivider: {
+    height: 1,
+    backgroundColor: "#ffffff10",
+    marginVertical: 12,
+  },
+  pmCardSpent: {
+    fontSize: 13,
+    color: "#4F8EF7",
+    fontWeight: "600",
+  },
   momoUnavailableIcon: {
     fontSize: 14,
     marginRight: 6,
@@ -941,7 +982,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     lineHeight: 32,
   },
-
   // Modal
   modalOverlay: {
     flex: 1,
@@ -974,6 +1014,13 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: "#00C89640",
+  },
+  fieldError: {
+    color: "#E05C5C",
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: -14,
+    marginBottom: 14,
   },
   categoryScroll: {
     marginBottom: 16,

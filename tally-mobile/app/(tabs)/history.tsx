@@ -10,10 +10,13 @@ import {
   ScrollView,
   TextInput,
   RefreshControl,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import { expenseAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
+import { formatDate } from "../../services/format";
 
 function getMonthFilters() {
   const filters: { label: string; value: string }[] = [{ label: "All", value: "all" }];
@@ -65,7 +68,8 @@ export default function HistoryScreen() {
   const [error, setError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [momoOnly, setMomoOnly] = useState(false);
+  // Payment-method filter: ALL shows everything; MOMO / PAYSTACK narrow to one method
+  const [paymentFilter, setPaymentFilter] = useState<"ALL" | "MOMO" | "PAYSTACK">("ALL");
 
   useFocusEffect(
     useCallback(() => {
@@ -83,7 +87,7 @@ export default function HistoryScreen() {
       setExpenses(sorted);
       setError(null);
     } catch (err) {
-      setError("Something went wrong. Pull down to refresh.");
+      setError("Could not load data. Pull down to refresh.");
     } finally {
       setLoading(false);
     }
@@ -114,7 +118,7 @@ export default function HistoryScreen() {
           onPress: async () => {
             try {
               await expenseAPI.deleteExpense(String(item.id));
-              setExpenses(expenses.filter((e) => e.id !== item.id));
+              setExpenses(expenses.filter((e) => !(e.id === item.id && e.type === item.type)));
             } catch (error) {
               Alert.alert("Error", "Failed to delete expense");
             }
@@ -131,7 +135,7 @@ export default function HistoryScreen() {
 
   const filteredExpenses = useMemo(() => {
     let result = monthFilteredExpenses;
-    if (momoOnly) result = result.filter((e) => e.paymentMethod === "MOMO");
+    if (paymentFilter !== "ALL") result = result.filter((e) => e.paymentMethod === paymentFilter);
     if (searchQuery !== "") {
       const q = searchQuery.toLowerCase();
       result = result.filter(
@@ -141,12 +145,9 @@ export default function HistoryScreen() {
       );
     }
     return result;
-  }, [monthFilteredExpenses, searchQuery, momoOnly]);
+  }, [monthFilteredExpenses, searchQuery, paymentFilter]);
 
   const totalSpent = filteredExpenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
-  const momoTotal = filteredExpenses
-    .filter((e) => e.paymentMethod === "MOMO")
-    .reduce((sum, e) => sum + parseFloat(e.amount), 0);
 
   if (loading) {
     return (
@@ -183,6 +184,7 @@ export default function HistoryScreen() {
         <TouchableOpacity
           style={styles.emptyButton}
           onPress={() => router.push("/(tabs)/add")}
+          activeOpacity={0.7}
         >
           <Text style={styles.emptyButtonText}>Add Your First Expense</Text>
         </TouchableOpacity>
@@ -191,10 +193,14 @@ export default function HistoryScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        nestedScrollEnabled
         contentContainerStyle={styles.filterRow}
       >
         {MONTH_FILTERS.map((f) => (
@@ -202,19 +208,30 @@ export default function HistoryScreen() {
             key={f.value}
             style={[styles.filterBtn, activeFilter === f.value && styles.filterBtnActive]}
             onPress={() => setActiveFilter(f.value)}
+            activeOpacity={0.7}
           >
             <Text style={[styles.filterText, activeFilter === f.value && styles.filterTextActive]}>
               {f.label}
             </Text>
           </TouchableOpacity>
         ))}
-        {/* MoMo-only filter */}
+        {/* Payment-method filters */}
         <TouchableOpacity
-          style={[styles.momoFilterButton, momoOnly && styles.momoFilterButtonActive]}
-          onPress={() => setMomoOnly((v) => !v)}
+          style={[styles.momoFilterButton, paymentFilter === "MOMO" && styles.momoFilterButtonActive]}
+          onPress={() => setPaymentFilter((f) => (f === "MOMO" ? "ALL" : "MOMO"))}
+          activeOpacity={0.7}
         >
-          <Text style={[styles.momoFilterText, momoOnly && styles.momoFilterTextActive]}>
+          <Text style={[styles.momoFilterText, paymentFilter === "MOMO" && styles.momoFilterTextActive]}>
             📱 MoMo Only
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.cardFilterButton, paymentFilter === "PAYSTACK" && styles.cardFilterButtonActive]}
+          onPress={() => setPaymentFilter((f) => (f === "PAYSTACK" ? "ALL" : "PAYSTACK"))}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.cardFilterText, paymentFilter === "PAYSTACK" && styles.cardFilterTextActive]}>
+            💳 Card Only
           </Text>
         </TouchableOpacity>
       </ScrollView>
@@ -230,22 +247,40 @@ export default function HistoryScreen() {
           onChangeText={setSearchQuery}
         />
         {searchQuery !== "" && (
-          <TouchableOpacity onPress={() => setSearchQuery("")}>
+          <TouchableOpacity onPress={() => setSearchQuery("")} activeOpacity={0.7}>
             <Text style={styles.clearBtn}>✕</Text>
           </TouchableOpacity>
         )}
       </View>
 
-      <View style={[styles.totalCard, momoOnly && styles.totalCardMomo]}>
+      <View
+        style={[
+          styles.totalCard,
+          paymentFilter === "MOMO" && styles.totalCardMomo,
+          paymentFilter === "PAYSTACK" && styles.totalCardPaystack,
+        ]}
+      >
         <Text style={styles.totalLabel}>
-          {momoOnly ? "Total MoMo Spending" : "Total Spent"}
+          {paymentFilter === "MOMO"
+            ? "Total MoMo Spending"
+            : paymentFilter === "PAYSTACK"
+            ? "Total Card Spending"
+            : "Total Spent"}
         </Text>
-        <Text style={[styles.totalAmount, momoOnly && styles.totalAmountMomo]}>
-          GHS {momoOnly ? momoTotal.toFixed(2) : totalSpent.toFixed(2)}
+        <Text
+          style={[
+            styles.totalAmount,
+            paymentFilter === "MOMO" && styles.totalAmountMomo,
+            paymentFilter === "PAYSTACK" && styles.totalAmountPaystack,
+          ]}
+        >
+          GHS {totalSpent.toFixed(2)}
         </Text>
-        {momoOnly && (
+        {paymentFilter !== "ALL" && (
           <Text style={styles.totalMomoSub}>
-            📱 {filteredExpenses.length} MoMo transaction{filteredExpenses.length !== 1 ? "s" : ""}
+            {paymentFilter === "MOMO" ? "📱" : "💳"} {filteredExpenses.length}{" "}
+            {paymentFilter === "MOMO" ? "MoMo" : "card"} transaction
+            {filteredExpenses.length !== 1 ? "s" : ""}
           </Text>
         )}
       </View>
@@ -268,21 +303,9 @@ export default function HistoryScreen() {
         </View>
       )}
 
-      {momoOnly && (
-        <View style={styles.momoSummaryCard}>
-          <Text style={styles.momoSummaryTitle}>MoMo Spending</Text>
-          <Text style={styles.momoSummaryAmount}>
-            GHS {filteredExpenses.reduce((sum, e) => sum + parseFloat(e.amount || "0"), 0).toFixed(2)}
-          </Text>
-          <Text style={styles.momoSummaryCount}>
-            {filteredExpenses.length} MoMo transaction{filteredExpenses.length !== 1 ? "s" : ""}
-          </Text>
-        </View>
-      )}
-
       <FlatList
         data={filteredExpenses}
-        keyExtractor={(item) => String(item.id)}
+        keyExtractor={(item) => `${item.type}-${item.id}`}
         contentContainerStyle={styles.list}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
         renderItem={({ item }) => {
@@ -290,10 +313,12 @@ export default function HistoryScreen() {
           const color = CATEGORY_COLORS[item.category] || "#8890A0";
           const { cleanDescription, tags } = parseTagsFromDescription(item.description);
           const isMomo = item.paymentMethod === "MOMO";
+          const isCard = item.paymentMethod === "PAYSTACK";
           return (
             <TouchableOpacity
               style={[styles.expenseCard, isShared && styles.sharedCard]}
               onLongPress={() => handleLongPress(item)}
+              activeOpacity={0.7}
             >
               <View style={styles.expenseLeft}>
                 <View style={[styles.iconBox, { backgroundColor: color + "20" }]}>
@@ -306,7 +331,7 @@ export default function HistoryScreen() {
                     {cleanDescription || item.category}
                   </Text>
                   <Text style={styles.expenseCategory}>
-                    {item.category} • {item.date}
+                    {item.category} • {formatDate(item.date)}
                   </Text>
                   <View style={styles.badgeRow}>
                     {isShared && (
@@ -315,11 +340,11 @@ export default function HistoryScreen() {
                       </View>
                     )}
                     <View style={[styles.badge, {
-                      backgroundColor: isMomo ? "#FFC10720" : "#ffffff10",
-                      borderColor: isMomo ? "#FFC107" : "#ffffff30",
+                      backgroundColor: isMomo ? "#FFC10720" : isCard ? "#4F8EF720" : "#ffffff10",
+                      borderColor: isMomo ? "#FFC107" : isCard ? "#4F8EF7" : "#ffffff30",
                     }]}>
-                      <Text style={[styles.badgeText, { color: isMomo ? "#FFC107" : "#8890A0" }]}>
-                        {isMomo ? "📱 MoMo" : "💵 Cash"}
+                      <Text style={[styles.badgeText, { color: isMomo ? "#FFC107" : isCard ? "#4F8EF7" : "#8890A0" }]}>
+                        {isMomo ? "📱 MoMo" : isCard ? "💳 Card" : "💵 Cash"}
                       </Text>
                     </View>
                   </View>
@@ -342,7 +367,7 @@ export default function HistoryScreen() {
         }}
       />
       <Text style={styles.hint}>Long press an expense to delete it</Text>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -407,6 +432,9 @@ const styles = StyleSheet.create({
   totalCardMomo: {
     borderColor: "#FFC10740",
   },
+  totalCardPaystack: {
+    borderColor: "#4F8EF740",
+  },
   totalLabel: {
     fontSize: 13,
     color: "#8890A0",
@@ -419,6 +447,9 @@ const styles = StyleSheet.create({
   },
   totalAmountMomo: {
     color: "#FFC107",
+  },
+  totalAmountPaystack: {
+    color: "#4F8EF7",
   },
   totalMomoSub: {
     fontSize: 12,
@@ -576,30 +607,27 @@ const styles = StyleSheet.create({
     color: "#FFC107",
     fontWeight: "bold",
   },
-  momoSummaryCard: {
-    backgroundColor: "#1A1F2E",
-    borderRadius: 16,
-    padding: 16,
-    marginHorizontal: 16,
-    marginBottom: 12,
+  cardFilterButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "#FFC10730",
-    alignItems: "center",
+    borderColor: "#4F8EF750",
+    backgroundColor: "#1A1F2E",
+    marginRight: 8,
   },
-  momoSummaryTitle: {
-    fontSize: 12,
+  cardFilterButtonActive: {
+    backgroundColor: "#4F8EF720",
+    borderColor: "#4F8EF7",
+  },
+  cardFilterText: {
+    fontSize: 13,
     color: "#8890A0",
-    marginBottom: 4,
+    fontWeight: "500",
   },
-  momoSummaryAmount: {
-    fontSize: 28,
+  cardFilterTextActive: {
+    color: "#4F8EF7",
     fontWeight: "bold",
-    color: "#FFC107",
-    marginBottom: 2,
-  },
-  momoSummaryCount: {
-    fontSize: 12,
-    color: "#8890A0",
   },
   searchContainer: {
     flexDirection: "row",

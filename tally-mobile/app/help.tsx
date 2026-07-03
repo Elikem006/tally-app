@@ -143,7 +143,7 @@ export default function HelpScreen() {
       <View style={styles.card}>
         <Text style={styles.contactLabel}>Email</Text>
         <Text style={styles.contactEmail}>support@tally.app</Text>
-        <TouchableOpacity style={styles.contactButton} onPress={handleEmail}>
+        <TouchableOpacity style={styles.contactButton} onPress={handleEmail} activeOpacity={0.7}>
           <Text style={styles.contactButtonText}>✉️  Send Email</Text>
         </TouchableOpacity>
       </View>
@@ -159,7 +159,7 @@ export default function HelpScreen() {
           <Text style={styles.aboutLabel}>Built by</Text>
           <Text style={styles.aboutValue}>Tally Team — KNUST</Text>
         </View>
-        <TouchableOpacity style={styles.rateButton} onPress={handleRate}>
+        <TouchableOpacity style={styles.rateButton} onPress={handleRate} activeOpacity={0.7}>
           <Text style={styles.rateButtonText}>⭐  Rate the App</Text>
         </TouchableOpacity>
       </View>

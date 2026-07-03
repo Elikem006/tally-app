@@ -10,6 +10,12 @@ import java.util.List;
 public interface ReminderRepository extends JpaRepository<Reminder, Long> {
     List<Reminder> findByUserIdOrderByDueDateAsc(Long userId);
 
+    // All unpaid reminders for a user
+    List<Reminder> findByUserIdAndIsPaidFalse(Long userId);
+
+    // Reminders due before a given date (overdue checks)
+    List<Reminder> findByUserIdAndDueDateBefore(Long userId, LocalDate date);
+
     // Upcoming: due within a date range AND not yet paid
     List<Reminder> findByUserIdAndIsPaidFalseAndDueDateBetweenOrderByDueDateAsc(
             Long userId, LocalDate start, LocalDate end);

@@ -41,7 +41,7 @@ export default function BudgetOverviewScreen() {
       setError(null);
       return budgetResponse.data;
     } catch (err) {
-      setError("Something went wrong. Pull down to refresh.");
+      setError("Could not load data. Pull down to refresh.");
       return null;
     }
   }
@@ -117,6 +117,7 @@ export default function BudgetOverviewScreen() {
         <TouchableOpacity
           style={styles.setupButton}
           onPress={() => router.push("/(tabs)/budget")}
+          activeOpacity={0.7}
         >
           <Text style={styles.setupButtonText}>Set Up Budgets</Text>
         </TouchableOpacity>
@@ -128,7 +129,7 @@ export default function BudgetOverviewScreen() {
     <SafeAreaView style={styles.safeArea}>
       {/* Fixed nav bar — always within reach */}
       <View style={styles.navBar}>
-        <TouchableOpacity style={styles.backRow} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backRow} onPress={() => router.back()} activeOpacity={0.7}>
           <Text style={styles.backArrow}>←</Text>
           <Text style={styles.backLabel}>Back</Text>
         </TouchableOpacity>
@@ -287,6 +288,7 @@ export default function BudgetOverviewScreen() {
       <TouchableOpacity
         style={styles.reportButton}
         onPress={() => router.push("/report")}
+        activeOpacity={0.7}
       >
         <Text style={styles.reportButtonText}>📈  View Monthly Report</Text>
       </TouchableOpacity>
@@ -294,6 +296,7 @@ export default function BudgetOverviewScreen() {
       <TouchableOpacity
         style={styles.editButton}
         onPress={() => router.push("/(tabs)/budget")}
+        activeOpacity={0.7}
       >
         <Text style={styles.editButtonText}>Edit Budgets</Text>
       </TouchableOpacity>

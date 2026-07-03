@@ -208,13 +208,18 @@ public class ExpenseService {
                 entry.put("amount", se.getAmount());
                 entry.put("category", "Shared");
                 entry.put("description", se.getDescription());
-                entry.put("date", se.getCreatedAt().toLocalDate().toString());
+                entry.put("date", se.getCreatedAt() != null
+                        ? se.getCreatedAt().toLocalDate().toString()
+                        : LocalDate.now().toString());
                 entry.put("type", "shared");
                 entry.put("groupId", se.getGroupId());
                 entry.put("groupName", resolveGroupName(se.getGroupId()));
                 entry.put("paidBy", se.getPaidBy());
                 entry.put("paidByName", resolveUserName(se.getPaidBy()));
-                entry.put("createdAt", se.getCreatedAt().toString());
+                // Shared expenses have no stored payment method — default to CASH
+                // so every history entry carries the field.
+                entry.put("paymentMethod", "CASH");
+                entry.put("createdAt", se.getCreatedAt() != null ? se.getCreatedAt().toString() : null);
                 combined.add(entry);
             }
         }

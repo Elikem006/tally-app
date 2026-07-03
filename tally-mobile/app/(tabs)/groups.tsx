@@ -7,7 +7,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   RefreshControl,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
@@ -19,7 +18,7 @@ export default function GroupsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [groupSummaries, setGroupSummaries] = useState<{ [key: number]: { total: number; memberCount: number } }>({});
+  const [groupSummaries, setGroupSummaries] = useState<{ [key: string]: { total: number; memberCount: number } }>({});
 
   useFocusEffect(
     useCallback(() => {
@@ -44,7 +43,6 @@ export default function GroupsScreen() {
             0,
           );
           const summary = { total, memberCount: (details.members || []).length };
-          console.log(`Group ${group.id} summary:`, summary);
           setGroupSummaries((prev) => ({
             ...prev,
             [String(group.id)]: summary,
@@ -54,7 +52,7 @@ export default function GroupsScreen() {
         }
       }
     } catch (err) {
-      setError("Something went wrong. Pull down to refresh.");
+      setError("Could not load data. Pull down to refresh.");
     } finally {
       setLoading(false);
     }
@@ -105,6 +103,7 @@ export default function GroupsScreen() {
           <TouchableOpacity
             style={styles.createButton}
             onPress={() => router.push("/create-group")}
+            activeOpacity={0.7}
           >
             <Text style={styles.createButtonText}>Create Your First Group</Text>
           </TouchableOpacity>
@@ -120,6 +119,7 @@ export default function GroupsScreen() {
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.groupCard}
+                activeOpacity={0.7}
                 onPress={() =>
                   router.push({
                     pathname: "/group-detail",
@@ -154,6 +154,7 @@ export default function GroupsScreen() {
           <TouchableOpacity
             style={styles.createButton}
             onPress={() => router.push("/create-group")}
+            activeOpacity={0.7}
           >
             <Text style={styles.createButtonText}>+ Create Group</Text>
           </TouchableOpacity>

@@ -9,7 +9,6 @@ import {
   Alert,
   ActivityIndicator,
   ScrollView,
-  Modal,
   RefreshControl,
   KeyboardAvoidingView,
   Platform,
@@ -17,6 +16,7 @@ import {
 import { remindersAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
 import { addHistoryItem } from "../../services/notificationHistory";
+import { formatDate } from "../../services/format";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 
@@ -56,6 +56,7 @@ export default function RemindersScreen() {
     String(i + 1).padStart(2, "0"),
   );
   const [saving, setSaving] = useState(false);
+  const [formErrors, setFormErrors] = useState<{ title?: string; amount?: string; date?: string }>({});
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
 
   useEffect(() => {
@@ -70,7 +71,7 @@ export default function RemindersScreen() {
       setReminders(response.data);
       setError(null);
     } catch (err) {
-      setError("Something went wrong. Pull down to refresh.");
+      setError("Could not load data. Pull down to refresh.");
     } finally {
       setLoading(false);
     }
@@ -86,14 +87,21 @@ export default function RemindersScreen() {
   }
 
   async function handleAddReminder() {
+    const errors: { title?: string; amount?: string; date?: string } = {};
     if (!title.trim()) {
-      showToast("Title is required", "error");
-      return;
+      errors.title = "Title is required";
+    }
+    if (amount.trim() !== "") {
+      const parsed = parseFloat(amount);
+      if (isNaN(parsed) || parsed <= 0) {
+        errors.amount = "Amount must be a number greater than 0";
+      }
     }
     if (!selectedDay || !selectedMonth || !selectedYear) {
-      showToast("Please select a due date", "error");
-      return;
+      errors.date = "Please select a due date";
     }
+    setFormErrors(errors);
+    if (Object.keys(errors).length > 0) return;
 
     const dueDateString = `${selectedYear}-${selectedMonth}-${selectedDay}`;
     const friendlyDate = `${selectedDay} ${MONTHS.find((m) => m.value === selectedMonth)?.label} ${selectedYear}`;
@@ -121,7 +129,7 @@ export default function RemindersScreen() {
       await addHistoryItem({
         type: "reminder_due",
         title: "Reminder set",
-        body: `"${title.trim()}" due ${friendlyDate}${amount.trim() ? ` — GHS ${amount.trim()}` : ""}.`,
+        body: `"${title.trim()}" due ${friendlyDate}${amount.trim() ? ` — GHS ${parseFloat(amount).toFixed(2)}` : ""}.`,
         data: { screen: "reminders" },
       });
       showToast("Reminder added!", "success");
@@ -192,6 +200,7 @@ export default function RemindersScreen() {
         <TouchableOpacity
           style={styles.addBtn}
           onPress={() => setShowAddForm(!showAddForm)}
+          activeOpacity={0.7}
         >
           <Text style={styles.addBtnText}>{showAddForm ? "✕" : "+"}</Text>
         </TouchableOpacity>
@@ -203,21 +212,29 @@ export default function RemindersScreen() {
           <Text style={styles.formTitle}>New Reminder</Text>
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, formErrors.title ? styles.inputErrorBorder : null]}
             placeholder="e.g. Rent, Electricity"
             placeholderTextColor="#8890A0"
             value={title}
-            onChangeText={setTitle}
+            onChangeText={(text) => {
+              setTitle(text);
+              if (formErrors.title) setFormErrors((prev) => ({ ...prev, title: undefined }));
+            }}
           />
+          {formErrors.title && <Text style={styles.fieldError}>{formErrors.title}</Text>}
 
           <TextInput
-            style={styles.input}
+            style={[styles.input, formErrors.amount ? styles.inputErrorBorder : null]}
             placeholder="Amount (optional)"
             placeholderTextColor="#8890A0"
             keyboardType="numeric"
             value={amount}
-            onChangeText={setAmount}
+            onChangeText={(text) => {
+              setAmount(text);
+              if (formErrors.amount) setFormErrors((prev) => ({ ...prev, amount: undefined }));
+            }}
           />
+          {formErrors.amount && <Text style={styles.fieldError}>{formErrors.amount}</Text>}
 
           <Text style={styles.label}>Due Date</Text>
           <View style={styles.datePickerRow}>
@@ -233,7 +250,11 @@ export default function RemindersScreen() {
                   <TouchableOpacity
                     key={day}
                     style={[styles.datePickerItem, selectedDay === day && styles.datePickerItemSelected]}
-                    onPress={() => setSelectedDay(day)}
+                    onPress={() => {
+                      setSelectedDay(day);
+                      if (formErrors.date) setFormErrors((prev) => ({ ...prev, date: undefined }));
+                    }}
+                    activeOpacity={0.7}
                   >
                     <Text style={[styles.datePickerItemText, selectedDay === day && styles.datePickerItemTextSelected]}>
                       {day}
@@ -257,7 +278,9 @@ export default function RemindersScreen() {
                     onPress={() => {
                       setSelectedMonth(month.value);
                       if (parseInt(selectedDay) > month.days) setSelectedDay("01");
+                      if (formErrors.date) setFormErrors((prev) => ({ ...prev, date: undefined }));
                     }}
+                    activeOpacity={0.7}
                   >
                     <Text style={[styles.datePickerItemText, selectedMonth === month.value && styles.datePickerItemTextSelected]}>
                       {month.label}
@@ -278,7 +301,11 @@ export default function RemindersScreen() {
                   <TouchableOpacity
                     key={year}
                     style={[styles.datePickerItem, selectedYear === year && styles.datePickerItemSelected]}
-                    onPress={() => setSelectedYear(year)}
+                    onPress={() => {
+                      setSelectedYear(year);
+                      if (formErrors.date) setFormErrors((prev) => ({ ...prev, date: undefined }));
+                    }}
+                    activeOpacity={0.7}
                   >
                     <Text style={[styles.datePickerItemText, selectedYear === year && styles.datePickerItemTextSelected]}>
                       {year}
@@ -288,6 +315,7 @@ export default function RemindersScreen() {
               </ScrollView>
             </View>
           </View>
+          {formErrors.date && <Text style={styles.fieldError}>{formErrors.date}</Text>}
           {selectedDay && selectedMonth && selectedYear && (
             <Text style={styles.selectedDateText}>
               📅 Selected: {selectedDay} {MONTHS.find((m) => m.value === selectedMonth)?.label} {selectedYear}
@@ -300,6 +328,7 @@ export default function RemindersScreen() {
             <TouchableOpacity
               style={[styles.toggle, isRecurring && styles.toggleActive]}
               onPress={() => setIsRecurring(!isRecurring)}
+              activeOpacity={0.7}
             >
               <Text style={[styles.toggleText, isRecurring && styles.toggleTextActive]}>
                 {isRecurring ? "Monthly ✓" : "Off"}
@@ -311,6 +340,7 @@ export default function RemindersScreen() {
             style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
             onPress={handleAddReminder}
             disabled={saving}
+            activeOpacity={0.7}
           >
             <Text style={styles.saveBtnText}>
               {saving ? "Saving…" : "Save Reminder"}
@@ -327,7 +357,9 @@ export default function RemindersScreen() {
               setSelectedMonth("");
               setSelectedYear(String(new Date().getFullYear()));
               setIsRecurring(false);
+              setFormErrors({});
             }}
+            activeOpacity={0.7}
           >
             <Text style={styles.cancelBtnText}>Cancel</Text>
           </TouchableOpacity>
@@ -342,6 +374,15 @@ export default function RemindersScreen() {
           <Text style={styles.emptySubtext}>
             Add bills to get notified when they're due
           </Text>
+          {!showAddForm && (
+            <TouchableOpacity
+              style={styles.emptyButton}
+              onPress={() => setShowAddForm(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.emptyButtonText}>+ Add Your First Reminder</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <FlatList
@@ -357,7 +398,7 @@ export default function RemindersScreen() {
                 <View style={styles.cardInfo}>
                   <Text style={styles.reminderTitle}>{item.title}</Text>
                   {item.dueDate && (
-                    <Text style={styles.reminderDue}>Due: {item.dueDate}</Text>
+                    <Text style={styles.reminderDue}>Due: {formatDate(item.dueDate)}</Text>
                   )}
                   {item.amount != null && (
                     <Text style={styles.reminderAmount}>
@@ -376,6 +417,7 @@ export default function RemindersScreen() {
                   <TouchableOpacity
                     style={styles.deleteBtn}
                     onPress={() => handleDelete(String(item.id))}
+                    activeOpacity={0.7}
                   >
                     <Text style={styles.deleteBtnText}>✕</Text>
                   </TouchableOpacity>
@@ -388,6 +430,7 @@ export default function RemindersScreen() {
                     <TouchableOpacity
                       style={styles.markPaidBtn}
                       onPress={() => handleMarkPaid(String(item.id))}
+                      activeOpacity={0.7}
                     >
                       <Text style={styles.markPaidText}>Mark Paid</Text>
                     </TouchableOpacity>
@@ -472,6 +515,15 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     borderWidth: 1,
     borderColor: "#ffffff15",
+  },
+  inputErrorBorder: {
+    borderColor: "#E05C5C",
+    marginBottom: 4,
+  },
+  fieldError: {
+    color: "#E05C5C",
+    fontSize: 12,
+    marginBottom: 10,
   },
   label: {
     fontSize: 12,
@@ -694,6 +746,19 @@ const styles = StyleSheet.create({
   },
   emptySubtext: {
     fontSize: 14,
+    color: "#8890A0",
     textAlign: "center",
+    marginBottom: 24,
+  },
+  emptyButton: {
+    backgroundColor: "#00C896",
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+  },
+  emptyButtonText: {
+    color: "#000000",
+    fontSize: 15,
+    fontWeight: "bold",
   },
 });

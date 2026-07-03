@@ -123,6 +123,14 @@ export const momoAPI = {
     api.get("/api/momo/balance"),
 };
 
+export const paystackAPI = {
+  initialize: (email: string, amount: string, description: string, userId: string) =>
+    api.post("/api/paystack/initialize", { email, amount, description, userId }),
+
+  verify: (reference: string, userId: string, amount: string, description: string, category: string) =>
+    api.post("/api/paystack/verify", { reference, userId, amount, description, category }),
+};
+
 export const remindersAPI = {
   createReminder: (
     userId: string,
@@ -164,7 +172,6 @@ api.interceptors.response.use(
     const status: number | undefined = error.response?.status;
 
     if (status === 401) {
-      console.warn("[Tally API] 401 Unauthorized — clearing session and redirecting to login.");
       try {
         // Lazy require avoids circular dep at module load time
         // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -176,22 +183,16 @@ api.interceptors.response.use(
         currentUser.avatarType = "";
         currentUser.avatarData = "";
         currentUser.phoneNumber = "";
-      } catch (e) {
-        console.warn("[Tally API] Could not clear currentUser:", e);
+      } catch {
+        // currentUser module not loaded yet — nothing to clear
       }
       try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const { router } = require("expo-router");
         router.replace("/(auth)/login");
-      } catch (e) {
-        console.warn("[Tally API] Could not navigate to login:", e);
+      } catch {
+        // navigation not ready — the guarded (tabs) layout will redirect
       }
-    }
-
-    if (status !== undefined && status >= 500) {
-      console.error(
-        error.response?.data || error.message,
-      );
     }
 
     return Promise.reject(error);

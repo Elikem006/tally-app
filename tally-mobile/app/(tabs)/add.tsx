@@ -11,8 +11,10 @@ import {
   Platform,
   Modal,
 } from "react-native";
-import { expenseAPI, momoAPI } from "../../services/api";
+import { usePaystack } from "react-native-paystack-webview";
+import { expenseAPI, momoAPI, paystackAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
+import { generatePaystackReference } from "../../services/paystack";
 import { currentUser } from "../(auth)/login";
 import { addHistoryItem } from "../../services/notificationHistory";
 import { signalMomoRefresh } from "../../services/momoRefresh";
@@ -28,20 +30,25 @@ const CATEGORIES = [
 ];
 
 type MomoStatus = "idle" | "sending" | "confirming" | "done";
+type PaymentMethod = "CASH" | "MOMO" | "PAYSTACK";
 
 // Module-level vars persist for the whole app session — no async needed
 let lastUsedCategory = "Food";
-let lastUsedPaymentMethod: "CASH" | "MOMO" = "CASH";
+let lastUsedPaymentMethod: PaymentMethod = "CASH";
 
 export default function AddScreen() {
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [selectedCategory, setSelectedCategory] = useState(lastUsedCategory);
   const [loading, setLoading] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "MOMO">(lastUsedPaymentMethod);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(lastUsedPaymentMethod);
+  const [cardProcessing, setCardProcessing] = useState(false);
+  const { popup } = usePaystack();
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [showHint, setShowHint] = useState(true);
+  const [amountError, setAmountError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
 
   // Auto-hide the "remembered" hint after 3 seconds
@@ -56,7 +63,7 @@ export default function AddScreen() {
     lastUsedCategory = cat;
   }
 
-  function handlePaymentMethodSelect(method: "CASH" | "MOMO") {
+  function handlePaymentMethodSelect(method: PaymentMethod) {
     setPaymentMethod(method);
     lastUsedPaymentMethod = method;
   }
@@ -86,18 +93,26 @@ export default function AddScreen() {
   }
 
   async function handleAddExpense() {
-    if (!amount) {
-      showToast("Please enter an amount", "error");
+    if (!amount.trim()) {
+      setAmountError("Please enter an amount");
       return;
     }
-    if (isNaN(parseFloat(amount))) {
-      showToast("Please enter a valid amount", "error");
+    const parsedAmount = parseFloat(amount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      setAmountError("Amount must be a number greater than 0");
       return;
     }
+    setAmountError(null);
 
     // MoMo → open payment modal instead of saving directly
     if (paymentMethod === "MOMO") {
       setShowMomoModal(true);
+      return;
+    }
+
+    // Card → open Paystack checkout
+    if (paymentMethod === "PAYSTACK") {
+      handleCardPayment();
       return;
     }
 
@@ -137,10 +152,11 @@ export default function AddScreen() {
 
   async function handleMomoPayment() {
     const phone = momoPhone.trim().replace(/\s/g, "");
-    if (phone.length < 10) {
-      showToast("Enter a valid 10-digit MoMo number", "error");
+    if (!/^\d{10}$/.test(phone)) {
+      setPhoneError("Phone number must be exactly 10 digits");
       return;
     }
+    setPhoneError(null);
 
     setMomoLoading(true);
     setMomoStatus("sending");
@@ -231,6 +247,72 @@ export default function AddScreen() {
     if (momoLoading) return; // block dismissal while in-flight
     setShowMomoModal(false);
     setMomoStatus("idle");
+    setPhoneError(null);
+  }
+
+  // ── Paystack card payment ──────────────────────────────────────────────────
+
+  function handleCardPayment() {
+    const email = currentUser.email.trim();
+    if (!email || !email.includes("@")) {
+      showToast("Card payments need the email on your account. Please log in again.", "error");
+      return;
+    }
+
+    const reference = generatePaystackReference();
+    setCardProcessing(true);
+    popup.checkout({
+      email,
+      amount: parseFloat(amount), // GHS — the Paystack SDK converts to pesewas
+      reference,
+      onSuccess: (res) => {
+        handlePaystackSuccess(res?.reference || reference);
+      },
+      onCancel: () => {
+        setCardProcessing(false);
+        showToast("Payment cancelled", "error");
+      },
+      onError: () => {
+        setCardProcessing(false);
+        showToast("Could not open card checkout. Please try again.", "error");
+      },
+    });
+  }
+
+  async function handlePaystackSuccess(reference: string) {
+    try {
+      const fullDescription = [description, ...tags].filter(Boolean).join(" ");
+      // The backend verifies with Paystack and records the expense as PAYSTACK
+      const res = await paystackAPI.verify(
+        reference,
+        getUserId(),
+        amount,
+        fullDescription,
+        selectedCategory,
+      );
+
+      if (res.data?.status === "success") {
+        const parsed = parseFloat(amount);
+        await addHistoryItem({
+          type: "expense_added",
+          title: "Card payment recorded",
+          body: `GHS ${parsed.toFixed(2)} paid by card for ${selectedCategory}${description ? ` — ${description}` : ""}.`,
+          data: { screen: "history" },
+        });
+        showToast("Payment successful! Expense recorded.", "success");
+        setAmount("");
+        setDescription("");
+        setTags([]);
+        setTagInput("");
+      } else {
+        showToast(res.data?.message || "Payment was not successful", "error");
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.error || "Could not verify payment. Please try again.";
+      showToast(msg, "error");
+    } finally {
+      setCardProcessing(false);
+    }
   }
 
   return (
@@ -247,13 +329,17 @@ export default function AddScreen() {
 
         <Text style={styles.label}>Amount (GHS)</Text>
         <TextInput
-          style={styles.input}
+          style={[styles.input, amountError ? styles.inputError : null]}
           placeholder="0.00"
           placeholderTextColor="#8890A0"
           value={amount}
-          onChangeText={setAmount}
+          onChangeText={(text) => {
+            setAmount(text);
+            if (amountError) setAmountError(null);
+          }}
           keyboardType="decimal-pad"
         />
+        {amountError && <Text style={styles.fieldError}>{amountError}</Text>}
 
         <Text style={styles.label}>Category</Text>
         <View style={styles.categoryGrid}>
@@ -302,6 +388,16 @@ export default function AddScreen() {
               MoMo
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.paymentChip, paymentMethod === "PAYSTACK" && styles.paymentChipActivePaystack]}
+            onPress={() => handlePaymentMethodSelect("PAYSTACK")}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.paymentChipIcon}>💳</Text>
+            <Text style={[styles.paymentChipText, paymentMethod === "PAYSTACK" && styles.paymentChipTextPaystack]}>
+              Card
+            </Text>
+          </TouchableOpacity>
         </View>
 
         <Text style={styles.label}>Description (optional)</Text>
@@ -326,7 +422,7 @@ export default function AddScreen() {
             onSubmitEditing={handleAddTag}
             returnKeyType="done"
           />
-          <TouchableOpacity style={styles.tagAddButton} onPress={handleAddTag}>
+          <TouchableOpacity style={styles.tagAddButton} onPress={handleAddTag} activeOpacity={0.7}>
             <Text style={styles.tagAddText}>Add</Text>
           </TouchableOpacity>
         </View>
@@ -336,7 +432,7 @@ export default function AddScreen() {
             {tags.map((tag) => (
               <View key={tag} style={styles.tagPill}>
                 <Text style={styles.tagText}>{tag}</Text>
-                <TouchableOpacity onPress={() => handleRemoveTag(tag)}>
+                <TouchableOpacity onPress={() => handleRemoveTag(tag)} activeOpacity={0.7}>
                   <Text style={styles.tagRemove}>✕</Text>
                 </TouchableOpacity>
               </View>
@@ -347,17 +443,23 @@ export default function AddScreen() {
         <TouchableOpacity
           style={[
             styles.button,
-            loading && styles.buttonDisabled,
+            (loading || cardProcessing) && styles.buttonDisabled,
             paymentMethod === "MOMO" && styles.buttonMomo,
+            paymentMethod === "PAYSTACK" && styles.buttonPaystack,
           ]}
           onPress={handleAddExpense}
-          disabled={loading}
+          disabled={loading || cardProcessing}
+          activeOpacity={0.7}
         >
-          {loading ? (
-            <ActivityIndicator color="#000000" />
+          {loading || cardProcessing ? (
+            <ActivityIndicator color={paymentMethod === "PAYSTACK" ? "#ffffff" : "#000000"} />
           ) : (
-            <Text style={styles.buttonText}>
-              {paymentMethod === "MOMO" ? "Pay with MoMo →" : "Add Expense"}
+            <Text style={[styles.buttonText, paymentMethod === "PAYSTACK" && styles.buttonTextPaystack]}>
+              {paymentMethod === "MOMO"
+                ? "Pay with MoMo →"
+                : paymentMethod === "PAYSTACK"
+                ? "Pay with Card →"
+                : "Add Expense"}
             </Text>
           )}
         </TouchableOpacity>
@@ -384,7 +486,7 @@ export default function AddScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Pay with MoMo 📱</Text>
               {!momoLoading && (
-                <TouchableOpacity onPress={closeMomoModal} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                <TouchableOpacity onPress={closeMomoModal} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
                   <Text style={styles.modalClose}>✕</Text>
                 </TouchableOpacity>
               )}
@@ -408,15 +510,19 @@ export default function AddScreen() {
               <>
                 <Text style={styles.momoPhoneLabel}>MoMo Number</Text>
                 <TextInput
-                  style={styles.momoPhoneInput}
+                  style={[styles.momoPhoneInput, phoneError ? styles.inputError : null]}
                   placeholder="e.g. 0241234567"
                   placeholderTextColor="#8890A080"
                   value={momoPhone}
-                  onChangeText={setMomoPhone}
+                  onChangeText={(text) => {
+                    setMomoPhone(text);
+                    if (phoneError) setPhoneError(null);
+                  }}
                   keyboardType="phone-pad"
                   maxLength={10}
                   autoFocus
                 />
+                {phoneError && <Text style={styles.fieldError}>{phoneError}</Text>}
               </>
             )}
 
@@ -447,12 +553,14 @@ export default function AddScreen() {
                 <TouchableOpacity
                   style={styles.modalCancelBtn}
                   onPress={closeMomoModal}
+                  activeOpacity={0.7}
                 >
                   <Text style={styles.modalCancelText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.modalPayBtn}
                   onPress={handleMomoPayment}
+                  activeOpacity={0.7}
                 >
                   <Text style={styles.modalPayText}>Pay Now</Text>
                 </TouchableOpacity>
@@ -505,6 +613,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#ffffff15",
     marginBottom: 20,
+  },
+  inputError: {
+    borderColor: "#E05C5C",
+    marginBottom: 4,
+  },
+  fieldError: {
+    color: "#E05C5C",
+    fontSize: 12,
+    marginBottom: 16,
   },
   textArea: {
     height: 100,
@@ -562,6 +679,12 @@ const styles = StyleSheet.create({
   buttonMomo: {
     backgroundColor: "#FFC107",
   },
+  buttonPaystack: {
+    backgroundColor: "#4F8EF7",
+  },
+  buttonTextPaystack: {
+    color: "#ffffff",
+  },
   buttonDisabled: {
     opacity: 0.6,
   },
@@ -596,6 +719,10 @@ const styles = StyleSheet.create({
     borderColor: "#FFC107",
     backgroundColor: "#FFC10715",
   },
+  paymentChipActivePaystack: {
+    borderColor: "#4F8EF7",
+    backgroundColor: "#4F8EF715",
+  },
   paymentChipIcon: {
     fontSize: 18,
   },
@@ -609,6 +736,9 @@ const styles = StyleSheet.create({
   },
   paymentChipTextMomo: {
     color: "#FFC107",
+  },
+  paymentChipTextPaystack: {
+    color: "#4F8EF7",
   },
   // Tags
   tagInputRow: {

@@ -21,6 +21,11 @@ public class MoMoController {
     @Autowired
     private MoMoService moMoService;
 
+    // Exceptions like NullPointerException can carry a null message — Map.of rejects null values
+    private static String errorMessage(Exception e) {
+        return e.getMessage() != null ? e.getMessage() : "An unexpected error occurred";
+    }
+
     /**
      * POST /api/momo/pay
      * Body: { "userId", "phoneNumber", "amount", "description", "groupId" }
@@ -64,7 +69,7 @@ public class MoMoController {
         } catch (Exception e) {
             log.severe("MoMo pay error: " + e.getMessage());
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage(), "success", false));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
@@ -83,7 +88,7 @@ public class MoMoController {
         } catch (Exception e) {
             log.severe("MoMo status error: " + e.getMessage());
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage(), "success", false));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
@@ -120,7 +125,7 @@ public class MoMoController {
             }
             log.severe("MoMo balance error: " + e.getMessage());
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage(), "success", false));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 

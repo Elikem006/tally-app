@@ -17,12 +17,14 @@ import { getUserId } from "../services/storage";
 export default function CreateGroupScreen() {
   const [groupName, setGroupName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
 
   async function handleCreateGroup() {
     if (!groupName.trim()) {
-      Alert.alert("Error", "Please enter a group name");
+      setNameError("Group name is required");
       return;
     }
+    setNameError(null);
 
     setLoading(true);
     try {
@@ -51,18 +53,23 @@ export default function CreateGroupScreen() {
 
       <Text style={styles.label}>Group Name</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, nameError ? styles.inputError : null]}
         placeholder="Enter group name"
         placeholderTextColor="#8890A0"
         value={groupName}
-        onChangeText={setGroupName}
+        onChangeText={(text) => {
+          setGroupName(text);
+          if (nameError) setNameError(null);
+        }}
         autoFocus
       />
+      {nameError && <Text style={styles.fieldError}>{nameError}</Text>}
 
       <TouchableOpacity
         style={[styles.button, loading && styles.buttonDisabled]}
         onPress={handleCreateGroup}
         disabled={loading}
+        activeOpacity={0.7}
       >
         {loading ? (
           <ActivityIndicator color="#000000" />
@@ -74,6 +81,7 @@ export default function CreateGroupScreen() {
       <TouchableOpacity
         style={styles.cancelButton}
         onPress={() => router.back()}
+        activeOpacity={0.7}
       >
         <Text style={styles.cancelText}>Cancel</Text>
       </TouchableOpacity>
@@ -119,6 +127,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#ffffff15",
     marginBottom: 24,
+  },
+  inputError: {
+    borderColor: "#E05C5C",
+    marginBottom: 4,
+  },
+  fieldError: {
+    color: "#E05C5C",
+    fontSize: 12,
+    marginBottom: 20,
   },
   button: {
     backgroundColor: "#00C896",

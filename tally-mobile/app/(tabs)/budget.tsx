@@ -39,6 +39,7 @@ export default function BudgetScreen() {
   const [fetching, setFetching] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({});
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
 
   useEffect(() => {
@@ -63,7 +64,7 @@ export default function BudgetScreen() {
       });
       setError(null);
     } catch (err) {
-      setError('Something went wrong. Pull down to refresh.');
+      setError('Could not load data. Pull down to refresh.');
     } finally {
       setFetching(false);
     }
@@ -99,6 +100,20 @@ export default function BudgetScreen() {
   }
 
   async function handleSave() {
+    // Validate: every non-empty limit must be a positive number
+    const errors: { [key: string]: string } = {};
+    for (const category of CATEGORIES) {
+      const value = limits[category];
+      if (value && value.trim() !== '') {
+        const parsed = parseFloat(value);
+        if (isNaN(parsed) || parsed <= 0) {
+          errors[category] = 'Enter a number greater than 0';
+        }
+      }
+    }
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
     const userId = getUserId();
     setLoading(true);
     try {
@@ -156,39 +171,52 @@ export default function BudgetScreen() {
         </Text>
 
         {CATEGORIES.map((category) => (
-          <View key={category} style={styles.categoryRow}>
-            <View style={styles.categoryLeft}>
-              <Text style={styles.categoryIcon}>{CATEGORY_ICONS[category]}</Text>
-              <Text style={styles.categoryName}>{category}</Text>
-            </View>
-            <View style={styles.rowRight}>
-              <View style={styles.inputContainer}>
-                <Text style={styles.currency}>GHS</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="0.00"
-                  placeholderTextColor="#8890A0"
-                  value={limits[category]}
-                  onChangeText={(text) =>
-                    setLimits((prev) => ({ ...prev, [category]: text }))
-                  }
-                  keyboardType="decimal-pad"
-                />
+          <View key={category}>
+            <View style={[styles.categoryRow, fieldErrors[category] ? styles.categoryRowError : null]}>
+              <View style={styles.categoryLeft}>
+                <Text style={styles.categoryIcon}>{CATEGORY_ICONS[category]}</Text>
+                <Text style={styles.categoryName}>{category}</Text>
               </View>
-              {limits[category] !== '' && (
-                <TouchableOpacity
-                  style={styles.clearBtn}
-                  onPress={() => clearCategory(category)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Text style={styles.clearBtnText}>✕</Text>
-                </TouchableOpacity>
-              )}
+              <View style={styles.rowRight}>
+                <View style={styles.inputContainer}>
+                  <Text style={styles.currency}>GHS</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="0.00"
+                    placeholderTextColor="#8890A0"
+                    value={limits[category]}
+                    onChangeText={(text) => {
+                      setLimits((prev) => ({ ...prev, [category]: text }));
+                      if (fieldErrors[category]) {
+                        setFieldErrors((prev) => {
+                          const next = { ...prev };
+                          delete next[category];
+                          return next;
+                        });
+                      }
+                    }}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+                {limits[category] !== '' && (
+                  <TouchableOpacity
+                    style={styles.clearBtn}
+                    onPress={() => clearCategory(category)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.clearBtnText}>✕</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
+            {fieldErrors[category] && (
+              <Text style={styles.fieldError}>{fieldErrors[category]}</Text>
+            )}
           </View>
         ))}
 
-        <TouchableOpacity style={styles.resetButton} onPress={resetAll}>
+        <TouchableOpacity style={styles.resetButton} onPress={resetAll} activeOpacity={0.7}>
           <Text style={styles.resetButtonText}>Reset All</Text>
         </TouchableOpacity>
 
@@ -196,6 +224,7 @@ export default function BudgetScreen() {
           style={[styles.button, loading && styles.buttonDisabled]}
           onPress={handleSave}
           disabled={loading}
+          activeOpacity={0.7}
         >
           {loading ? (
             <ActivityIndicator color="#000000" />
@@ -255,6 +284,16 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     borderWidth: 1,
     borderColor: '#ffffff10',
+  },
+  categoryRowError: {
+    borderColor: '#E05C5C',
+    marginBottom: 4,
+  },
+  fieldError: {
+    color: '#E05C5C',
+    fontSize: 12,
+    marginBottom: 10,
+    marginLeft: 4,
   },
   categoryLeft: {
     flexDirection: 'row',

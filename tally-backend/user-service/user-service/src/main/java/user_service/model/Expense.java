@@ -32,6 +32,7 @@ public class Expense {
     @Column(updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    // One of: CASH, MOMO (MTN Mobile Money), PAYSTACK (card via Paystack)
     @Column(name = "payment_method", nullable = true)
     private String paymentMethod = "CASH";
 }

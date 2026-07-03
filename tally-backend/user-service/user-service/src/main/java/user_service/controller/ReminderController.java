@@ -19,6 +19,11 @@ public class ReminderController {
     @Autowired
     private ReminderService reminderService;
 
+    // Exceptions like NullPointerException can carry a null message — Map.of rejects null values
+    private static String errorMessage(Exception e) {
+        return e.getMessage() != null ? e.getMessage() : "An unexpected error occurred";
+    }
+
     // POST /api/reminders
     // Body: { userId, title, amount?, dueDate?, isRecurring?, recurrenceType? }
     @PostMapping
@@ -37,6 +42,10 @@ public class ReminderController {
             String amountStr = request.get("amount");
             BigDecimal amount = (amountStr != null && !amountStr.isBlank())
                     ? new BigDecimal(amountStr) : null;
+            if (amount != null && amount.compareTo(BigDecimal.ZERO) <= 0) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Amount must be greater than zero", "success", false));
+            }
 
             String dueDateStr = request.get("dueDate");
             LocalDate dueDate = (dueDateStr != null && !dueDateStr.isBlank())
@@ -53,7 +62,7 @@ public class ReminderController {
             return ResponseEntity.status(HttpStatus.CREATED).body(reminder);
 
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "success", false));
+            return ResponseEntity.badRequest().body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
@@ -64,7 +73,7 @@ public class ReminderController {
             List<Reminder> reminders = reminderService.getUserReminders(userId);
             return ResponseEntity.ok(reminders);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "success", false));
+            return ResponseEntity.badRequest().body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
@@ -75,7 +84,7 @@ public class ReminderController {
             List<Reminder> reminders = reminderService.getUpcomingReminders(userId);
             return ResponseEntity.ok(reminders);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "success", false));
+            return ResponseEntity.badRequest().body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
@@ -86,7 +95,7 @@ public class ReminderController {
             Reminder reminder = reminderService.markPaid(reminderId);
             return ResponseEntity.ok(reminder);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "success", false));
+            return ResponseEntity.badRequest().body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
@@ -97,7 +106,7 @@ public class ReminderController {
             reminderService.deleteReminder(reminderId);
             return ResponseEntity.ok(Map.of("message", "Reminder deleted", "success", true));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "success", false));
+            return ResponseEntity.badRequest().body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 }

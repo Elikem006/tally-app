@@ -18,6 +18,11 @@ public class BudgetController {
     @Autowired
     private BudgetService budgetService;
 
+    // Exceptions like NullPointerException can carry a null message — Map.of rejects null values
+    private static String errorMessage(Exception e) {
+        return e.getMessage() != null ? e.getMessage() : "An unexpected error occurred";
+    }
+
     @PostMapping
     public ResponseEntity<?> setBudget(@RequestBody Map<String, String> request) {
         try {
@@ -47,7 +52,7 @@ public class BudgetController {
 
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage(), "success", false));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
@@ -58,7 +63,7 @@ public class BudgetController {
             return ResponseEntity.ok(budgets);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage(), "success", false));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
@@ -72,7 +77,7 @@ public class BudgetController {
             return ResponseEntity.ok(summary);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage(), "success", false));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
@@ -85,7 +90,7 @@ public class BudgetController {
             return ResponseEntity.ok(Map.of("message", "Budget deleted", "success", true));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage(), "success", false));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 }
