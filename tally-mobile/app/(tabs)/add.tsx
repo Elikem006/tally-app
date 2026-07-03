@@ -11,10 +11,8 @@ import {
   Platform,
   Modal,
 } from "react-native";
-import { usePaystack } from "react-native-paystack-webview";
-import { expenseAPI, momoAPI, paystackAPI } from "../../services/api";
+import { expenseAPI, momoAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
-import { generatePaystackReference } from "../../services/paystack";
 import { currentUser } from "../(auth)/login";
 import { addHistoryItem } from "../../services/notificationHistory";
 import { signalMomoRefresh } from "../../services/momoRefresh";
@@ -30,7 +28,7 @@ const CATEGORIES = [
 ];
 
 type MomoStatus = "idle" | "sending" | "confirming" | "done";
-type PaymentMethod = "CASH" | "MOMO" | "PAYSTACK";
+type PaymentMethod = "CASH" | "MOMO";
 
 // Module-level vars persist for the whole app session — no async needed
 let lastUsedCategory = "Food";
@@ -42,8 +40,6 @@ export default function AddScreen() {
   const [selectedCategory, setSelectedCategory] = useState(lastUsedCategory);
   const [loading, setLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(lastUsedPaymentMethod);
-  const [cardProcessing, setCardProcessing] = useState(false);
-  const { popup } = usePaystack();
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [showHint, setShowHint] = useState(true);
@@ -107,12 +103,6 @@ export default function AddScreen() {
     // MoMo → open payment modal instead of saving directly
     if (paymentMethod === "MOMO") {
       setShowMomoModal(true);
-      return;
-    }
-
-    // Card → open Paystack checkout
-    if (paymentMethod === "PAYSTACK") {
-      handleCardPayment();
       return;
     }
 
@@ -250,71 +240,6 @@ export default function AddScreen() {
     setPhoneError(null);
   }
 
-  // ── Paystack card payment ──────────────────────────────────────────────────
-
-  function handleCardPayment() {
-    const email = currentUser.email.trim();
-    if (!email || !email.includes("@")) {
-      showToast("Card payments need the email on your account. Please log in again.", "error");
-      return;
-    }
-
-    const reference = generatePaystackReference();
-    setCardProcessing(true);
-    popup.checkout({
-      email,
-      amount: parseFloat(amount), // GHS — the Paystack SDK converts to pesewas
-      reference,
-      onSuccess: (res) => {
-        handlePaystackSuccess(res?.reference || reference);
-      },
-      onCancel: () => {
-        setCardProcessing(false);
-        showToast("Payment cancelled", "error");
-      },
-      onError: () => {
-        setCardProcessing(false);
-        showToast("Could not open card checkout. Please try again.", "error");
-      },
-    });
-  }
-
-  async function handlePaystackSuccess(reference: string) {
-    try {
-      const fullDescription = [description, ...tags].filter(Boolean).join(" ");
-      // The backend verifies with Paystack and records the expense as PAYSTACK
-      const res = await paystackAPI.verify(
-        reference,
-        getUserId(),
-        amount,
-        fullDescription,
-        selectedCategory,
-      );
-
-      if (res.data?.status === "success") {
-        const parsed = parseFloat(amount);
-        await addHistoryItem({
-          type: "expense_added",
-          title: "Card payment recorded",
-          body: `GHS ${parsed.toFixed(2)} paid by card for ${selectedCategory}${description ? ` — ${description}` : ""}.`,
-          data: { screen: "history" },
-        });
-        showToast("Payment successful! Expense recorded.", "success");
-        setAmount("");
-        setDescription("");
-        setTags([]);
-        setTagInput("");
-      } else {
-        showToast(res.data?.message || "Payment was not successful", "error");
-      }
-    } catch (err: any) {
-      const msg = err.response?.data?.error || "Could not verify payment. Please try again.";
-      showToast(msg, "error");
-    } finally {
-      setCardProcessing(false);
-    }
-  }
-
   return (
     <KeyboardAvoidingView
       style={styles.flex}
@@ -388,16 +313,6 @@ export default function AddScreen() {
               MoMo
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.paymentChip, paymentMethod === "PAYSTACK" && styles.paymentChipActivePaystack]}
-            onPress={() => handlePaymentMethodSelect("PAYSTACK")}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.paymentChipIcon}>💳</Text>
-            <Text style={[styles.paymentChipText, paymentMethod === "PAYSTACK" && styles.paymentChipTextPaystack]}>
-              Card
-            </Text>
-          </TouchableOpacity>
         </View>
 
         <Text style={styles.label}>Description (optional)</Text>
@@ -443,23 +358,18 @@ export default function AddScreen() {
         <TouchableOpacity
           style={[
             styles.button,
-            (loading || cardProcessing) && styles.buttonDisabled,
+            loading && styles.buttonDisabled,
             paymentMethod === "MOMO" && styles.buttonMomo,
-            paymentMethod === "PAYSTACK" && styles.buttonPaystack,
           ]}
           onPress={handleAddExpense}
-          disabled={loading || cardProcessing}
+          disabled={loading}
           activeOpacity={0.7}
         >
-          {loading || cardProcessing ? (
-            <ActivityIndicator color={paymentMethod === "PAYSTACK" ? "#ffffff" : "#000000"} />
+          {loading ? (
+            <ActivityIndicator color="#000000" />
           ) : (
-            <Text style={[styles.buttonText, paymentMethod === "PAYSTACK" && styles.buttonTextPaystack]}>
-              {paymentMethod === "MOMO"
-                ? "Pay with MoMo →"
-                : paymentMethod === "PAYSTACK"
-                ? "Pay with Card →"
-                : "Add Expense"}
+            <Text style={styles.buttonText}>
+              {paymentMethod === "MOMO" ? "Pay with MoMo →" : "Add Expense"}
             </Text>
           )}
         </TouchableOpacity>
@@ -662,13 +572,6 @@ const styles = StyleSheet.create({
   categoryNameActive: {
     color: "#00C896",
   },
-  lastUsedHint: {
-    fontSize: 11,
-    color: "#8890A0",
-    textAlign: "center",
-    marginTop: 4,
-    marginBottom: 8,
-  },
   button: {
     backgroundColor: "#00C896",
     borderRadius: 12,
@@ -678,12 +581,6 @@ const styles = StyleSheet.create({
   },
   buttonMomo: {
     backgroundColor: "#FFC107",
-  },
-  buttonPaystack: {
-    backgroundColor: "#4F8EF7",
-  },
-  buttonTextPaystack: {
-    color: "#ffffff",
   },
   buttonDisabled: {
     opacity: 0.6,
@@ -719,10 +616,6 @@ const styles = StyleSheet.create({
     borderColor: "#FFC107",
     backgroundColor: "#FFC10715",
   },
-  paymentChipActivePaystack: {
-    borderColor: "#4F8EF7",
-    backgroundColor: "#4F8EF715",
-  },
   paymentChipIcon: {
     fontSize: 18,
   },
@@ -736,9 +629,6 @@ const styles = StyleSheet.create({
   },
   paymentChipTextMomo: {
     color: "#FFC107",
-  },
-  paymentChipTextPaystack: {
-    color: "#4F8EF7",
   },
   // Tags
   tagInputRow: {
@@ -910,12 +800,5 @@ const styles = StyleSheet.create({
     color: "#000000",
     fontWeight: "bold",
     fontSize: 16,
-  },
-  modalStatusText: {
-    color: "#8890A0",
-    fontSize: 14,
-    textAlign: "center",
-    marginTop: 12,
-    minHeight: 20,
   },
 });

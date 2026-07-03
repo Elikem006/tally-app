@@ -51,7 +51,6 @@ export default function HomeScreen() {
   const [momoStatus, setMomoStatus] = useState<"loading" | "available" | "unavailable">("loading");
   const [momoBalanceLoading, setMomoBalanceLoading] = useState(false);
   const [momoMonthlySpent, setMomoMonthlySpent] = useState("0.00");
-  const [cardMonthlySpent, setCardMonthlySpent] = useState("0.00");
 
   // Quick add state
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -125,7 +124,6 @@ export default function HomeScreen() {
           .filter(isThisMonth)
           .reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0);
       setMomoMonthlySpent(monthlyTotal("MOMO").toFixed(2));
-      setCardMonthlySpent(monthlyTotal("PAYSTACK").toFixed(2));
       setError(null);
     } catch (err) {
       setError("Could not load data. Pull down to refresh.");
@@ -393,13 +391,16 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* Paystack subsection */}
-          <View style={styles.pmDivider} />
-          <Text style={styles.pmSubheader}>💳 Paystack (Card)</Text>
-          <Text style={styles.pmCardSpent}>
-            GHS {cardMonthlySpent} paid by card this month
-          </Text>
         </View>
+
+        {/* Pay Vendor button */}
+        <TouchableOpacity
+          style={styles.payVendorButton}
+          onPress={() => router.push("/pay-vendor")}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.payVendorButtonText}>📤  Pay Vendor via MoMo</Text>
+        </TouchableOpacity>
 
         {Object.keys(categoryTotals).length > 0 && (
           <View style={styles.section}>
@@ -875,11 +876,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff10",
     marginVertical: 12,
   },
-  pmCardSpent: {
-    fontSize: 13,
-    color: "#4F8EF7",
-    fontWeight: "600",
-  },
   momoUnavailableIcon: {
     fontSize: 14,
     marginRight: 6,
@@ -958,6 +954,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#FFC107",
     fontWeight: "600",
+  },
+  // Pay Vendor button
+  payVendorButton: {
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    marginBottom: 20,
+    borderWidth: 1.5,
+    borderColor: "#FFC107",
+    backgroundColor: "#FFC10715",
+  },
+  payVendorButtonText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#FFC107",
   },
   // FAB
   fab: {

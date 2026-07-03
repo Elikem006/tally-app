@@ -2,8 +2,6 @@ import { Stack, useRouter } from "expo-router";
 import { registerForPushNotifications } from "../services/notifications";
 import { useEffect, useRef } from "react";
 import * as Notifications from "expo-notifications";
-import { PaystackProvider } from "react-native-paystack-webview";
-import { PAYSTACK_PUBLIC_KEY } from "../services/paystack";
 
 export default function RootLayout() {
   const router = useRouter();
@@ -62,7 +60,6 @@ export default function RootLayout() {
   }, [router]);
 
   return (
-    <PaystackProvider publicKey={PAYSTACK_PUBLIC_KEY} currency="GHS" defaultChannels={["card", "mobile_money"]}>
     <Stack screenOptions={{ headerShown: false, headerStyle: { backgroundColor: "#0F1117" }, headerTintColor: "#ffffff" }}>
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(tabs)" />
@@ -82,7 +79,10 @@ export default function RootLayout() {
         name="help"
         options={{ headerShown: true, title: "Help & Support" }}
       />
+      <Stack.Screen
+        name="pay-vendor"
+        options={{ headerShown: true, title: "Pay Vendor" }}
+      />
     </Stack>
-    </PaystackProvider>
   );
 }

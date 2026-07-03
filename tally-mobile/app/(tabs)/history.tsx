@@ -68,8 +68,8 @@ export default function HistoryScreen() {
   const [error, setError] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  // Payment-method filter: ALL shows everything; MOMO / PAYSTACK narrow to one method
-  const [paymentFilter, setPaymentFilter] = useState<"ALL" | "MOMO" | "PAYSTACK">("ALL");
+  // Payment-method filter: ALL shows everything; MOMO narrows to MoMo only
+  const [paymentFilter, setPaymentFilter] = useState<"ALL" | "MOMO">("ALL");
 
   useFocusEffect(
     useCallback(() => {
@@ -225,15 +225,6 @@ export default function HistoryScreen() {
             📱 MoMo Only
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.cardFilterButton, paymentFilter === "PAYSTACK" && styles.cardFilterButtonActive]}
-          onPress={() => setPaymentFilter((f) => (f === "PAYSTACK" ? "ALL" : "PAYSTACK"))}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.cardFilterText, paymentFilter === "PAYSTACK" && styles.cardFilterTextActive]}>
-            💳 Card Only
-          </Text>
-        </TouchableOpacity>
       </ScrollView>
 
       {/* Search bar */}
@@ -257,29 +248,22 @@ export default function HistoryScreen() {
         style={[
           styles.totalCard,
           paymentFilter === "MOMO" && styles.totalCardMomo,
-          paymentFilter === "PAYSTACK" && styles.totalCardPaystack,
         ]}
       >
         <Text style={styles.totalLabel}>
-          {paymentFilter === "MOMO"
-            ? "Total MoMo Spending"
-            : paymentFilter === "PAYSTACK"
-            ? "Total Card Spending"
-            : "Total Spent"}
+          {paymentFilter === "MOMO" ? "Total MoMo Spending" : "Total Spent"}
         </Text>
         <Text
           style={[
             styles.totalAmount,
             paymentFilter === "MOMO" && styles.totalAmountMomo,
-            paymentFilter === "PAYSTACK" && styles.totalAmountPaystack,
           ]}
         >
           GHS {totalSpent.toFixed(2)}
         </Text>
-        {paymentFilter !== "ALL" && (
+        {paymentFilter === "MOMO" && (
           <Text style={styles.totalMomoSub}>
-            {paymentFilter === "MOMO" ? "📱" : "💳"} {filteredExpenses.length}{" "}
-            {paymentFilter === "MOMO" ? "MoMo" : "card"} transaction
+            📱 {filteredExpenses.length} MoMo transaction
             {filteredExpenses.length !== 1 ? "s" : ""}
           </Text>
         )}
@@ -313,7 +297,7 @@ export default function HistoryScreen() {
           const color = CATEGORY_COLORS[item.category] || "#8890A0";
           const { cleanDescription, tags } = parseTagsFromDescription(item.description);
           const isMomo = item.paymentMethod === "MOMO";
-          const isCard = item.paymentMethod === "PAYSTACK";
+          const isTransfer = isMomo && item.description?.startsWith("Sent to ");
           return (
             <TouchableOpacity
               style={[styles.expenseCard, isShared && styles.sharedCard]}
@@ -340,11 +324,11 @@ export default function HistoryScreen() {
                       </View>
                     )}
                     <View style={[styles.badge, {
-                      backgroundColor: isMomo ? "#FFC10720" : isCard ? "#4F8EF720" : "#ffffff10",
-                      borderColor: isMomo ? "#FFC107" : isCard ? "#4F8EF7" : "#ffffff30",
+                      backgroundColor: isTransfer ? "#FFC10720" : isMomo ? "#FFC10720" : "#ffffff10",
+                      borderColor: isTransfer ? "#FFC107" : isMomo ? "#FFC107" : "#ffffff30",
                     }]}>
-                      <Text style={[styles.badgeText, { color: isMomo ? "#FFC107" : isCard ? "#4F8EF7" : "#8890A0" }]}>
-                        {isMomo ? "📱 MoMo" : isCard ? "💳 Card" : "💵 Cash"}
+                      <Text style={[styles.badgeText, { color: isTransfer ? "#FFC107" : isMomo ? "#FFC107" : "#8890A0" }]}>
+                        {isTransfer ? "📤 MoMo Transfer" : isMomo ? "📱 MoMo" : "💵 Cash"}
                       </Text>
                     </View>
                   </View>
@@ -432,9 +416,6 @@ const styles = StyleSheet.create({
   totalCardMomo: {
     borderColor: "#FFC10740",
   },
-  totalCardPaystack: {
-    borderColor: "#4F8EF740",
-  },
   totalLabel: {
     fontSize: 13,
     color: "#8890A0",
@@ -447,9 +428,6 @@ const styles = StyleSheet.create({
   },
   totalAmountMomo: {
     color: "#FFC107",
-  },
-  totalAmountPaystack: {
-    color: "#4F8EF7",
   },
   totalMomoSub: {
     fontSize: 12,
@@ -605,28 +583,6 @@ const styles = StyleSheet.create({
   },
   momoFilterTextActive: {
     color: "#FFC107",
-    fontWeight: "bold",
-  },
-  cardFilterButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#4F8EF750",
-    backgroundColor: "#1A1F2E",
-    marginRight: 8,
-  },
-  cardFilterButtonActive: {
-    backgroundColor: "#4F8EF720",
-    borderColor: "#4F8EF7",
-  },
-  cardFilterText: {
-    fontSize: 13,
-    color: "#8890A0",
-    fontWeight: "500",
-  },
-  cardFilterTextActive: {
-    color: "#4F8EF7",
     fontWeight: "bold",
   },
   searchContainer: {

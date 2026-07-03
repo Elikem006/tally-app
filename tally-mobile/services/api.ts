@@ -121,14 +121,24 @@ export const momoAPI = {
 
   getBalance: () =>
     api.get("/api/momo/balance"),
-};
 
-export const paystackAPI = {
-  initialize: (email: string, amount: string, description: string, userId: string) =>
-    api.post("/api/paystack/initialize", { email, amount, description, userId }),
+  transfer: (
+    recipientPhone: string,
+    amount: string,
+    description: string,
+    userId: string,
+    category: string,
+  ) =>
+    api.post("/api/momo/transfer", {
+      recipientPhone,
+      amount,
+      description,
+      userId,
+      category,
+    }),
 
-  verify: (reference: string, userId: string, amount: string, description: string, category: string) =>
-    api.post("/api/paystack/verify", { reference, userId, amount, description, category }),
+  checkTransferStatus: (referenceId: string) =>
+    api.get(`/api/momo/transfer/status/${referenceId}`),
 };
 
 export const remindersAPI = {
