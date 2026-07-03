@@ -223,7 +223,7 @@ export default function RemindersScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={[styles.flex, { paddingTop: Math.max(insets.top, 20) }]}>
         {/* Header */}

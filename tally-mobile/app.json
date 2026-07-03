@@ -20,7 +20,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0F1117"
       },
-      "package": "com.tally.app"
+      "package": "com.tally.app",
+      "softwareKeyboardLayoutMode": "resize"
     },
     "plugins": [
       "expo-router"
