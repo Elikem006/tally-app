@@ -68,6 +68,40 @@ function parseTagsFromDescription(description: string | null | undefined): {
   return { cleanDescription, tags };
 }
 
+const EyelashClosedIcon = ({ size = 20, color = "#D97706" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M2 10C6 15 18 15 22 10"
+      stroke={color}
+      strokeWidth={2.2}
+      strokeLinecap="round"
+    />
+    <Path d="M4 12L2 14.5" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
+    <Path d="M8 13.5L7 16.5" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
+    <Path d="M12 14L12 17.5" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
+    <Path d="M16 13.5L17 16.5" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
+    <Path d="M20 12L22 14.5" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
+  </Svg>
+);
+
+const EyelashOpenIcon = ({ size = 20, color = "#D97706" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M2 12C6 6 18 6 22 12C18 18 6 18 2 12Z"
+      stroke={color}
+      strokeWidth={2.2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Path
+      d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z"
+      stroke={color}
+      strokeWidth={2.2}
+      fill={color}
+    />
+  </Svg>
+);
+
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [expenses, setExpenses] = useState<any[]>([]);
@@ -653,11 +687,11 @@ export default function HomeScreen() {
                 style={styles.hideMomoBtn}
                 activeOpacity={0.7}
               >
-                <MaterialCommunityIcons
-                  name={hideMomoBalance ? "eye-closed" : "eye"}
-                  size={18}
-                  color="#D97706"
-                />
+                {hideMomoBalance ? (
+                  <EyelashClosedIcon size={18} color="#D97706" />
+                ) : (
+                  <EyelashOpenIcon size={18} color="#D97706" />
+                )}
               </TouchableOpacity>
             )}
           </View>
