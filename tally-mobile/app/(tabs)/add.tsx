@@ -9,13 +9,12 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Modal,
 } from "react-native";
-import { expenseAPI, momoAPI } from "../../services/api";
+import { router } from "expo-router";
+import { expenseAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
 import { currentUser } from "../(auth)/login";
 import { addHistoryItem } from "../../services/notificationHistory";
-import { signalMomoRefresh } from "../../services/momoRefresh";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
 
@@ -27,12 +26,24 @@ const CATEGORIES = [
   { name: "Other", emoji: "📦" },
 ];
 
-type MomoStatus = "idle" | "sending" | "confirming" | "done";
 type PaymentMethod = "CASH" | "MOMO";
 
 // Module-level vars persist for the whole app session — no async needed
 let lastUsedCategory = "Food";
 let lastUsedPaymentMethod: PaymentMethod = "CASH";
+
+// Holds form data when navigating away to Pay Vendor so the Add screen
+// can be cleared after a successful payment.
+export let pendingExpenseData: {
+  amount: string;
+  category: string;
+  description: string;
+  paymentMethod: PaymentMethod;
+} | null = null;
+
+export function clearPendingExpenseData() {
+  pendingExpenseData = null;
+}
 
 export default function AddScreen() {
   const [amount, setAmount] = useState("");
@@ -44,7 +55,6 @@ export default function AddScreen() {
   const [tagInput, setTagInput] = useState("");
   const [showHint, setShowHint] = useState(true);
   const [amountError, setAmountError] = useState<string | null>(null);
-  const [phoneError, setPhoneError] = useState<string | null>(null);
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
 
   // Auto-hide the "remembered" hint after 3 seconds
@@ -63,12 +73,6 @@ export default function AddScreen() {
     setPaymentMethod(method);
     lastUsedPaymentMethod = method;
   }
-
-  // MoMo payment modal
-  const [showMomoModal, setShowMomoModal] = useState(false);
-  const [momoPhone, setMomoPhone] = useState(currentUser.phoneNumber || "");
-  const [momoStatus, setMomoStatus] = useState<MomoStatus>("idle");
-  const [momoLoading, setMomoLoading] = useState(false);
 
   function handleAddTag() {
     const raw = tagInput.trim();
@@ -100,9 +104,23 @@ export default function AddScreen() {
     }
     setAmountError(null);
 
-    // MoMo → open payment modal instead of saving directly
+    // MoMo → navigate to Pay Vendor screen with pre-filled data
     if (paymentMethod === "MOMO") {
-      setShowMomoModal(true);
+      pendingExpenseData = {
+        amount: amount.trim(),
+        category: selectedCategory,
+        description: [description, ...tags].filter(Boolean).join(" "),
+        paymentMethod: "MOMO",
+      };
+      router.push({
+        pathname: "/pay-vendor",
+        params: {
+          amount: amount.trim(),
+          description: [description, ...tags].filter(Boolean).join(" "),
+          category: selectedCategory,
+          fromAddExpense: "true",
+        },
+      });
       return;
     }
 
@@ -138,106 +156,6 @@ export default function AddScreen() {
     } finally {
       setLoading(false);
     }
-  }
-
-  async function handleMomoPayment() {
-    const phone = momoPhone.trim().replace(/\s/g, "");
-    if (!/^\d{10}$/.test(phone)) {
-      setPhoneError("Phone number must be exactly 10 digits");
-      return;
-    }
-    setPhoneError(null);
-
-    setMomoLoading(true);
-    setMomoStatus("sending");
-
-    try {
-      const userId = getUserId();
-      const fullDescription = [description, ...tags].filter(Boolean).join(" ");
-
-      // Request payment from MTN MoMo sandbox
-      const payRes = await momoAPI.requestPayment(
-        "",       // no groupId for personal expenses
-        userId,
-        phone,
-        amount,
-        fullDescription || selectedCategory,
-      );
-
-      const referenceId: string =
-        payRes.data?.referenceId ?? payRes.data?.externalId ?? "";
-
-      // Wait 3 s, then check payment status
-      setMomoStatus("confirming");
-      await new Promise((r) => setTimeout(r, 3000));
-
-      let paymentStatus = "PENDING";
-      if (referenceId) {
-        try {
-          const statusRes = await momoAPI.checkStatus(referenceId);
-          paymentStatus = statusRes.data?.status ?? "PENDING";
-        } catch {
-          // If status check fails, treat as PENDING and record the expense
-          paymentStatus = "PENDING";
-        }
-      }
-
-      if (paymentStatus === "FAILED") {
-        showToast("Payment failed. Please try again.", "error");
-        setMomoStatus("idle");
-        setMomoLoading(false);
-        return;
-      }
-
-      // SUCCESSFUL or PENDING — record the expense
-      const today = new Date().toISOString().split("T")[0];
-      const parsed = parseFloat(amount);
-      await expenseAPI.createExpense(
-        userId,
-        amount,
-        selectedCategory,
-        fullDescription,
-        today,
-        "MOMO",
-      );
-
-      await addHistoryItem({
-        type: "expense_added",
-        title: "MoMo payment recorded",
-        body: `GHS ${parsed.toFixed(2)} paid via MoMo for ${selectedCategory}${description ? ` — ${description}` : ""}.`,
-        data: { screen: "history" },
-      });
-
-      setMomoStatus("done");
-      // Tell Home screen to re-fetch wallet balance on next focus
-      signalMomoRefresh();
-
-      // Brief pause so user sees "confirmed" state, then close
-      setTimeout(() => {
-        setShowMomoModal(false);
-        setMomoStatus("idle");
-        setMomoLoading(false);
-        showToast("Payment successful! Expense recorded.", "success");
-        setAmount("");
-        setDescription("");
-        setTags([]);
-        setTagInput("");
-        setMomoPhone("");
-      }, 1200);
-    } catch (err: any) {
-      const msg =
-        err.response?.data?.error || "Payment request failed. Please try again.";
-      showToast(msg, "error");
-      setMomoStatus("idle");
-      setMomoLoading(false);
-    }
-  }
-
-  function closeMomoModal() {
-    if (momoLoading) return; // block dismissal while in-flight
-    setShowMomoModal(false);
-    setMomoStatus("idle");
-    setPhoneError(null);
   }
 
   return (
@@ -369,116 +287,11 @@ export default function AddScreen() {
             <ActivityIndicator color="#000000" />
           ) : (
             <Text style={styles.buttonText}>
-              {paymentMethod === "MOMO" ? "Pay with MoMo →" : "Add Expense"}
+              {paymentMethod === "MOMO" ? "Pay Vendor via MoMo →" : "Add Expense"}
             </Text>
           )}
         </TouchableOpacity>
       </ScrollView>
-
-      {/* ── MoMo Payment Modal ─────────────────────────────────────────── */}
-      <Modal
-        visible={showMomoModal}
-        transparent
-        animationType="slide"
-        onRequestClose={closeMomoModal}
-      >
-        <KeyboardAvoidingView
-          style={styles.modalOverlay}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-        >
-          <TouchableOpacity
-            style={styles.modalBackdrop}
-            activeOpacity={1}
-            onPress={closeMomoModal}
-          />
-          <View style={styles.modalCard}>
-            {/* Header */}
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Pay with MoMo 📱</Text>
-              {!momoLoading && (
-                <TouchableOpacity onPress={closeMomoModal} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
-                  <Text style={styles.modalClose}>✕</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Amount box */}
-            <View style={styles.momoAmountBox}>
-              <Text style={styles.momoAmountLabel}>You are paying</Text>
-              <Text style={styles.momoAmountValue}>
-                GHS {parseFloat(amount || "0").toFixed(2)}
-              </Text>
-              {(description || selectedCategory) && (
-                <Text style={styles.momoAmountDesc}>
-                  {description || selectedCategory}
-                </Text>
-              )}
-            </View>
-
-            {/* Phone input — only shown while idle */}
-            {momoStatus === "idle" && (
-              <>
-                <Text style={styles.momoPhoneLabel}>MoMo Number</Text>
-                <TextInput
-                  style={[styles.momoPhoneInput, phoneError ? styles.inputError : null]}
-                  placeholder="e.g. 0241234567"
-                  placeholderTextColor="#8890A080"
-                  value={momoPhone}
-                  onChangeText={(text) => {
-                    setMomoPhone(text);
-                    if (phoneError) setPhoneError(null);
-                  }}
-                  keyboardType="phone-pad"
-                  maxLength={10}
-                  autoFocus
-                />
-                {phoneError && <Text style={styles.fieldError}>{phoneError}</Text>}
-              </>
-            )}
-
-            {/* Status feedback while processing */}
-            {momoStatus !== "idle" && (
-              <View style={styles.momoStatusBox}>
-                {momoStatus !== "done" && (
-                  <ActivityIndicator
-                    color="#FFC107"
-                    size="large"
-                    style={{ marginBottom: 12 }}
-                  />
-                )}
-                {momoStatus === "done" && (
-                  <Text style={styles.momoStatusIcon}>✅</Text>
-                )}
-                <Text style={styles.momoStatusText}>
-                  {momoStatus === "sending" && "Sending payment request to your MoMo number..."}
-                  {momoStatus === "confirming" && "Confirming payment..."}
-                  {momoStatus === "done" && "Payment confirmed!"}
-                </Text>
-              </View>
-            )}
-
-            {/* Buttons — hidden while processing */}
-            {momoStatus === "idle" && (
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={styles.modalCancelBtn}
-                  onPress={closeMomoModal}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.modalCancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.modalPayBtn}
-                  onPress={handleMomoPayment}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.modalPayText}>Pay Now</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
 
       <Toast
         message={toastMessage}
@@ -679,126 +492,5 @@ const styles = StyleSheet.create({
   tagRemove: {
     fontSize: 12,
     color: "#00C896",
-  },
-  // MoMo modal
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.6)",
-  },
-  modalCard: {
-    backgroundColor: "#1A1F2E",
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    padding: 24,
-    paddingBottom: 40,
-    borderTopWidth: 1,
-    borderColor: "#FFC10740",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#ffffff",
-  },
-  modalClose: {
-    fontSize: 18,
-    color: "#8890A0",
-    padding: 4,
-  },
-  momoAmountBox: {
-    backgroundColor: "#0F1117",
-    borderRadius: 16,
-    padding: 20,
-    alignItems: "center",
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "#FFC10730",
-  },
-  momoAmountLabel: {
-    fontSize: 12,
-    color: "#8890A0",
-    marginBottom: 6,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-  momoAmountValue: {
-    fontSize: 40,
-    fontWeight: "bold",
-    color: "#FFC107",
-    marginBottom: 4,
-  },
-  momoAmountDesc: {
-    fontSize: 13,
-    color: "#8890A0",
-  },
-  momoPhoneLabel: {
-    fontSize: 13,
-    color: "#ffffff",
-    fontWeight: "500",
-    marginBottom: 8,
-  },
-  momoPhoneInput: {
-    backgroundColor: "#0F1117",
-    borderRadius: 12,
-    padding: 16,
-    color: "#ffffff",
-    fontSize: 18,
-    fontWeight: "600",
-    borderWidth: 1,
-    borderColor: "#FFC10740",
-    marginBottom: 20,
-    letterSpacing: 1,
-  },
-  momoStatusBox: {
-    alignItems: "center",
-    paddingVertical: 24,
-  },
-  momoStatusIcon: {
-    fontSize: 48,
-    marginBottom: 12,
-  },
-  momoStatusText: {
-    fontSize: 15,
-    color: "#FFC107",
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  modalButtons: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  modalCancelBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#ffffff30",
-    alignItems: "center",
-  },
-  modalCancelText: {
-    fontSize: 15,
-    color: "#8890A0",
-    fontWeight: "600",
-  },
-  modalPayBtn: {
-    flex: 2,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: "#FFC107",
-    alignItems: "center",
-  },
-  modalPayText: {
-    color: "#000000",
-    fontWeight: "bold",
-    fontSize: 16,
   },
 });

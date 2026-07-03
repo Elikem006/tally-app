@@ -10,9 +10,11 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { useRouter } from "expo-router";
-import { momoAPI } from "../services/api";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { momoAPI, expenseAPI } from "../services/api";
+import { getUserId } from "../services/storage";
 import { currentUser } from "./(auth)/login";
+import { addHistoryItem } from "../services/notificationHistory";
 
 const CATEGORIES = [
   { name: "Food", emoji: "🍔" },
@@ -25,15 +27,29 @@ const CATEGORIES = [
 export default function PayVendorScreen() {
   const router = useRouter();
 
+  // Pre-fill from Add Expense screen if navigated from there
+  const {
+    amount: initialAmount,
+    description: initialDescription,
+    category: initialCategory,
+    fromAddExpense,
+  } = useLocalSearchParams<{
+    amount?: string;
+    description?: string;
+    category?: string;
+    fromAddExpense?: string;
+  }>();
+
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [vendorPhone, setVendorPhone] = useState("");
-  const [amount, setAmount] = useState("");
-  const [description, setDescription] = useState("");
-  const [category, setCategory] = useState("Other");
+  const [amount, setAmount] = useState(initialAmount ?? "");
+  const [description, setDescription] = useState(initialDescription ?? "");
+  const [category, setCategory] = useState(initialCategory ?? "Other");
   const [referenceId, setReferenceId] = useState("");
   const [transferStatus, setTransferStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [expenseRecorded, setExpenseRecorded] = useState(false);
 
   // ── Step 1 validation ──────────────────────────────────────────────────────
   const handleProceedToConfirm = () => {
@@ -56,11 +72,13 @@ export default function PayVendorScreen() {
     setError("");
 
     try {
+      const userId = getUserId();
+
       const res = await momoAPI.transfer(
         vendorPhone.trim(),
         amount.trim(),
         description.trim() || "MoMo transfer",
-        String(currentUser.id ?? ""),
+        userId,                 // ← was currentUser.id (undefined); now correctly uses getUserId()
         category,
       );
 
@@ -81,6 +99,39 @@ export default function PayVendorScreen() {
       }
 
       setTransferStatus(status);
+
+      // On SUCCESSFUL, also create expense from frontend as a safety net
+      // (backend already records it; this ensures it appears even if backend userId lookup failed)
+      if (status === "SUCCESSFUL" && !expenseRecorded) {
+        try {
+          const today = new Date().toISOString().split("T")[0];
+          const expenseDesc = `Sent to ${vendorPhone.trim()}${description.trim() ? ": " + description.trim() : ""}`;
+          await expenseAPI.createExpense(
+            userId,
+            amount.trim(),
+            category,
+            expenseDesc,
+            today,
+            "MOMO",
+          );
+          setExpenseRecorded(true);
+          await addHistoryItem({
+            type: "expense_added",
+            title: "MoMo Transfer",
+            body: `GHS ${parseFloat(amount).toFixed(2)} sent to ${vendorPhone.trim()} via MoMo.`,
+            data: { screen: "history" },
+          });
+        } catch {
+          // Non-fatal — backend may have already recorded it
+        }
+      }
+
+      // If navigated from Add Expense, go back to Add tab after a short delay
+      if (status === "SUCCESSFUL" && fromAddExpense === "true") {
+        setTimeout(() => {
+          router.replace("/(tabs)/add");
+        }, 2000);
+      }
     } catch (err: any) {
       const msg =
         err?.response?.data?.error ??
@@ -248,7 +299,13 @@ export default function PayVendorScreen() {
                 </Text>
                 <Text style={styles.resultBody}>
                   GHS {Number(amount).toFixed(2)} was sent to {vendorPhone}.
+                  {"\n"}Expense recorded in your history.
                 </Text>
+                {fromAddExpense === "true" && (
+                  <Text style={[styles.resultBody, { color: "#8890A0", marginTop: 4 }]}>
+                    Returning to Add Expense…
+                  </Text>
+                )}
               </>
             )}
 
@@ -281,7 +338,19 @@ export default function PayVendorScreen() {
                       setLoading(true);
                       try {
                         const r = await momoAPI.checkTransferStatus(referenceId);
-                        setTransferStatus(r.data?.status ?? "PENDING");
+                        const newStatus = r.data?.status ?? "PENDING";
+                        setTransferStatus(newStatus);
+                        // Record expense if it just became SUCCESSFUL
+                        if (newStatus === "SUCCESSFUL" && !expenseRecorded) {
+                          const userId = getUserId();
+                          const today = new Date().toISOString().split("T")[0];
+                          const expenseDesc = `Sent to ${vendorPhone.trim()}${description.trim() ? ": " + description.trim() : ""}`;
+                          await expenseAPI.createExpense(userId, amount.trim(), category, expenseDesc, today, "MOMO").catch(() => {});
+                          setExpenseRecorded(true);
+                          if (fromAddExpense === "true") {
+                            setTimeout(() => router.replace("/(tabs)/add"), 2000);
+                          }
+                        }
                       } catch {
                         // keep PENDING
                       } finally {
@@ -302,13 +371,15 @@ export default function PayVendorScreen() {
               </>
             )}
 
-            <TouchableOpacity
-              style={styles.secondaryBtn}
-              onPress={() => router.replace("/(tabs)")}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.secondaryBtnText}>Back to Home</Text>
-            </TouchableOpacity>
+            {transferStatus !== "SUCCESSFUL" && (
+              <TouchableOpacity
+                style={styles.secondaryBtn}
+                onPress={() => router.replace("/(tabs)")}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.secondaryBtnText}>Back to Home</Text>
+              </TouchableOpacity>
+            )}
 
             {transferStatus !== "SUCCESSFUL" && (
               <TouchableOpacity
@@ -318,10 +389,21 @@ export default function PayVendorScreen() {
                   setError("");
                   setReferenceId("");
                   setTransferStatus("");
+                  setExpenseRecorded(false);
                 }}
                 activeOpacity={0.7}
               >
                 <Text style={styles.secondaryBtnText}>Try Again</Text>
+              </TouchableOpacity>
+            )}
+
+            {transferStatus === "SUCCESSFUL" && (
+              <TouchableOpacity
+                style={styles.secondaryBtn}
+                onPress={() => router.replace("/(tabs)/history")}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.secondaryBtnText}>View in History</Text>
               </TouchableOpacity>
             )}
           </View>

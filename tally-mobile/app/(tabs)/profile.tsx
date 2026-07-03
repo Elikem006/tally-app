@@ -95,6 +95,30 @@ export default function ProfileScreen() {
     }
   }
 
+  async function handleRemovePhone() {
+    Alert.alert(
+      "Remove Phone Number",
+      "Are you sure you want to remove your MoMo number?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await authAPI.updatePhone(getUserId(), "");
+              setPhoneNumber("");
+              currentUser.phoneNumber = "";
+              showToast("Phone number removed", "success");
+            } catch {
+              showToast("Failed to remove phone number", "error");
+            }
+          },
+        },
+      ],
+    );
+  }
+
   async function handleSavePhone() {
     const cleaned = phoneNumber.trim().replace(/\s/g, "");
     if (!/^\d{10}$/.test(cleaned)) {
@@ -182,18 +206,38 @@ export default function ProfileScreen() {
         <View style={[styles.card, styles.infoCard]}>
           <Text style={styles.infoLabel}>MoMo Number</Text>
           <View style={styles.infoRow}>
-            <Text style={styles.infoValue}>
-              {currentUser.phoneNumber || "Not set"}
-            </Text>
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={() => setEditingPhone(true)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.editButtonText}>
-                {currentUser.phoneNumber ? "Edit" : "+ Add"}
-              </Text>
-            </TouchableOpacity>
+            {phoneNumber ? (
+              <>
+                <Text style={styles.infoValue}>{phoneNumber}</Text>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  <TouchableOpacity
+                    style={styles.editButton}
+                    onPress={() => setEditingPhone(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.editButtonText}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.removeButton}
+                    onPress={handleRemovePhone}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.removeButtonText}>Remove</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={[styles.infoValue, { color: "#8890A0" }]}>Not set</Text>
+                <TouchableOpacity
+                  style={styles.editButton}
+                  onPress={() => setEditingPhone(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.editButtonText}>+ Add</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
       ) : (
@@ -479,6 +523,19 @@ const styles = StyleSheet.create({
   },
   editButtonText: {
     color: "#00C896",
+  },
+  removeButton: {
+    backgroundColor: "#E05C5C20",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: "#E05C5C",
+  },
+  removeButtonText: {
+    color: "#E05C5C",
+    fontSize: 13,
+    fontWeight: "600",
   },
   phoneInput: {
     backgroundColor: "#0F1117",
