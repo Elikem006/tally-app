@@ -19,7 +19,7 @@ import { useFocusEffect, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { expenseAPI, remindersAPI, budgetAPI, momoAPI } from '../../services/api';
 import { getUserId, getUserName, safeStorage } from '../../services/storage';
-import { Feather } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Svg, Path } from 'react-native-svg';
 import {
   addHistoryItem,
@@ -653,8 +653,8 @@ export default function HomeScreen() {
                 style={styles.hideMomoBtn}
                 activeOpacity={0.7}
               >
-                <Feather
-                  name={hideMomoBalance ? "eye-off" : "eye"}
+                <MaterialCommunityIcons
+                  name={hideMomoBalance ? "eye-closed" : "eye"}
                   size={18}
                   color="#D97706"
                 />
