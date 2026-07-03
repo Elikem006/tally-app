@@ -83,6 +83,10 @@ export default function RootLayout() {
         name="pay-vendor"
         options={{ headerShown: true, title: "Pay Vendor" }}
       />
+      <Stack.Screen
+        name="manage-categories"
+        options={{ headerShown: true, title: "Manage Categories" }}
+      />
     </Stack>
   );
 }

@@ -9,9 +9,10 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from "react-native";
 import { router } from "expo-router";
-import { expenseAPI } from "../../services/api";
+import { expenseAPI, categoriesAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
 import { currentUser } from "../(auth)/login";
 import { addHistoryItem } from "../../services/notificationHistory";
@@ -55,6 +56,10 @@ export default function AddScreen() {
   const [tagInput, setTagInput] = useState("");
   const [showHint, setShowHint] = useState(true);
   const [amountError, setAmountError] = useState<string | null>(null);
+  const [customCategories, setCustomCategories] = useState<{ id: number; name: string; emoji: string }[]>([]);
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryEmoji, setNewCategoryEmoji] = useState("");
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
 
   // Auto-hide the "remembered" hint after 3 seconds
@@ -62,6 +67,42 @@ export default function AddScreen() {
     const timer = setTimeout(() => setShowHint(false), 3000);
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    fetchCustomCategories();
+  }, []);
+
+  async function fetchCustomCategories() {
+    try {
+      const response = await categoriesAPI.getUserCategories(getUserId());
+      setCustomCategories(response.data || []);
+    } catch {
+      // Non-fatal — custom categories are optional
+    }
+  }
+
+  async function handleCreateCategory() {
+    if (!newCategoryEmoji.trim() || !newCategoryName.trim()) {
+      showToast("Please enter both emoji and category name", "error");
+      return;
+    }
+    try {
+      const response = await categoriesAPI.createCategory(
+        getUserId(),
+        newCategoryName.trim(),
+        newCategoryEmoji.trim(),
+      );
+      const created = response.data;
+      setCustomCategories((prev) => [...prev, created]);
+      handleCategorySelect(created.name);
+      setNewCategoryName("");
+      setNewCategoryEmoji("");
+      setShowAddCategory(false);
+      showToast("Category created!", "success");
+    } catch (err: any) {
+      showToast(err?.response?.data?.error || "Failed to create category", "error");
+    }
+  }
 
   function handleCategorySelect(cat: string) {
     setSelectedCategory(cat);
@@ -186,6 +227,7 @@ export default function AddScreen() {
 
         <Text style={styles.label}>Category</Text>
         <View style={styles.categoryGrid}>
+          {/* Default categories */}
           {CATEGORIES.map((cat) => {
             const isSelected = selectedCategory === cat.name;
             return (
@@ -202,7 +244,32 @@ export default function AddScreen() {
               </TouchableOpacity>
             );
           })}
+          {/* Custom categories */}
+          {customCategories.map((cat) => {
+            const isSelected = selectedCategory === cat.name;
+            return (
+              <TouchableOpacity
+                key={`custom-${cat.id}`}
+                style={[styles.categoryCard, isSelected && styles.categoryCardActive]}
+                onPress={() => handleCategorySelect(cat.name)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
+                <Text style={[styles.categoryName, isSelected && styles.categoryNameActive]}>
+                  {cat.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
+        {/* + Add Category button */}
+        <TouchableOpacity
+          style={styles.addCategoryButton}
+          onPress={() => setShowAddCategory(true)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.addCategoryText}>+ Add Category</Text>
+        </TouchableOpacity>
         {showHint && (
           <Text style={{ fontSize: 11, color: "#8890A0", textAlign: "center", marginBottom: 8 }}>
             ↩ Remembered from last expense
@@ -299,6 +366,69 @@ export default function AddScreen() {
         visible={toastVisible}
         onHide={hideToast}
       />
+
+      {/* ── Create Custom Category Modal ─────────────────────────────── */}
+      <Modal
+        visible={showAddCategory}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowAddCategory(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowAddCategory(false)}
+          />
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Create Custom Category</Text>
+
+            <Text style={styles.modalLabel}>Choose an emoji</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={newCategoryEmoji}
+              onChangeText={setNewCategoryEmoji}
+              placeholder="e.g. 🏠 💊 📚"
+              placeholderTextColor="#8890A060"
+              autoFocus
+            />
+
+            <Text style={styles.modalLabel}>Category name</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={newCategoryName}
+              onChangeText={setNewCategoryName}
+              placeholder="e.g. Healthcare, Rent"
+              placeholderTextColor="#8890A060"
+              returnKeyType="done"
+              onSubmitEditing={handleCreateCategory}
+            />
+
+            <TouchableOpacity
+              style={styles.createButton}
+              onPress={handleCreateCategory}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.createButtonText}>Create</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => {
+                setShowAddCategory(false);
+                setNewCategoryName("");
+                setNewCategoryEmoji("");
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -492,5 +622,85 @@ const styles = StyleSheet.create({
   tagRemove: {
     fontSize: 12,
     color: "#00C896",
+  },
+  // Add Category button
+  addCategoryButton: {
+    borderWidth: 1,
+    borderColor: "#00C896",
+    borderStyle: "dashed",
+    borderRadius: 12,
+    padding: 12,
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  addCategoryText: {
+    color: "#00C896",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  // Create category modal
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.65)",
+  },
+  modalCard: {
+    backgroundColor: "#1A1F2E",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 40,
+    borderTopWidth: 1,
+    borderColor: "#00C89630",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#ffffff",
+    marginBottom: 20,
+  },
+  modalLabel: {
+    fontSize: 13,
+    color: "#8890A0",
+    fontWeight: "500",
+    marginBottom: 6,
+  },
+  modalInput: {
+    backgroundColor: "#0F1117",
+    borderRadius: 12,
+    padding: 14,
+    color: "#ffffff",
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: "#ffffff15",
+    marginBottom: 16,
+  },
+  createButton: {
+    backgroundColor: "#00C896",
+    borderRadius: 12,
+    padding: 14,
+    alignItems: "center",
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  createButtonText: {
+    color: "#000000",
+    fontWeight: "bold",
+    fontSize: 15,
+  },
+  cancelButton: {
+    borderRadius: 12,
+    padding: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#ffffff20",
+  },
+  cancelButtonText: {
+    color: "#8890A0",
+    fontSize: 15,
+    fontWeight: "600",
   },
 });

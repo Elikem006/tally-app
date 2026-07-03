@@ -141,6 +141,15 @@ export const momoAPI = {
     api.get(`/api/momo/transfer/status/${referenceId}`),
 };
 
+export const categoriesAPI = {
+  getUserCategories: (userId: string) =>
+    api.get(`/api/categories/user/${userId}`),
+  createCategory: (userId: string, name: string, emoji: string) =>
+    api.post("/api/categories", { userId, name, emoji }),
+  deleteCategory: (id: string, userId: string) =>
+    api.delete(`/api/categories/${id}/user/${userId}`),
+};
+
 export const remindersAPI = {
   createReminder: (
     userId: string,

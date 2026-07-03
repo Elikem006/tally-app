@@ -12,14 +12,14 @@ import {
   Platform,
   RefreshControl,
 } from 'react-native';
-import { budgetAPI } from '../../services/api';
+import { budgetAPI, categoriesAPI } from '../../services/api';
 import { getUserId } from '../../services/storage';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 
-const CATEGORIES = ['Food', 'Transport', 'Entertainment', 'Utilities', 'Other'];
+const DEFAULT_CATEGORIES = ['Food', 'Transport', 'Entertainment', 'Utilities', 'Other'];
 
-const CATEGORY_ICONS: { [key: string]: string } = {
+const DEFAULT_CATEGORY_ICONS: { [key: string]: string } = {
   Food: '🍔',
   Transport: '🚗',
   Entertainment: '🎮',
@@ -40,11 +40,22 @@ export default function BudgetScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({});
+  const [customCategories, setCustomCategories] = useState<{ id: number; name: string; emoji: string }[]>([]);
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
 
   useEffect(() => {
     loadExistingBudgets();
+    loadCustomCategories();
   }, []);
+
+  async function loadCustomCategories() {
+    try {
+      const res = await categoriesAPI.getUserCategories(getUserId());
+      setCustomCategories(res.data || []);
+    } catch {
+      // Non-fatal
+    }
+  }
 
   async function loadExistingBudgets() {
     try {
@@ -54,14 +65,20 @@ export default function BudgetScreen() {
       response.data.forEach((budget: any) => {
         existing[budget.category] = String(budget.monthlyLimit);
       });
-      setLimits({
+      setLimits((prev) => ({
         Food: '',
         Transport: '',
         Entertainment: '',
         Utilities: '',
         Other: '',
+        // preserve any custom category slots already in state
+        ...Object.fromEntries(
+          Object.keys(prev)
+            .filter((k) => !DEFAULT_CATEGORIES.includes(k))
+            .map((k) => [k, '']),
+        ),
         ...existing,
-      });
+      }));
       setError(null);
     } catch (err) {
       setError('Could not load data. Pull down to refresh.');
@@ -72,7 +89,7 @@ export default function BudgetScreen() {
 
   async function onRefresh() {
     setRefreshing(true);
-    await loadExistingBudgets();
+    await Promise.all([loadExistingBudgets(), loadCustomCategories()]);
     setRefreshing(false);
   }
 
@@ -87,11 +104,12 @@ export default function BudgetScreen() {
         text: 'Reset',
         style: 'destructive',
         onPress: async () => {
-          // Clear local state immediately — this always works regardless of backend
-          setLimits({ Food: '', Transport: '', Entertainment: '', Utilities: '', Other: '' });
-          // Sync to backend best-effort (requires backend restart if DELETE endpoint is new)
+          const emptyLimits: { [key: string]: string } = { Food: '', Transport: '', Entertainment: '', Utilities: '', Other: '' };
+          customCategories.forEach((c) => { emptyLimits[c.name] = ''; });
+          setLimits(emptyLimits);
           const userId = getUserId();
-          for (const category of CATEGORIES) {
+          const allCats = [...DEFAULT_CATEGORIES, ...customCategories.map((c) => c.name)];
+          for (const category of allCats) {
             try { await budgetAPI.deleteBudget(userId, category); } catch {}
           }
         },
@@ -100,9 +118,9 @@ export default function BudgetScreen() {
   }
 
   async function handleSave() {
-    // Validate: every non-empty limit must be a positive number
+    const allCategories = [...DEFAULT_CATEGORIES, ...customCategories.map((c) => c.name)];
     const errors: { [key: string]: string } = {};
-    for (const category of CATEGORIES) {
+    for (const category of allCategories) {
       const value = limits[category];
       if (value && value.trim() !== '') {
         const parsed = parseFloat(value);
@@ -117,12 +135,11 @@ export default function BudgetScreen() {
     const userId = getUserId();
     setLoading(true);
     try {
-      for (const category of CATEGORIES) {
+      for (const category of allCategories) {
         const value = limits[category];
         if (value && value !== '0') {
           await budgetAPI.setBudget(userId, category, value);
         } else {
-          // Best-effort delete — don't let a failed delete block saving other categories
           try { await budgetAPI.deleteBudget(userId, category); } catch {}
         }
       }
@@ -170,11 +187,11 @@ export default function BudgetScreen() {
           Set how much you want to spend per category this month
         </Text>
 
-        {CATEGORIES.map((category) => (
+        {DEFAULT_CATEGORIES.map((category) => (
           <View key={category}>
             <View style={[styles.categoryRow, fieldErrors[category] ? styles.categoryRowError : null]}>
               <View style={styles.categoryLeft}>
-                <Text style={styles.categoryIcon}>{CATEGORY_ICONS[category]}</Text>
+                <Text style={styles.categoryIcon}>{DEFAULT_CATEGORY_ICONS[category]}</Text>
                 <Text style={styles.categoryName}>{category}</Text>
               </View>
               <View style={styles.rowRight}>
@@ -184,7 +201,7 @@ export default function BudgetScreen() {
                     style={styles.input}
                     placeholder="0.00"
                     placeholderTextColor="#8890A0"
-                    value={limits[category]}
+                    value={limits[category] ?? ''}
                     onChangeText={(text) => {
                       setLimits((prev) => ({ ...prev, [category]: text }));
                       if (fieldErrors[category]) {
@@ -215,6 +232,57 @@ export default function BudgetScreen() {
             )}
           </View>
         ))}
+
+        {customCategories.length > 0 && (
+          <>
+            <Text style={styles.sectionDivider}>Custom Categories</Text>
+            {customCategories.map((cat) => (
+              <View key={cat.name}>
+                <View style={[styles.categoryRow, fieldErrors[cat.name] ? styles.categoryRowError : null]}>
+                  <View style={styles.categoryLeft}>
+                    <Text style={styles.categoryIcon}>{cat.emoji}</Text>
+                    <Text style={styles.categoryName}>{cat.name}</Text>
+                  </View>
+                  <View style={styles.rowRight}>
+                    <View style={styles.inputContainer}>
+                      <Text style={styles.currency}>GHS</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="0.00"
+                        placeholderTextColor="#8890A0"
+                        value={limits[cat.name] ?? ''}
+                        onChangeText={(text) => {
+                          setLimits((prev) => ({ ...prev, [cat.name]: text }));
+                          if (fieldErrors[cat.name]) {
+                            setFieldErrors((prev) => {
+                              const next = { ...prev };
+                              delete next[cat.name];
+                              return next;
+                            });
+                          }
+                        }}
+                        keyboardType="decimal-pad"
+                      />
+                    </View>
+                    {limits[cat.name] !== '' && (
+                      <TouchableOpacity
+                        style={styles.clearBtn}
+                        onPress={() => clearCategory(cat.name)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.clearBtnText}>✕</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+                {fieldErrors[cat.name] && (
+                  <Text style={styles.fieldError}>{fieldErrors[cat.name]}</Text>
+                )}
+              </View>
+            ))}
+          </>
+        )}
 
         <TouchableOpacity style={styles.resetButton} onPress={resetAll} activeOpacity={0.7}>
           <Text style={styles.resetButtonText}>Reset All</Text>
@@ -349,6 +417,16 @@ const styles = StyleSheet.create({
     color: '#E05C5C',
     fontSize: 11,
     fontWeight: 'bold',
+  },
+  sectionDivider: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#8890A0',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginTop: 16,
+    marginBottom: 10,
+    marginLeft: 2,
   },
   resetButton: {
     borderWidth: 1,

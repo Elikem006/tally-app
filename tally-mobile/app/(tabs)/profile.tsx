@@ -329,6 +329,13 @@ export default function ProfileScreen() {
         </>
       ) : null}
 
+      {/* Manage Categories */}
+      <TouchableOpacity style={styles.helpButton} onPress={() => router.push("/manage-categories")} activeOpacity={0.7}>
+        <Text style={styles.helpButtonIcon}>🏷️</Text>
+        <Text style={styles.helpButtonText}>Manage Categories</Text>
+        <Text style={styles.helpButtonArrow}>›</Text>
+      </TouchableOpacity>
+
       {/* Help & Support */}
       <TouchableOpacity style={styles.helpButton} onPress={() => router.push("/help")} activeOpacity={0.7}>
         <Text style={styles.helpButtonIcon}>❓</Text>

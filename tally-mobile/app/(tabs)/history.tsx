@@ -14,7 +14,7 @@ import {
   Platform,
 } from "react-native";
 import { useFocusEffect, router } from "expo-router";
-import { expenseAPI } from "../../services/api";
+import { expenseAPI, categoriesAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
 import { formatDate } from "../../services/format";
 
@@ -70,12 +70,29 @@ export default function HistoryScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   // Payment-method filter: ALL shows everything; MOMO narrows to MoMo only
   const [paymentFilter, setPaymentFilter] = useState<"ALL" | "MOMO">("ALL");
+  const [customCategories, setCustomCategories] = useState<{ id: number; name: string; emoji: string }[]>([]);
 
   useFocusEffect(
     useCallback(() => {
       fetchExpenses();
+      fetchCustomCategories();
     }, []),
   );
+
+  async function fetchCustomCategories() {
+    try {
+      const res = await categoriesAPI.getUserCategories(getUserId());
+      setCustomCategories(res.data || []);
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  function getCategoryIcon(categoryName: string): string {
+    if (CATEGORY_ICONS[categoryName]) return CATEGORY_ICONS[categoryName];
+    const custom = customCategories.find((c) => c.name === categoryName);
+    return custom ? custom.emoji : "📦";
+  }
 
   async function fetchExpenses() {
     try {
@@ -307,7 +324,7 @@ export default function HistoryScreen() {
               <View style={styles.expenseLeft}>
                 <View style={[styles.iconBox, { backgroundColor: color + "20" }]}>
                   <Text style={styles.icon}>
-                    {CATEGORY_ICONS[item.category] || "📦"}
+                    {getCategoryIcon(item.category)}
                   </Text>
                 </View>
                 <View style={{ flex: 1 }}>
