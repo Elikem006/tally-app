@@ -19,17 +19,33 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string }>({});
+
+  function validate(): boolean {
+    const next: { name?: string; email?: string; password?: string } = {};
+    if (!name.trim()) {
+      next.name = 'Name is required';
+    }
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      next.email = 'Email is required';
+    } else {
+      const atIndex = trimmedEmail.indexOf('@');
+      if (atIndex < 1 || trimmedEmail.indexOf('.', atIndex) < 0) {
+        next.email = 'Enter a valid email address';
+      }
+    }
+    if (!password) {
+      next.password = 'Password is required';
+    } else if (password.length < 6) {
+      next.password = 'Password must be at least 6 characters';
+    }
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  }
 
   async function handleRegister() {
-    if (!name || !email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
-      return;
-    }
-
-    if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
-      return;
-    }
+    if (!validate()) return;
 
     setLoading(true);
     try {
@@ -59,39 +75,52 @@ export default function RegisterScreen() {
         <View style={styles.form}>
           <Text style={styles.label}>Full Name</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, errors.name ? styles.inputError : null]}
             placeholder="Your full name"
             placeholderTextColor="#8890A0"
             value={name}
-            onChangeText={setName}
+            onChangeText={(text) => {
+              setName(text);
+              if (errors.name) setErrors((prev) => ({ ...prev, name: undefined }));
+            }}
             autoCapitalize="words"
           />
+          {errors.name && <Text style={styles.fieldError}>{errors.name}</Text>}
 
           <Text style={styles.label}>Email</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, errors.email ? styles.inputError : null]}
             placeholder="you@example.com"
             placeholderTextColor="#8890A0"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(text) => {
+              setEmail(text);
+              if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
+            }}
             keyboardType="email-address"
             autoCapitalize="none"
           />
+          {errors.email && <Text style={styles.fieldError}>{errors.email}</Text>}
 
           <Text style={styles.label}>Password</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, errors.password ? styles.inputError : null]}
             placeholder="At least 6 characters"
             placeholderTextColor="#8890A0"
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(text) => {
+              setPassword(text);
+              if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
+            }}
             secureTextEntry
           />
+          {errors.password && <Text style={styles.fieldError}>{errors.password}</Text>}
 
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
             onPress={handleRegister}
             disabled={loading}
+            activeOpacity={0.7}
           >
             {loading ? (
               <ActivityIndicator color="#000000" />
@@ -100,7 +129,7 @@ export default function RegisterScreen() {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7}>
             <Text style={styles.link}>
               Already have an account?{' '}
               <Text style={styles.linkBold}>Log in</Text>
@@ -153,6 +182,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ffffff15',
     marginBottom: 16,
+  },
+  inputError: {
+    borderColor: '#E05C5C',
+    marginBottom: 4,
+  },
+  fieldError: {
+    color: '#E05C5C',
+    fontSize: 12,
+    marginBottom: 12,
   },
   button: {
     backgroundColor: '#00C896',

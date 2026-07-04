@@ -6,7 +6,7 @@ import { addHistoryItem } from "./notificationHistory";
 // Ask the user for permission and get their push token
 export async function registerForPushNotifications(): Promise<string | null> {
   if (!Device.isDevice) {
-    console.log("Push notifications only work on real devices");
+    // Push notifications only work on real devices
     return null;
   }
 
@@ -19,7 +19,6 @@ export async function registerForPushNotifications(): Promise<string | null> {
   }
 
   if (finalStatus !== "granted") {
-    console.log("Permission not granted for push notifications");
     return null;
   }
 
@@ -58,9 +57,10 @@ export async function notifyNewSharedExpense(
   amount: string,
   description?: string,
 ) {
+  const formatted = (parseFloat(amount) || 0).toFixed(2);
   const body = description
-    ? `${payerName} added GHS ${amount} for "${description}"`
-    : `${payerName} added GHS ${amount} to the group`;
+    ? `${payerName} added GHS ${formatted} for "${description}"`
+    : `${payerName} added GHS ${formatted} to the group`;
   await sendLocalNotification("💸 New Shared Expense", body, {
     screen: "group-detail",
     groupId: String(groupId),
@@ -96,15 +96,20 @@ export async function notifySettleUp(groupName: string, payerName: string) {
 }
 
 export async function notifyReminderDue(title: string, dueDate: string) {
+  const friendly = new Date(dueDate).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
   await sendLocalNotification(
     "🔔 Reminder Due",
-    `"${title}" is due on ${dueDate}`,
+    `"${title}" is due on ${isNaN(new Date(dueDate).getTime()) ? dueDate : friendly}`,
     { screen: "reminders" },
   );
 }
 
 export async function notifyMonthlyReport(month: string, totalSpent: string) {
-  const body = `Your ${month} spending report is ready — GHS ${totalSpent} total`;
+  const body = `Your ${month} spending report is ready — GHS ${(parseFloat(totalSpent) || 0).toFixed(2)} total`;
   await sendLocalNotification("📊 Monthly Report Ready", body, { screen: "report" });
   await addHistoryItem({
     type: "monthly_report",

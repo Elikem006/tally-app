@@ -1,7 +1,18 @@
-import { useState, useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, RefreshControl, TextInput } from "react-native";
+import { useState, useEffect, useCallback } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  ScrollView,
+  RefreshControl,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
 import { router, useFocusEffect } from "expo-router";
-import { useCallback } from "react";
 import { currentUser } from "../(auth)/login";
 import { expenseAPI, authAPI } from "../../services/api";
 import Toast from "../../components/Toast";
@@ -26,6 +37,7 @@ export default function ProfileScreen() {
   const [phoneNumber, setPhoneNumber] = useState(currentUser.phoneNumber || "");
   const [editingPhone, setEditingPhone] = useState(false);
   const [savingPhone, setSavingPhone] = useState(false);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
 
   useEffect(() => {
@@ -68,7 +80,7 @@ export default function ProfileScreen() {
       });
       setError(null);
     } catch (err) {
-      setError("Something went wrong. Pull down to refresh.");
+      setError("Could not load data. Pull down to refresh.");
     } finally {
       setLoadingStats(false);
     }
@@ -83,12 +95,37 @@ export default function ProfileScreen() {
     }
   }
 
+  async function handleRemovePhone() {
+    Alert.alert(
+      "Remove Phone Number",
+      "Are you sure you want to remove your MoMo number?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await authAPI.updatePhone(getUserId(), "");
+              setPhoneNumber("");
+              currentUser.phoneNumber = "";
+              showToast("Phone number removed", "success");
+            } catch {
+              showToast("Failed to remove phone number", "error");
+            }
+          },
+        },
+      ],
+    );
+  }
+
   async function handleSavePhone() {
     const cleaned = phoneNumber.trim().replace(/\s/g, "");
-    if (cleaned.length !== 10) {
-      showToast("Enter a valid 10-digit phone number", "error");
+    if (!/^\d{10}$/.test(cleaned)) {
+      setPhoneError("Phone number must be exactly 10 digits");
       return;
     }
+    setPhoneError(null);
     setSavingPhone(true);
     try {
       await authAPI.updatePhone(getUserId(), cleaned);
@@ -123,9 +160,14 @@ export default function ProfileScreen() {
   }
 
   return (
+    <KeyboardAvoidingView
+      style={styles.scroll}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
     <ScrollView
       style={styles.scroll}
       contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
     >
       {/* Avatar */}
@@ -136,7 +178,7 @@ export default function ProfileScreen() {
         avatarData={avatarData}
         style={styles.avatarMargin}
       />
-      <TouchableOpacity style={styles.editAvatarBtn} onPress={() => router.push("/avatar-builder")}>
+      <TouchableOpacity style={styles.editAvatarBtn} onPress={() => router.push("/avatar-builder")} activeOpacity={0.7}>
         <Text style={styles.editAvatarText}>✏️  Edit Avatar</Text>
       </TouchableOpacity>
 
@@ -164,37 +206,63 @@ export default function ProfileScreen() {
         <View style={[styles.card, styles.infoCard]}>
           <Text style={styles.infoLabel}>MoMo Number</Text>
           <View style={styles.infoRow}>
-            <Text style={styles.infoValue}>
-              {currentUser.phoneNumber || "Not set"}
-            </Text>
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={() => setEditingPhone(true)}
-            >
-              <Text style={styles.editButtonText}>
-                {currentUser.phoneNumber ? "Edit" : "+ Add"}
-              </Text>
-            </TouchableOpacity>
+            {phoneNumber ? (
+              <>
+                <Text style={styles.infoValue}>{phoneNumber}</Text>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  <TouchableOpacity
+                    style={styles.editButton}
+                    onPress={() => setEditingPhone(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.editButtonText}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.removeButton}
+                    onPress={handleRemovePhone}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.removeButtonText}>Remove</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={[styles.infoValue, { color: "#8890A0" }]}>Not set</Text>
+                <TouchableOpacity
+                  style={styles.editButton}
+                  onPress={() => setEditingPhone(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.editButtonText}>+ Add</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
       ) : (
         <View style={[styles.card, styles.infoCard]}>
           <Text style={styles.infoLabel}>MoMo Number</Text>
           <TextInput
-            style={styles.phoneInput}
+            style={[styles.phoneInput, phoneError ? styles.inputError : null]}
             value={phoneNumber}
-            onChangeText={setPhoneNumber}
+            onChangeText={(text) => {
+              setPhoneNumber(text);
+              if (phoneError) setPhoneError(null);
+            }}
             keyboardType="phone-pad"
             placeholder="e.g. 0241234567"
             placeholderTextColor="#8890A0"
             maxLength={10}
             autoFocus
           />
+          {phoneError && <Text style={styles.fieldError}>{phoneError}</Text>}
           <View style={styles.phoneButtonRow}>
             <TouchableOpacity
               style={styles.phoneSaveButton}
               onPress={handleSavePhone}
               disabled={savingPhone}
+              activeOpacity={0.7}
             >
               {savingPhone ? (
                 <ActivityIndicator color="#000000" size="small" />
@@ -207,7 +275,9 @@ export default function ProfileScreen() {
               onPress={() => {
                 setEditingPhone(false);
                 setPhoneNumber(currentUser.phoneNumber || "");
+                setPhoneError(null);
               }}
+              activeOpacity={0.7}
             >
               <Text style={styles.phoneCancelText}>Cancel</Text>
             </TouchableOpacity>
@@ -232,13 +302,13 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.statCard}>
               <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit>
-                GHS {stats.totalSpent.toFixed(0)}
+                GHS {stats.totalSpent.toFixed(2)}
               </Text>
               <Text style={styles.statLabel}>Total Spent</Text>
             </View>
             <View style={styles.statCard}>
               <Text style={styles.statNumber} numberOfLines={1} adjustsFontSizeToFit>
-                GHS {stats.thisMonthSpent.toFixed(0)}
+                GHS {stats.thisMonthSpent.toFixed(2)}
               </Text>
               <Text style={styles.statLabel}>This Month</Text>
             </View>
@@ -259,12 +329,27 @@ export default function ProfileScreen() {
         </>
       ) : null}
 
+      {/* Manage Categories */}
+      <TouchableOpacity style={styles.helpButton} onPress={() => router.push("/manage-categories")} activeOpacity={0.7}>
+        <Text style={styles.helpButtonIcon}>🏷️</Text>
+        <Text style={styles.helpButtonText}>Manage Categories</Text>
+        <Text style={styles.helpButtonArrow}>›</Text>
+      </TouchableOpacity>
+
+      {/* Help & Support */}
+      <TouchableOpacity style={styles.helpButton} onPress={() => router.push("/help")} activeOpacity={0.7}>
+        <Text style={styles.helpButtonIcon}>❓</Text>
+        <Text style={styles.helpButtonText}>Help & Support</Text>
+        <Text style={styles.helpButtonArrow}>›</Text>
+      </TouchableOpacity>
+
       {/* Logout */}
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.7}>
         <Text style={styles.logoutText}>Log Out</Text>
       </TouchableOpacity>
       <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -388,6 +473,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     marginVertical: 16,
   },
+  helpButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1A1F2E",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#ffffff10",
+    gap: 12,
+  },
+  helpButtonIcon: { fontSize: 20 },
+  helpButtonText: { flex: 1, color: "#ffffff", fontSize: 15, fontWeight: "500" },
+  helpButtonArrow: { color: "#8890A0", fontSize: 20 },
   logoutButton: {
     width: "100%",
     backgroundColor: "#E05C5C20",
@@ -431,6 +530,17 @@ const styles = StyleSheet.create({
   },
   editButtonText: {
     color: "#00C896",
+  },
+  removeButton: {
+    backgroundColor: "#E05C5C20",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: "#E05C5C",
+  },
+  removeButtonText: {
+    color: "#E05C5C",
     fontSize: 13,
     fontWeight: "600",
   },
@@ -442,6 +552,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     borderWidth: 1,
     borderColor: "#ffffff20",
+    marginBottom: 10,
+  },
+  inputError: {
+    borderColor: "#E05C5C",
+    marginBottom: 4,
+  },
+  fieldError: {
+    color: "#E05C5C",
+    fontSize: 12,
     marginBottom: 10,
   },
   phoneButtonRow: {

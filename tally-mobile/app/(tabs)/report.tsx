@@ -174,7 +174,7 @@ export default function ReportScreen() {
       setReport(reportRes.data);
       setError(null);
     } catch (e) {
-      setError("Something went wrong. Pull down to refresh.");
+      setError("Could not load data. Pull down to refresh.");
     } finally {
       setLoading(false);
     }
@@ -186,7 +186,7 @@ export default function ReportScreen() {
       setAllExpenses(res.data || []);
       setError(null);
     } catch (e) {
-      setError("Something went wrong. Pull down to refresh.");
+      setError("Could not load data. Pull down to refresh.");
     } finally {
       setChartLoading(false);
     }
@@ -228,11 +228,11 @@ export default function ReportScreen() {
 
   const MonthNav = (
     <View style={styles.monthNav}>
-      <TouchableOpacity onPress={goToPreviousMonth} style={styles.navArrow}>
+      <TouchableOpacity onPress={goToPreviousMonth} style={styles.navArrow} activeOpacity={0.7}>
         <Text style={styles.navArrowText}>←</Text>
       </TouchableOpacity>
       <Text style={styles.monthLabel}>{selectedMonthName} {selectedYear}</Text>
-      <TouchableOpacity onPress={goToNextMonth} style={styles.navArrow} disabled={isCurrentMonth}>
+      <TouchableOpacity onPress={goToNextMonth} style={styles.navArrow} disabled={isCurrentMonth} activeOpacity={0.7}>
         <Text style={[styles.navArrowText, isCurrentMonth && styles.navArrowDisabled]}>→</Text>
       </TouchableOpacity>
     </View>
@@ -284,6 +284,7 @@ export default function ReportScreen() {
               key={mode}
               style={[styles.viewModeBtn, timeView === mode && styles.viewModeBtnActive]}
               onPress={() => setTimeView(mode)}
+              activeOpacity={0.7}
             >
               <Text style={[styles.viewModeBtnText, timeView === mode && styles.viewModeBtnTextActive]}>
                 {mode.charAt(0).toUpperCase() + mode.slice(1)}

@@ -3,6 +3,7 @@ import { notifyNewSharedExpense } from "../services/notifications";
 import { useLocalSearchParams, router } from "expo-router";
 import { groupAPI, momoAPI } from "../services/api";
 import { getUserId } from "../services/storage";
+import { formatDate } from "../services/format";
 import { currentUser } from "./(auth)/login";
 import Avatar from "../components/Avatar";
 import Toast from "../components/Toast";
@@ -36,6 +37,9 @@ export default function GroupDetailScreen() {
   const [showAddMember, setShowAddMember] = useState(false);
   const [memberUserId, setMemberUserId] = useState("");
   const [addingMember, setAddingMember] = useState(false);
+  const [expenseErrors, setExpenseErrors] = useState<{ amount?: string; description?: string }>({});
+  const [memberError, setMemberError] = useState<string | null>(null);
+  const [momoPhoneError, setMomoPhoneError] = useState<string | null>(null);
 
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
 
@@ -61,7 +65,7 @@ export default function GroupDetailScreen() {
       setBalances(balancesRes.data);
       setError(null);
     } catch (err) {
-      setError("Something went wrong. Pull down to refresh.");
+      setError("Could not load data. Pull down to refresh.");
     } finally {
       setLoading(false);
     }
@@ -77,10 +81,21 @@ export default function GroupDetailScreen() {
   }
 
   async function handleAddExpense() {
-    if (!expenseAmount || !expenseDescription) {
-      showToast("Please enter amount and description", "error");
-      return;
+    const errors: { amount?: string; description?: string } = {};
+    if (!expenseDescription.trim()) {
+      errors.description = "Description is required";
     }
+    if (!expenseAmount.trim()) {
+      errors.amount = "Amount is required";
+    } else {
+      const parsed = parseFloat(expenseAmount);
+      if (isNaN(parsed) || parsed <= 0) {
+        errors.amount = "Amount must be a number greater than 0";
+      }
+    }
+    setExpenseErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
     setAddingExpense(true);
     try {
       const userId = getUserId();
@@ -115,13 +130,14 @@ export default function GroupDetailScreen() {
   async function handleMomoPayment() {
     const phone = momoPhone.trim();
     if (!phone) {
-      showToast("Please enter your MoMo phone number.", "error");
+      setMomoPhoneError("Please enter your MoMo phone number");
       return;
     }
     if (!/^\d{10}$/.test(phone)) {
-      showToast("Phone number must be exactly 10 digits.", "error");
+      setMomoPhoneError("Phone number must be exactly 10 digits");
       return;
     }
+    setMomoPhoneError(null);
 
     setMomoLoading(true);
     try {
@@ -176,10 +192,11 @@ export default function GroupDetailScreen() {
   }
 
   async function handleAddMember() {
-    if (!memberUserId) {
-      showToast("Please enter a user ID", "error");
+    if (!memberUserId.trim()) {
+      setMemberError("Please enter a user ID");
       return;
     }
+    setMemberError(null);
     setAddingMember(true);
     try {
       await groupAPI.addMember(String(groupId), memberUserId);
@@ -276,8 +293,7 @@ export default function GroupDetailScreen() {
               if (diffMins < 60) return `${diffMins}m ago`;
               const diffHours = Math.floor(diffMins / 60);
               if (diffHours < 24) return `${diffHours}h ago`;
-              const d = new Date(createdAt);
-              return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+              return formatDate(createdAt);
             }
 
             return sorted.map((expense: any) => (
@@ -337,6 +353,7 @@ export default function GroupDetailScreen() {
             <TouchableOpacity
               style={styles.soloAddButton}
               onPress={() => setShowAddMember(true)}
+              activeOpacity={0.7}
             >
               <Text style={styles.soloAddButtonText}>+ Add Member</Text>
             </TouchableOpacity>
@@ -347,17 +364,22 @@ export default function GroupDetailScreen() {
           <View style={styles.addExpenseForm}>
             <Text style={styles.sectionTitle}>Add Member by User ID</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, memberError ? styles.inputErrorBorder : null]}
               placeholder="Enter User ID (e.g. 2)"
               placeholderTextColor="#8890A0"
               value={memberUserId}
-              onChangeText={setMemberUserId}
+              onChangeText={(text) => {
+                setMemberUserId(text);
+                if (memberError) setMemberError(null);
+              }}
               keyboardType="numeric"
             />
+            {memberError && <Text style={styles.fieldError}>{memberError}</Text>}
             <TouchableOpacity
               style={[styles.button, addingMember && styles.buttonDisabled]}
               onPress={handleAddMember}
               disabled={addingMember}
+              activeOpacity={0.7}
             >
               {addingMember ? (
                 <ActivityIndicator color="#000000" />
@@ -365,12 +387,19 @@ export default function GroupDetailScreen() {
                 <Text style={styles.buttonText}>Add Member</Text>
               )}
             </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowAddMember(false)}>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => {
+                setShowAddMember(false);
+                setMemberError(null);
+              }}
+              activeOpacity={0.7}
+            >
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         ) : (
-          <TouchableOpacity style={styles.addButton} onPress={() => setShowAddMember(true)}>
+          <TouchableOpacity style={styles.addButton} onPress={() => setShowAddMember(true)} activeOpacity={0.7}>
             <Text style={styles.addButtonText}>+ Add Member</Text>
           </TouchableOpacity>
         )}
@@ -419,6 +448,7 @@ export default function GroupDetailScreen() {
                   {b.owes && String(b.userId) === String(currentUser.userId) && (
                     <TouchableOpacity
                       style={styles.settleButton}
+                      activeOpacity={0.7}
                       onPress={() =>
                         handleSettleUp(
                           b.userId,
@@ -476,24 +506,41 @@ export default function GroupDetailScreen() {
           <View style={styles.addExpenseForm}>
             <Text style={styles.sectionTitle}>Add Shared Expense</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, expenseErrors.description ? styles.inputErrorBorder : null]}
               placeholder="Description (e.g. Dinner)"
               placeholderTextColor="#8890A0"
               value={expenseDescription}
-              onChangeText={setExpenseDescription}
+              onChangeText={(text) => {
+                setExpenseDescription(text);
+                if (expenseErrors.description) {
+                  setExpenseErrors((prev) => ({ ...prev, description: undefined }));
+                }
+              }}
             />
+            {expenseErrors.description && (
+              <Text style={styles.fieldError}>{expenseErrors.description}</Text>
+            )}
             <TextInput
-              style={styles.input}
+              style={[styles.input, expenseErrors.amount ? styles.inputErrorBorder : null]}
               placeholder="Amount (GHS)"
               placeholderTextColor="#8890A0"
               value={expenseAmount}
-              onChangeText={setExpenseAmount}
+              onChangeText={(text) => {
+                setExpenseAmount(text);
+                if (expenseErrors.amount) {
+                  setExpenseErrors((prev) => ({ ...prev, amount: undefined }));
+                }
+              }}
               keyboardType="decimal-pad"
             />
+            {expenseErrors.amount && (
+              <Text style={styles.fieldError}>{expenseErrors.amount}</Text>
+            )}
             <TouchableOpacity
               style={[styles.button, addingExpense && styles.buttonDisabled]}
               onPress={handleAddExpense}
               disabled={addingExpense}
+              activeOpacity={0.7}
             >
               {addingExpense ? (
                 <ActivityIndicator color="#000000" />
@@ -501,23 +548,30 @@ export default function GroupDetailScreen() {
                 <Text style={styles.buttonText}>Add & Split Equally</Text>
               )}
             </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelButton} onPress={() => setShowAddExpense(false)}>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={() => {
+                setShowAddExpense(false);
+                setExpenseErrors({});
+              }}
+              activeOpacity={0.7}
+            >
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         )}
 
         {!showAddExpense && (
-          <TouchableOpacity style={styles.addButton} onPress={() => setShowAddExpense(true)}>
+          <TouchableOpacity style={styles.addButton} onPress={() => setShowAddExpense(true)} activeOpacity={0.7}>
             <Text style={styles.addButtonText}>+ Add Shared Expense</Text>
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteGroup}>
+        <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteGroup} activeOpacity={0.7}>
           <Text style={styles.deleteButtonText}>Delete Group</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
           <Text style={styles.backButtonText}>← Back to Groups</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -547,21 +601,26 @@ export default function GroupDetailScreen() {
 
               {/* Phone input */}
               <TextInput
-                style={styles.modalInput}
+                style={[styles.modalInput, momoPhoneError ? styles.inputErrorBorder : null]}
                 placeholder="Enter MoMo number e.g. 0241234567"
                 placeholderTextColor="#8890A0"
                 value={momoPhone}
-                onChangeText={setMomoPhone}
+                onChangeText={(text) => {
+                  setMomoPhone(text);
+                  if (momoPhoneError) setMomoPhoneError(null);
+                }}
                 keyboardType="phone-pad"
                 maxLength={10}
                 editable={!momoLoading}
               />
+              {momoPhoneError && <Text style={styles.fieldError}>{momoPhoneError}</Text>}
 
               {/* Pay Now */}
               <TouchableOpacity
                 style={[styles.payButton, momoLoading && { opacity: 0.6 }]}
                 onPress={handleMomoPayment}
                 disabled={momoLoading}
+                activeOpacity={0.7}
               >
                 {momoLoading ? (
                   <ActivityIndicator color="#000000" />
@@ -575,6 +634,7 @@ export default function GroupDetailScreen() {
                 style={styles.skipButton}
                 onPress={handleSkipAndSettle}
                 disabled={momoLoading}
+                activeOpacity={0.7}
               >
                 <Text style={styles.skipButtonText}>Skip &amp; Settle</Text>
               </TouchableOpacity>
@@ -583,7 +643,11 @@ export default function GroupDetailScreen() {
               {!momoLoading && (
                 <TouchableOpacity
                   style={styles.cancelLink}
-                  onPress={() => setShowMomoModal(false)}
+                  onPress={() => {
+                    setShowMomoModal(false);
+                    setMomoPhoneError(null);
+                  }}
+                  activeOpacity={0.7}
                 >
                   <Text style={styles.cancelLinkText}>Cancel</Text>
                 </TouchableOpacity>
@@ -664,6 +728,8 @@ const styles = StyleSheet.create({
     padding: 14, color: "#ffffff", fontSize: 15,
     borderWidth: 1, borderColor: "#ffffff20", marginBottom: 12,
   },
+  inputErrorBorder: { borderColor: "#E05C5C", marginBottom: 4 },
+  fieldError: { color: "#E05C5C", fontSize: 12, marginBottom: 10 },
   button: {
     backgroundColor: "#00C896", borderRadius: 12,
     padding: 14, alignItems: "center", marginBottom: 8,

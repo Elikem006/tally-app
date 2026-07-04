@@ -1,6 +1,7 @@
 package user_service.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import user_service.model.Group;
@@ -12,10 +13,6 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Handles all group and shared expense API requests at /api/groups.
- * Delegates logic to GroupService.
- */
 @RestController
 @RequestMapping("/api/groups")
 @CrossOrigin(origins = "*")
@@ -24,53 +21,57 @@ public class GroupController {
     @Autowired
     private GroupService groupService;
 
-    /**
-     * POST /api/groups
-     * Creates a new group. The creator is automatically added as a member.
-     * Required fields: name, createdBy
-     */
+    // Exceptions like NullPointerException can carry a null message — Map.of rejects null values
+    private static String errorMessage(Exception e) {
+        return e.getMessage() != null ? e.getMessage() : "An unexpected error occurred";
+    }
+
+    // POST /api/groups — create a group
     @PostMapping
     public ResponseEntity<?> createGroup(@RequestBody Map<String, String> request) {
         try {
             String name = request.get("name");
-            Long createdBy = Long.parseLong(request.get("createdBy"));
+            String createdByStr = request.get("createdBy");
 
-            if (name == null || name.isEmpty()) {
+            if (name == null || name.isBlank()) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "Group name is required"));
+                        .body(Map.of("error", "Group name is required", "success", false));
+            }
+            if (createdByStr == null || createdByStr.isBlank()) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "createdBy is required", "success", false));
             }
 
-            Group group = groupService.createGroup(name, createdBy);
-            return ResponseEntity.ok(group);
+            Long createdBy = Long.parseLong(createdByStr);
+            Group group = groupService.createGroup(name.trim(), createdBy);
+            return ResponseEntity.status(HttpStatus.CREATED).body(group);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
-    /**
-     * POST /api/groups/{groupId}/members
-     * Adds a user to an existing group.
-     * Required field: userId
-     */
+    // POST /api/groups/:id/members — add a member
     @PostMapping("/{groupId}/members")
     public ResponseEntity<?> addMember(
             @PathVariable Long groupId,
             @RequestBody Map<String, String> request) {
         try {
-            Long userId = Long.parseLong(request.get("userId"));
+            String userIdStr = request.get("userId");
+            if (userIdStr == null || userIdStr.isBlank()) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "userId is required", "success", false));
+            }
+            Long userId = Long.parseLong(userIdStr);
             GroupMember member = groupService.addMember(groupId, userId);
-            return ResponseEntity.ok(member);
+            return ResponseEntity.status(HttpStatus.CREATED).body(member);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
-    /**
-     * GET /api/groups/user/{userId}
-     * Returns all groups the specified user belongs to.
-     */
+    // GET /api/groups/user/:id — get all groups for a user
     @GetMapping("/user/{userId}")
     public ResponseEntity<?> getUserGroups(@PathVariable Long userId) {
         try {
@@ -78,30 +79,25 @@ public class GroupController {
             return ResponseEntity.ok(groups);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
-    /**
-     * GET /api/groups/{groupId}
-     * Returns full group details including members and shared expenses.
-     */
+    // GET /api/groups/:id — group details with members and expenses
     @GetMapping("/{groupId}")
     public ResponseEntity<?> getGroupDetails(@PathVariable Long groupId) {
         try {
             Map<String, Object> details = groupService.getGroupDetails(groupId);
+            // GroupService creates a new HashMap — safe to mutate directly
+            details.put("success", true);
             return ResponseEntity.ok(details);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
-    /**
-     * POST /api/groups/{groupId}/expenses
-     * Adds a shared expense to a group. Split equally among all members.
-     * Required fields: paidBy, amount, description
-     */
+    // POST /api/groups/:id/expenses — add a shared expense
     @PostMapping("/{groupId}/expenses")
     public ResponseEntity<?> addSharedExpense(
             @PathVariable Long groupId,
@@ -113,12 +109,14 @@ public class GroupController {
 
             if (paidByStr == null || amountStr == null || description == null) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "paidBy, amount and description are required"));
+                        .body(Map.of("error", "paidBy, amount and description are required", "success", false));
             }
 
+            // Trim before empty-check so "   " is treated as empty
+            description = description.trim();
             if (description.isEmpty()) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "Description cannot be empty"));
+                        .body(Map.of("error", "Description cannot be empty", "success", false));
             }
 
             Long paidBy = Long.parseLong(paidByStr);
@@ -126,22 +124,19 @@ public class GroupController {
 
             if (amount.compareTo(BigDecimal.ZERO) <= 0) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "Amount must be greater than zero"));
+                        .body(Map.of("error", "Amount must be greater than zero", "success", false));
             }
 
             SharedExpense expense = groupService.addSharedExpense(
                     groupId, paidBy, amount, description);
-            return ResponseEntity.ok(expense);
+            return ResponseEntity.status(HttpStatus.CREATED).body(expense);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
-    /**
-     * GET /api/groups/{groupId}/balances
-     * Calculates and returns who owes whom within the group.
-     */
+    // GET /api/groups/:id/balances — calculate who owes whom
     @GetMapping("/{groupId}/balances")
     public ResponseEntity<?> getBalances(@PathVariable Long groupId) {
         try {
@@ -149,41 +144,41 @@ public class GroupController {
             return ResponseEntity.ok(balances);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
-    /**
-     * POST /api/groups/{groupId}/settle
-     * Marks all expenses as settled for a specific user in the group.
-     * Required field: userId
-     */
+    // POST /api/groups/:id/settle — settle up (optionally with MoMo payment)
     @PostMapping("/{groupId}/settle")
     public ResponseEntity<?> settleUp(
             @PathVariable Long groupId,
             @RequestBody Map<String, String> request) {
         try {
-            Long userId = Long.parseLong(request.get("userId"));
-            Map<String, Object> result = groupService.settleUp(groupId, userId);
+            String userIdStr = request.get("userId");
+            if (userIdStr == null || userIdStr.isBlank()) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "userId is required", "success", false));
+            }
+            Long userId = Long.parseLong(userIdStr);
+            String phoneNumber = request.get("phoneNumber"); // optional
+            Map<String, Object> result = groupService.settleUp(groupId, userId, phoneNumber);
+            // GroupService creates a new HashMap — safe to mutate directly
+            result.put("success", true);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
-    /**
-     * DELETE /api/groups/{groupId}
-     * Deletes a group and all its associated data.
-     */
     @DeleteMapping("/{groupId}")
     public ResponseEntity<?> deleteGroup(@PathVariable Long groupId) {
         try {
             groupService.deleteGroup(groupId);
-            return ResponseEntity.ok(Map.of("message", "Group deleted successfully"));
+            return ResponseEntity.ok(Map.of("message", "Group deleted successfully", "success", true));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage()));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 }

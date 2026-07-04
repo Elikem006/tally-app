@@ -121,6 +121,33 @@ export const momoAPI = {
 
   getBalance: () =>
     api.get("/api/momo/balance"),
+
+  transfer: (
+    recipientPhone: string,
+    amount: string,
+    description: string,
+    userId: string,
+    category: string,
+  ) =>
+    api.post("/api/momo/transfer", {
+      recipientPhone,
+      amount,
+      description,
+      userId,
+      category,
+    }),
+
+  checkTransferStatus: (referenceId: string) =>
+    api.get(`/api/momo/transfer/status/${referenceId}`),
+};
+
+export const categoriesAPI = {
+  getUserCategories: (userId: string) =>
+    api.get(`/api/categories/user/${userId}`),
+  createCategory: (userId: string, name: string, emoji: string) =>
+    api.post("/api/categories", { userId, name, emoji }),
+  deleteCategory: (id: string, userId: string) =>
+    api.delete(`/api/categories/${id}/user/${userId}`),
 };
 
 export const remindersAPI = {
@@ -164,7 +191,6 @@ api.interceptors.response.use(
     const status: number | undefined = error.response?.status;
 
     if (status === 401) {
-      console.warn("[Tally API] 401 Unauthorized — clearing session and redirecting to login.");
       try {
         // Lazy require avoids circular dep at module load time
         // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -176,22 +202,16 @@ api.interceptors.response.use(
         currentUser.avatarType = "";
         currentUser.avatarData = "";
         currentUser.phoneNumber = "";
-      } catch (e) {
-        console.warn("[Tally API] Could not clear currentUser:", e);
+      } catch {
+        // currentUser module not loaded yet — nothing to clear
       }
       try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const { router } = require("expo-router");
         router.replace("/(auth)/login");
-      } catch (e) {
-        console.warn("[Tally API] Could not navigate to login:", e);
+      } catch {
+        // navigation not ready — the guarded (tabs) layout will redirect
       }
-    }
-
-    if (status !== undefined && status >= 500) {
-      console.error(
-        error.response?.data || error.message,
-      );
     }
 
     return Promise.reject(error);

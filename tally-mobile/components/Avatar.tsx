@@ -1,4 +1,4 @@
-import { View, Text, Image } from "react-native";
+import { View, Text, Image, StyleProp, ViewStyle, ImageStyle } from "react-native";
 
 const AVATAR_COLORS = [
   "#00C896", "#2563EB", "#7C3AED", "#DB2777",
@@ -10,7 +10,7 @@ interface AvatarProps {
   name: string;
   size?: number;
   avatarData?: string | null;
-  style?: any;
+  style?: StyleProp<ViewStyle & ImageStyle>;
 }
 
 export default function Avatar({ userId, name, size = 40, avatarData, style }: AvatarProps) {

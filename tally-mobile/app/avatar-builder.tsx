@@ -108,11 +108,11 @@ export default function AvatarBuilderScreen() {
       </View>
 
       {/* Picker buttons */}
-      <TouchableOpacity style={styles.pickerBtn} onPress={() => pickImage(true)}>
+      <TouchableOpacity style={styles.pickerBtn} onPress={() => pickImage(true)} activeOpacity={0.7}>
         <Text style={styles.pickerBtnText}>📷  Take Photo</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.pickerBtn} onPress={() => pickImage(false)}>
+      <TouchableOpacity style={styles.pickerBtn} onPress={() => pickImage(false)} activeOpacity={0.7}>
         <Text style={styles.pickerBtnText}>🖼️  Choose from Gallery</Text>
       </TouchableOpacity>
 
@@ -121,13 +121,14 @@ export default function AvatarBuilderScreen() {
         style={[styles.saveBtn, saving && { opacity: 0.7 }]}
         onPress={handleSave}
         disabled={saving}
+        activeOpacity={0.7}
       >
         {saving
           ? <ActivityIndicator color="#000" />
           : <Text style={styles.saveBtnText}>Save Photo</Text>}
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()}>
+      <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()} activeOpacity={0.7}>
         <Text style={styles.cancelBtnText}>Cancel</Text>
       </TouchableOpacity>
       <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />

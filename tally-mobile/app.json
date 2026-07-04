@@ -23,8 +23,7 @@
       "package": "com.tally.app"
     },
     "plugins": [
-      "expo-router",
-      "@react-native-community/datetimepicker"
+      "expo-router"
     ]
   }
 }
