@@ -14,7 +14,7 @@ import {
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { authAPI } from '../../services/api';
-import { Feather, AntDesign, FontAwesome } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 
 export default function RegisterScreen() {
@@ -170,33 +170,6 @@ export default function RegisterScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Or With divider */}
-            <View style={styles.dividerRow}>
-              <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-              <Text style={[styles.dividerText, { color: colors.textSecondary }]}>or sign up with</Text>
-              <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-            </View>
-
-            {/* Social Buttons */}
-            <View style={styles.socialRow}>
-              <TouchableOpacity
-                style={[styles.socialButton, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
-                activeOpacity={0.7}
-                onPress={() => Alert.alert('Google Login', 'Integration coming soon!')}
-              >
-                <AntDesign name="google" size={16} color="#4285F4" />
-                <Text style={[styles.socialButtonText, { color: colors.text }]}>Google</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.socialButton, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
-                activeOpacity={0.7}
-                onPress={() => Alert.alert('Apple Login', 'Integration coming soon!')}
-              >
-                <FontAwesome name="apple" size={16} color={theme === 'dark' ? '#ffffff' : '#111111'} />
-                <Text style={[styles.socialButtonText, { color: colors.text }]}>Apple</Text>
-              </TouchableOpacity>
-            </View>
           </View>
         </View>
       </ScrollView>
