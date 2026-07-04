@@ -3,9 +3,11 @@ package user_service.controller;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import user_service.service.ExpenseService;
 import user_service.service.MoMoService;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -20,6 +22,14 @@ public class MoMoController {
 
     @Autowired
     private MoMoService moMoService;
+
+    @Autowired
+    private ExpenseService expenseService;
+
+    // Exceptions like NullPointerException can carry a null message — Map.of rejects null values
+    private static String errorMessage(Exception e) {
+        return e.getMessage() != null ? e.getMessage() : "An unexpected error occurred";
+    }
 
     /**
      * POST /api/momo/pay
@@ -64,7 +74,7 @@ public class MoMoController {
         } catch (Exception e) {
             log.severe("MoMo pay error: " + e.getMessage());
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage(), "success", false));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
@@ -83,7 +93,7 @@ public class MoMoController {
         } catch (Exception e) {
             log.severe("MoMo status error: " + e.getMessage());
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage(), "success", false));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
@@ -120,7 +130,85 @@ public class MoMoController {
             }
             log.severe("MoMo balance error: " + e.getMessage());
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage(), "success", false));
+                    .body(Map.of("error", errorMessage(e), "success", false));
+        }
+    }
+
+    /**
+     * POST /api/momo/transfer
+     * Body: { "userId", "recipientPhone", "amount", "description", "category" }
+     * Initiates a MoMo disbursement (transfer) to a vendor and records it as an expense.
+     */
+    @PostMapping("/transfer")
+    public ResponseEntity<?> initiateTransfer(@RequestBody Map<String, String> request) {
+        try {
+            String recipientPhone = request.get("recipientPhone");
+            String amountStr      = request.get("amount");
+            String description    = request.getOrDefault("description", "MoMo transfer");
+            String category       = request.getOrDefault("category", "Other");
+            String userIdStr      = request.get("userId");
+
+            if (recipientPhone == null || recipientPhone.isBlank()) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "recipientPhone is required", "success", false));
+            }
+            if (amountStr == null || amountStr.isBlank()) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "amount is required", "success", false));
+            }
+
+            BigDecimal amount = new BigDecimal(amountStr);
+            if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "amount must be greater than zero", "success", false));
+            }
+
+            String referenceId = UUID.randomUUID().toString();
+            moMoService.transfer(recipientPhone, amount, description, referenceId);
+
+            // Record as personal expense so it shows in History
+            if (userIdStr != null && !userIdStr.isBlank()) {
+                try {
+                    Long userId = Long.parseLong(userIdStr);
+                    String expenseDesc = "Sent to " + recipientPhone +
+                            (description != null && !description.isBlank() ? ": " + description : "");
+                    expenseService.createExpense(userId, amount, category, expenseDesc, LocalDate.now(), "MOMO");
+                } catch (Exception ex) {
+                    // Non-fatal — log and continue; the transfer itself succeeded
+                    log.warning("Failed to record transfer expense: " + ex.getMessage());
+                }
+            }
+
+            return ResponseEntity.ok(Map.of(
+                    "referenceId", referenceId,
+                    "message",     "Transfer initiated. Recipient will receive funds shortly.",
+                    "status",      "PENDING",
+                    "success",     true
+            ));
+
+        } catch (Exception e) {
+            log.severe("MoMo transfer error: " + e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", errorMessage(e), "success", false));
+        }
+    }
+
+    /**
+     * GET /api/momo/transfer/status/{referenceId}
+     */
+    @GetMapping("/transfer/status/{referenceId}")
+    public ResponseEntity<?> checkTransferStatus(@PathVariable String referenceId) {
+        try {
+            String status = moMoService.getTransferStatus(referenceId);
+            return ResponseEntity.ok(Map.of(
+                    "referenceId", referenceId,
+                    "status",      status,
+                    "success",     true
+            ));
+        } catch (Exception e) {
+            log.severe("MoMo transfer status error: " + e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 

@@ -39,6 +39,18 @@ public class MoMoService {
     @Value("${momo.callback.url}")
     private String callbackUrl;
 
+    @Value("${momo.disbursement.subscription.key}")
+    private String disbursementSubscriptionKey;
+
+    @Value("${momo.disbursement.api.user}")
+    private String disbursementApiUser;
+
+    @Value("${momo.disbursement.api.key}")
+    private String disbursementApiKey;
+
+    @Value("${momo.disbursement.base.url}")
+    private String disbursementBaseUrl;
+
     private final RestTemplate restTemplate = buildRestTemplate();
 
     private static RestTemplate buildRestTemplate() {
@@ -163,6 +175,126 @@ public class MoMoService {
             return result;
         } catch (HttpStatusCodeException e) {
             throw new RuntimeException("MoMo balance check failed: " + e.getStatusCode() + " — " + e.getResponseBodyAsString());
+        }
+    }
+
+    // ─── Disbursements (Transfer) ─────────────────────────────────────────────
+
+    /**
+     * Obtain a Bearer access token from the MoMo Disbursements API.
+     */
+    public String getDisbursementAccessToken() {
+        String credentials = disbursementApiUser + ":" + disbursementApiKey;
+        String basicAuth = "Basic " + Base64.getEncoder().encodeToString(credentials.getBytes());
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", basicAuth);
+        headers.set("Ocp-Apim-Subscription-Key", disbursementSubscriptionKey);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        HttpEntity<String> entity = new HttpEntity<>("", headers);
+
+        try {
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    disbursementBaseUrl + "/disbursement/token/",
+                    HttpMethod.POST,
+                    entity,
+                    Map.class
+            );
+
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                throw new RuntimeException("Failed to get disbursement token. Status: " + response.getStatusCode());
+            }
+            if (!response.getBody().containsKey("access_token")) {
+                throw new RuntimeException("Disbursement token response missing access_token field");
+            }
+
+            return (String) response.getBody().get("access_token");
+        } catch (HttpStatusCodeException e) {
+            throw new RuntimeException("Failed to get disbursement token: " + e.getStatusCode() + " — " + e.getResponseBodyAsString());
+        }
+    }
+
+    /**
+     * Initiate a transfer (disbursement) to the given MSISDN phone number.
+     * Returns the referenceId on HTTP 202 Accepted.
+     */
+    public String transfer(String recipientPhone, BigDecimal amount, String description, String referenceId) {
+        String token = getDisbursementAccessToken();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer " + token);
+        headers.set("X-Reference-Id", referenceId);
+        headers.set("X-Target-Environment", "sandbox");
+        headers.set("Ocp-Apim-Subscription-Key", disbursementSubscriptionKey);
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        Map<String, Object> payee = new HashMap<>();
+        payee.put("partyIdType", "MSISDN");
+        payee.put("partyId", recipientPhone);
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("amount",       amount.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString());
+        body.put("currency",     "EUR");
+        body.put("externalId",   referenceId);
+        body.put("payee",        payee);
+        body.put("payerMessage", description);
+        body.put("payeeNote",    description);
+
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
+
+        try {
+            ResponseEntity<String> response = restTemplate.exchange(
+                    disbursementBaseUrl + "/disbursement/v1_0/transfer",
+                    HttpMethod.POST,
+                    entity,
+                    String.class
+            );
+
+            if (response.getStatusCode() == HttpStatus.ACCEPTED) {
+                log.info("MoMo transfer accepted. referenceId=" + referenceId);
+                return referenceId;
+            }
+
+            throw new RuntimeException("MoMo transfer returned unexpected status: " + response.getStatusCode());
+        } catch (HttpStatusCodeException e) {
+            throw new RuntimeException("MoMo transfer failed: " + e.getStatusCode() + " — " + e.getResponseBodyAsString());
+        }
+    }
+
+    /**
+     * Get the status of a previously initiated transfer.
+     * Returns "SUCCESSFUL", "FAILED", or "PENDING".
+     */
+    public String getTransferStatus(String referenceId) {
+        String token = getDisbursementAccessToken();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Authorization", "Bearer " + token);
+        headers.set("X-Target-Environment", "sandbox");
+        headers.set("Ocp-Apim-Subscription-Key", disbursementSubscriptionKey);
+
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        try {
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    disbursementBaseUrl + "/disbursement/v1_0/transfer/" + referenceId,
+                    HttpMethod.GET,
+                    entity,
+                    Map.class
+            );
+
+            if (!response.getStatusCode().is2xxSuccessful()) {
+                throw new RuntimeException("Failed to get transfer status. Status: " + response.getStatusCode());
+            }
+
+            if (response.getBody() != null && response.getBody().containsKey("status")) {
+                return (String) response.getBody().get("status");
+            }
+
+            return "PENDING";
+        } catch (HttpStatusCodeException e) {
+            throw new RuntimeException("MoMo transfer status check failed: " + e.getStatusCode() + " — " + e.getResponseBodyAsString());
         }
     }
 

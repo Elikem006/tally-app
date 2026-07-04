@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  RefreshControl,
+  ScrollView,
 } from "react-native";
 import { useFocusEffect, router } from "expo-router";
 import {
@@ -88,8 +90,20 @@ const SCREEN_BY_TYPE: Record<HistoryNotif["type"], string> = {
 };
 
 export default function NotificationHistoryScreen() {
-  const [items,   setItems]   = useState<HistoryNotif[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [items,      setItems]      = useState<HistoryNotif[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      const list = await getHistory();
+      setItems(list);
+      await markAllRead();
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -159,12 +173,12 @@ export default function NotificationHistoryScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
           <Text style={styles.backArrow}>‹</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Notifications</Text>
         {items.length > 0 ? (
-          <TouchableOpacity onPress={handleClearAll} style={styles.clearBtn}>
+          <TouchableOpacity onPress={handleClearAll} style={styles.clearBtn} activeOpacity={0.7}>
             <Text style={styles.clearText}>Clear all</Text>
           </TouchableOpacity>
         ) : (
@@ -173,13 +187,16 @@ export default function NotificationHistoryScreen() {
       </View>
 
       {items.length === 0 ? (
-        <View style={styles.empty}>
+        <ScrollView
+          contentContainerStyle={styles.empty}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+        >
           <Text style={styles.emptyIcon}>🔔</Text>
           <Text style={styles.emptyTitle}>All caught up</Text>
           <Text style={styles.emptyBody}>
             Budget alerts, expense saves, and reminders will appear here.
           </Text>
-        </View>
+        </ScrollView>
       ) : (
         <FlatList
           data={listData}
@@ -187,6 +204,7 @@ export default function NotificationHistoryScreen() {
             item._isHeader ? `hdr-${i}` : item.id
           }
           contentContainerStyle={{ paddingBottom: 32, paddingTop: 8 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
           renderItem={({ item }) => {
             if (item._isHeader) {
               return (
@@ -196,7 +214,7 @@ export default function NotificationHistoryScreen() {
             const cfg = TYPE_CONFIG[item.type];
             return (
               <TouchableOpacity
-                activeOpacity={0.75}
+                activeOpacity={0.7}
                 onPress={() => handleNotificationPress(item)}
                 style={[
                   styles.card,
@@ -222,6 +240,7 @@ export default function NotificationHistoryScreen() {
                   style={styles.deleteBtn}
                   onPress={() => handleDelete(item.id)}
                   hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  activeOpacity={0.7}
                 >
                   <Text style={styles.deleteX}>✕</Text>
                 </TouchableOpacity>
@@ -304,7 +323,7 @@ const styles = StyleSheet.create({
 
   // Empty state
   empty: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 40,

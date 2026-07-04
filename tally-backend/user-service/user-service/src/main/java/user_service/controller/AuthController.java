@@ -16,6 +16,11 @@ public class AuthController {
     @Autowired
     private UserService userService;
 
+    // Exceptions like NullPointerException can carry a null message — Map.of rejects null values
+    private static String errorMessage(Exception e) {
+        return e.getMessage() != null ? e.getMessage() : "An unexpected error occurred";
+    }
+
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody Map<String, String> request) {
         try {
@@ -41,7 +46,7 @@ public class AuthController {
 
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage(), "success", false));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
@@ -62,7 +67,7 @@ public class AuthController {
 
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage(), "success", false));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
@@ -81,7 +86,7 @@ public class AuthController {
                     "success", true
             ));
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "success", false));
+            return ResponseEntity.badRequest().body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
@@ -98,7 +103,7 @@ public class AuthController {
                     "success", true
             ));
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "success", false));
+            return ResponseEntity.badRequest().body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
@@ -108,18 +113,28 @@ public class AuthController {
             @RequestBody Map<String, String> request) {
         try {
             String phoneNumber = request.get("phoneNumber");
-            if (phoneNumber == null || phoneNumber.isBlank()) {
+            // Empty string means clear the number; null means field was missing entirely
+            if (phoneNumber == null) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "Phone number is required", "success", false));
+                        .body(Map.of("error", "phoneNumber field is required", "success", false));
+            }
+            if (phoneNumber.isEmpty()) {
+                // Clear the number
+                var user = userService.updatePhoneNumber(userId, null);
+                return ResponseEntity.ok(Map.of(
+                        "message", "Phone number removed",
+                        "phoneNumber", "",
+                        "success", true
+                ));
             }
             var user = userService.updatePhoneNumber(userId, phoneNumber);
             return ResponseEntity.ok(Map.of(
                     "message", "Phone number updated",
-                    "phoneNumber", user.getPhoneNumber(),
+                    "phoneNumber", user.getPhoneNumber() != null ? user.getPhoneNumber() : "",
                     "success", true
             ));
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage(), "success", false));
+            return ResponseEntity.badRequest().body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 

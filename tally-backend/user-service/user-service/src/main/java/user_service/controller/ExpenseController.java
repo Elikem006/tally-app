@@ -20,6 +20,11 @@ public class ExpenseController {
     @Autowired
     private ExpenseService expenseService;
 
+    // Exceptions like NullPointerException can carry a null message — Map.of rejects null values
+    private static String errorMessage(Exception e) {
+        return e.getMessage() != null ? e.getMessage() : "An unexpected error occurred";
+    }
+
     @PostMapping
     public ResponseEntity<?> createExpense(@RequestBody Map<String, String> request) {
         try {
@@ -55,7 +60,7 @@ public class ExpenseController {
 
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage(), "success", false));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
@@ -72,7 +77,7 @@ public class ExpenseController {
             return ResponseEntity.ok(expenses);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage(), "success", false));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
@@ -83,7 +88,7 @@ public class ExpenseController {
             return ResponseEntity.ok(Map.of("message", "Expense deleted successfully", "success", true));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage(), "success", false));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
@@ -99,7 +104,7 @@ public class ExpenseController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage(), "success", false));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
@@ -109,7 +114,7 @@ public class ExpenseController {
             return ResponseEntity.ok(expenseService.getCombinedHistory(userId));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", e.getMessage(), "success", false));
+                    .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 }
