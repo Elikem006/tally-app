@@ -2,10 +2,12 @@ import { Stack, useRouter } from "expo-router";
 import { registerForPushNotifications } from "../services/notifications";
 import { useEffect, useRef } from "react";
 import * as Notifications from "expo-notifications";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { ThemeProvider } from "../hooks/useTheme";
 
 export default function RootLayout() {
   const router = useRouter();
-  const responseListener = useRef<Notifications.EventSubscription | null>(null);
+  const responseListener = useRef<any>(null);
   const navigationReady = useRef(false);
 
   // Mark navigation as ready after first render
@@ -13,18 +15,10 @@ export default function RootLayout() {
     navigationReady.current = true;
   }, []);
 
-  // Register for push notifications + set foreground handler
+  // Register for push notifications
   useEffect(() => {
-    registerForPushNotifications();
-
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-        shouldShowBanner: true,
-        shouldShowList: true,
-      }),
+    registerForPushNotifications().then((result) => {
+      console.log("Notification permission:", result);
     });
   }, []);
 
@@ -38,8 +32,8 @@ export default function RootLayout() {
       setTimeout(() => {
         if (data.screen === "group-detail" && data.groupId) {
           router.push({ pathname: "/group-detail", params: { groupId: String(data.groupId) } });
-        } else if (data.screen === "budget-overview") {
-          router.push("/(tabs)/budget-overview");
+        } else if (data.screen === "budget-overview" || data.screen === "budget") {
+          router.push("/(tabs)/budget");
         } else if (data.screen === "reminders") {
           router.push("/(tabs)/reminders");
         } else if (data.screen === "report") {
@@ -60,33 +54,36 @@ export default function RootLayout() {
   }, [router]);
 
   return (
-    <Stack screenOptions={{ headerShown: false, headerStyle: { backgroundColor: "#0F1117" }, headerTintColor: "#ffffff" }}>
-      <Stack.Screen name="(auth)" />
-      <Stack.Screen name="(tabs)" />
-      <Stack.Screen
-        name="group-detail"
-        options={{ headerShown: true, title: "Group Detail" }}
-      />
-      <Stack.Screen
-        name="create-group"
-        options={{ headerShown: true, title: "Create Group" }}
-      />
-      <Stack.Screen
-        name="avatar-builder"
-        options={{ headerShown: true, title: "Edit Avatar" }}
-      />
-      <Stack.Screen
-        name="help"
-        options={{ headerShown: true, title: "Help & Support" }}
-      />
-      <Stack.Screen
-        name="pay-vendor"
-        options={{ headerShown: true, title: "Pay Vendor" }}
-      />
-      <Stack.Screen
-        name="manage-categories"
-        options={{ headerShown: true, title: "Manage Categories" }}
-      />
-    </Stack>
+    <ThemeProvider>
+      <SafeAreaProvider>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            headerStyle: { backgroundColor: "#ffffff" },
+            headerTintColor: "#1E293B",
+            headerTitleStyle: { fontWeight: "bold" },
+          }}
+        >
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen
+            name="group-detail"
+            options={{ headerShown: false, title: "Group Detail" }}
+          />
+          <Stack.Screen
+            name="create-group"
+            options={{ headerShown: false, title: "Create Group" }}
+          />
+          <Stack.Screen
+            name="avatar-builder"
+            options={{ headerShown: true, title: "Edit Avatar" }}
+          />
+          <Stack.Screen
+            name="help"
+            options={{ headerShown: true, title: "Help & Support" }}
+          />
+        </Stack>
+      </SafeAreaProvider>
+    </ThemeProvider>
   );
 }

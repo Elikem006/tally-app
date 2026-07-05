@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,60 +7,67 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Modal,
-} from "react-native";
-import { router } from "expo-router";
-import { expenseAPI, categoriesAPI } from "../../services/api";
-import { getUserId } from "../../services/storage";
-import { currentUser } from "../(auth)/login";
-import { addHistoryItem } from "../../services/notificationHistory";
-import Toast from "../../components/Toast";
-import { useToast } from "../../hooks/useToast";
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { expenseAPI, budgetAPI, momoAPI } from '../../services/api';
+import { getUserId, currentUser } from '../../services/storage';
+import { addHistoryItem } from '../../services/notificationHistory';
+import { signalMomoRefresh } from '../../services/momoRefresh';
+import Toast from '../../components/Toast';
+import { useToast } from '../../hooks/useToast';
+import { useTheme } from '../../hooks/useTheme';
 
-const CATEGORIES = [
-  { name: "Food", emoji: "🍔" },
-  { name: "Transport", emoji: "🚗" },
-  { name: "Entertainment", emoji: "🎮" },
-  { name: "Utilities", emoji: "💡" },
-  { name: "Other", emoji: "📦" },
-];
+const CATEGORIES = ['Food', 'Transport', 'Entertainment', 'Utilities', 'Other'];
 
-type PaymentMethod = "CASH" | "MOMO";
+const CATEGORY_ICONS: { [key: string]: string } = {
+  Food: '🍔',
+  Transport: '🚗',
+  Entertainment: '🎮',
+  Utilities: '💡',
+  Other: '📦',
+};
+
+type MomoStatus = "idle" | "sending" | "confirming" | "done";
 
 // Module-level vars persist for the whole app session — no async needed
 let lastUsedCategory = "Food";
-let lastUsedPaymentMethod: PaymentMethod = "CASH";
-
-// Holds form data when navigating away to Pay Vendor so the Add screen
-// can be cleared after a successful payment.
-export let pendingExpenseData: {
-  amount: string;
-  category: string;
-  description: string;
-  paymentMethod: PaymentMethod;
-} | null = null;
-
-export function clearPendingExpenseData() {
-  pendingExpenseData = null;
-}
+let lastUsedPaymentMethod: "CASH" | "MOMO" = "CASH";
 
 export default function AddScreen() {
-  const [amount, setAmount] = useState("");
-  const [description, setDescription] = useState("");
+  const insets = useSafeAreaInsets();
+  const { colors, theme } = useTheme();
+  const [transactionType, setTransactionType] = useState<'expense' | 'income'>('expense');
+  const [amount, setAmount] = useState('');
+  const [description, setDescription] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(lastUsedCategory);
   const [loading, setLoading] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(lastUsedPaymentMethod);
+  const [fetching, setFetching] = useState(true);
+  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "MOMO">(lastUsedPaymentMethod);
+
+  // Dynamic monthly totals and budget limits
+  const [spent, setSpent] = useState<{ [key: string]: number }>({});
+  const [limits, setLimits] = useState<{ [key: string]: number }>({});
+
+  // Input focus status for outline treatments
+  const [amountFocused, setAmountFocused] = useState(false);
+  const [descFocused, setDescFocused] = useState(false);
+  const [tagFocused, setTagFocused] = useState(false);
+
+  // Tag list state
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [showHint, setShowHint] = useState(true);
-  const [amountError, setAmountError] = useState<string | null>(null);
-  const [customCategories, setCustomCategories] = useState<{ id: number; name: string; emoji: string }[]>([]);
-  const [showAddCategory, setShowAddCategory] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState("");
-  const [newCategoryEmoji, setNewCategoryEmoji] = useState("");
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+
+  // MoMo payment modal
+  const [showMomoModal, setShowMomoModal] = useState(false);
+  const [momoPhone, setMomoPhone] = useState(currentUser.phoneNumber || "");
+  const [momoStatus, setMomoStatus] = useState<MomoStatus>("idle");
+  const [momoLoading, setMomoLoading] = useState(false);
 
   // Auto-hide the "remembered" hint after 3 seconds
   useEffect(() => {
@@ -69,38 +76,34 @@ export default function AddScreen() {
   }, []);
 
   useEffect(() => {
-    fetchCustomCategories();
+    loadData();
   }, []);
 
-  async function fetchCustomCategories() {
+  async function loadData() {
+    setFetching(true);
     try {
-      const response = await categoriesAPI.getUserCategories(getUserId());
-      setCustomCategories(response.data || []);
-    } catch {
-      // Non-fatal — custom categories are optional
-    }
-  }
+      const userId = getUserId();
+      const [expensesRes, budgetsRes] = await Promise.all([
+        expenseAPI.getUserExpenses(userId),
+        budgetAPI.getUserBudgets(userId)
+      ]);
+      
+      const totals: { [key: string]: number } = {};
+      expensesRes.data.forEach((expense: any) => {
+        const cat = expense.category || 'Other';
+        totals[cat] = (totals[cat] || 0) + parseFloat(expense.amount || '0');
+      });
+      setSpent(totals);
 
-  async function handleCreateCategory() {
-    if (!newCategoryEmoji.trim() || !newCategoryName.trim()) {
-      showToast("Please enter both emoji and category name", "error");
-      return;
-    }
-    try {
-      const response = await categoriesAPI.createCategory(
-        getUserId(),
-        newCategoryName.trim(),
-        newCategoryEmoji.trim(),
-      );
-      const created = response.data;
-      setCustomCategories((prev) => [...prev, created]);
-      handleCategorySelect(created.name);
-      setNewCategoryName("");
-      setNewCategoryEmoji("");
-      setShowAddCategory(false);
-      showToast("Category created!", "success");
-    } catch (err: any) {
-      showToast(err?.response?.data?.error || "Failed to create category", "error");
+      const budgetMap: { [key: string]: number } = {};
+      budgetsRes.data.forEach((budget: any) => {
+        budgetMap[budget.category] = parseFloat(budget.monthlyLimit) || 0;
+      });
+      setLimits(budgetMap);
+    } catch (err) {
+      console.log('Error loading dynamic metrics for categories:', err);
+    } finally {
+      setFetching(false);
     }
   }
 
@@ -110,7 +113,7 @@ export default function AddScreen() {
     lastUsedCategory = cat;
   }
 
-  function handlePaymentMethodSelect(method: PaymentMethod) {
+  function handlePaymentMethodSelect(method: "CASH" | "MOMO") {
     setPaymentMethod(method);
     lastUsedPaymentMethod = method;
   }
@@ -134,231 +137,503 @@ export default function AddScreen() {
   }
 
   async function handleAddExpense() {
-    if (!amount.trim()) {
-      setAmountError("Please enter an amount");
+    if (!amount) {
+      showToast("Please enter an amount", "error");
       return;
     }
-    const parsedAmount = parseFloat(amount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      setAmountError("Amount must be a number greater than 0");
+    if (isNaN(parseFloat(amount))) {
+      showToast("Please enter a valid amount", "error");
       return;
     }
-    setAmountError(null);
 
-    // MoMo → navigate to Pay Vendor screen with pre-filled data
+    // MoMo → open payment modal instead of saving directly
     if (paymentMethod === "MOMO") {
-      pendingExpenseData = {
-        amount: amount.trim(),
-        category: selectedCategory,
-        description: [description, ...tags].filter(Boolean).join(" "),
-        paymentMethod: "MOMO",
-      };
-      router.push({
-        pathname: "/pay-vendor",
-        params: {
-          amount: amount.trim(),
-          description: [description, ...tags].filter(Boolean).join(" "),
-          category: selectedCategory,
-          fromAddExpense: "true",
-        },
-      });
+      setShowMomoModal(true);
       return;
     }
 
     // Cash flow
     setLoading(true);
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const today = new Date().toISOString().split('T')[0];
       const userId = getUserId();
-      const fullDescription = [description, ...tags].filter(Boolean).join(" ");
-      await expenseAPI.createExpense(
-        userId,
-        amount,
-        selectedCategory,
-        fullDescription,
-        today,
-        "CASH",
-      );
+      const fullDescription = [description.trim(), ...tags].filter(Boolean).join(" ");
+      const finalAmtStr = String(transactionType === 'income' ? Math.abs(parseFloat(amount)) : -Math.abs(parseFloat(amount)));
+      await expenseAPI.createExpense(userId, finalAmtStr, selectedCategory, fullDescription, today, "CASH");
+      
       const parsed = parseFloat(amount);
       await addHistoryItem({
-        type: "expense_added",
-        title: "Expense recorded",
-        body: `GHS ${parsed.toFixed(2)} added to ${selectedCategory}${description ? ` — ${description}` : ""}.`,
+        type: transactionType === 'income' ? "income_added" : "expense_added",
+        title: transactionType === 'income' ? "Income recorded" : "Expense recorded",
+        body: `${transactionType === 'income' ? '+' : '-'}GHS ${parsed.toFixed(2)} added to ${selectedCategory}${description ? ` — ${description}` : ""}.`,
         data: { screen: "history" },
       });
-      showToast("Expense added successfully!", "success");
-      setAmount("");
-      setDescription("");
+
+      showToast(transactionType === 'income' ? "Income added successfully!" : "Expense added successfully!", "success");
+
+      // Update spent values locally for responsive UI feedback
+      if (transactionType === 'expense') {
+        const addedAmt = parseFloat(amount) || 0;
+        setSpent(prev => ({
+          ...prev,
+          [selectedCategory]: (prev[selectedCategory] || 0) + addedAmt
+        }));
+      }
+
+      setAmount('');
+      setDescription('');
       setTags([]);
       setTagInput("");
     } catch (error: any) {
-      const message = error.response?.data?.error || "Failed to add expense.";
+      const message = error.response?.data?.error || (transactionType === 'income' ? 'Failed to add income.' : 'Failed to add expense.');
       showToast(message, "error");
     } finally {
       setLoading(false);
     }
   }
 
+  async function handleMomoPayment() {
+    const phone = momoPhone.trim().replace(/\s/g, "");
+    if (phone.length < 10) {
+      showToast("Enter a valid 10-digit MoMo number", "error");
+      return;
+    }
+
+    setMomoLoading(true);
+    setMomoStatus("sending");
+
+    try {
+      const userId = getUserId();
+      const fullDescription = [description.trim(), ...tags].filter(Boolean).join(" ");
+
+      // Request payment from MTN MoMo sandbox
+      const payRes = await momoAPI.requestPayment(
+        "",       // no groupId for personal expenses
+        userId,
+        phone,
+        amount,
+        fullDescription || selectedCategory,
+      );
+
+      const referenceId: string =
+        payRes.data?.referenceId ?? payRes.data?.externalId ?? "";
+
+      // Wait 3s, then check payment status
+      setMomoStatus("confirming");
+      await new Promise((r) => setTimeout(r, 3000));
+
+      let paymentStatus = "PENDING";
+      if (referenceId) {
+        try {
+          const statusRes = await momoAPI.checkStatus(referenceId);
+          paymentStatus = statusRes.data?.status ?? "PENDING";
+        } catch {
+          // If status check fails, treat as PENDING and record the expense
+          paymentStatus = "PENDING";
+        }
+      }
+
+      if (paymentStatus === "FAILED") {
+        showToast("Payment failed. Please try again.", "error");
+        setMomoStatus("idle");
+        setMomoLoading(false);
+        return;
+      }
+
+      // SUCCESSFUL or PENDING — record the transaction
+      const today = new Date().toISOString().split("T")[0];
+      const parsed = parseFloat(amount);
+      const finalAmtStr = String(transactionType === 'income' ? Math.abs(parsed) : -Math.abs(parsed));
+      await expenseAPI.createExpense(
+        userId,
+        finalAmtStr,
+        selectedCategory,
+        fullDescription,
+        today,
+        "MOMO",
+      );
+
+      await addHistoryItem({
+        type: transactionType === 'income' ? "income_added" : "expense_added",
+        title: transactionType === 'income' ? "MoMo deposit recorded" : "MoMo payment recorded",
+        body: `${transactionType === 'income' ? '+' : '-'}GHS ${parsed.toFixed(2)} via MoMo for ${selectedCategory}${description ? ` — ${description}` : ""}.`,
+        data: { screen: "history" },
+      });
+
+      // Update spent values locally for responsive UI feedback
+      if (transactionType === 'expense') {
+        const addedAmt = parseFloat(amount) || 0;
+        setSpent(prev => ({
+          ...prev,
+          [selectedCategory]: (prev[selectedCategory] || 0) + addedAmt
+        }));
+      }
+
+      setMomoStatus("done");
+      // Tell Home screen to re-fetch wallet balance on next focus
+      signalMomoRefresh();
+
+      // Brief pause so user sees "confirmed" state, then close
+      setTimeout(() => {
+        setShowMomoModal(false);
+        setMomoStatus("idle");
+        setMomoLoading(false);
+        showToast("Payment successful! Expense recorded.", "success");
+        setAmount("");
+        setDescription("");
+        setTags([]);
+        setTagInput("");
+        setMomoPhone("");
+      }, 1200);
+    } catch (err: any) {
+      const msg =
+        err.response?.data?.error || "Payment request failed. Please try again.";
+      showToast(msg, "error");
+      setMomoStatus("idle");
+      setMomoLoading(false);
+    }
+  }
+
+  function closeMomoModal() {
+    if (momoLoading) return; // block dismissal while in-flight
+    setShowMomoModal(false);
+    setMomoStatus("idle");
+  }
+
+
+
+  if (fetching) {
+    return (
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
   return (
     <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={[styles.flex, { backgroundColor: colors.background }]}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text style={styles.title}>Add Expense</Text>
-
-        <Text style={styles.label}>Amount (GHS)</Text>
-        <TextInput
-          style={[styles.input, amountError ? styles.inputError : null]}
-          placeholder="0.00"
-          placeholderTextColor="#8890A0"
-          value={amount}
-          onChangeText={(text) => {
-            setAmount(text);
-            if (amountError) setAmountError(null);
-          }}
-          keyboardType="decimal-pad"
-        />
-        {amountError && <Text style={styles.fieldError}>{amountError}</Text>}
-
-        <Text style={styles.label}>Category</Text>
-        <View style={styles.categoryGrid}>
-          {/* Default categories */}
-          {CATEGORIES.map((cat) => {
-            const isSelected = selectedCategory === cat.name;
-            return (
-              <TouchableOpacity
-                key={cat.name}
-                style={[styles.categoryCard, isSelected && styles.categoryCardActive]}
-                onPress={() => handleCategorySelect(cat.name)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
-                <Text style={[styles.categoryName, isSelected && styles.categoryNameActive]}>
-                  {cat.name}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-          {/* Custom categories */}
-          {customCategories.map((cat) => {
-            const isSelected = selectedCategory === cat.name;
-            return (
-              <TouchableOpacity
-                key={`custom-${cat.id}`}
-                style={[styles.categoryCard, isSelected && styles.categoryCardActive]}
-                onPress={() => handleCategorySelect(cat.name)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
-                <Text style={[styles.categoryName, isSelected && styles.categoryNameActive]}>
-                  {cat.name}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-        {/* + Add Category button */}
-        <TouchableOpacity
-          style={styles.addCategoryButton}
-          onPress={() => setShowAddCategory(true)}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.addCategoryText}>+ Add Category</Text>
-        </TouchableOpacity>
-        {showHint && (
-          <Text style={{ fontSize: 11, color: "#8890A0", textAlign: "center", marginBottom: 8 }}>
-            ↩ Remembered from last expense
+      <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={true}>
+        {/* Card container */}
+        <View style={[styles.mainCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+          <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>
+            {transactionType === 'income' ? 'Add Income' : 'Add Expense'}
           </Text>
-        )}
 
-        <Text style={styles.label}>Payment Method</Text>
-        <View style={styles.paymentMethodRow}>
-          <TouchableOpacity
-            style={[styles.paymentChip, paymentMethod === "CASH" && styles.paymentChipActive]}
-            onPress={() => handlePaymentMethodSelect("CASH")}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.paymentChipIcon}>💵</Text>
-            <Text style={[styles.paymentChipText, paymentMethod === "CASH" && styles.paymentChipTextActive]}>
-              Cash
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.paymentChip, paymentMethod === "MOMO" && styles.paymentChipActiveMomo]}
-            onPress={() => handlePaymentMethodSelect("MOMO")}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.paymentChipIcon}>📱</Text>
-            <Text style={[styles.paymentChipText, paymentMethod === "MOMO" && styles.paymentChipTextMomo]}>
-              MoMo
-            </Text>
-          </TouchableOpacity>
-        </View>
+          {/* Segmented Control for Expense vs Income */}
+          <View style={[styles.typeSelectorRow, { backgroundColor: colors.neutralBg }]}>
+            <TouchableOpacity
+              style={[
+                styles.typeBtn,
+                transactionType === 'expense' && { backgroundColor: colors.negative },
+              ]}
+              onPress={() => setTransactionType('expense')}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.typeBtnText,
+                { color: colors.textSecondary },
+                transactionType === 'expense' && { color: '#ffffff' },
+              ]}>
+                💸 Expense
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.typeBtn,
+                transactionType === 'income' && { backgroundColor: colors.positive },
+              ]}
+              onPress={() => setTransactionType('income')}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.typeBtnText,
+                { color: colors.textSecondary },
+                transactionType === 'income' && { color: '#ffffff' },
+              ]}>
+                💰 Income
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-        <Text style={styles.label}>Description (optional)</Text>
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          placeholder="What was this for?"
-          placeholderTextColor="#8890A0"
-          value={description}
-          onChangeText={setDescription}
-          multiline
-          numberOfLines={3}
-        />
+          {/* Enter Amount box styled for the theme */}
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Amount (GHS)</Text>
+          <View style={[
+            styles.amountBox,
+            { backgroundColor: colors.inputBg, borderColor: colors.border },
+            amountFocused && { borderColor: colors.primary }
+          ]}>
+            <Text style={[styles.amountPrefix, { color: colors.text }]}>GHS</Text>
+            <TextInput
+              style={[styles.amountInput, { color: colors.text }]}
+              placeholder="0.00"
+              placeholderTextColor={theme === 'dark' ? '#4B5563' : '#C8D2DC'}
+              value={amount}
+              onChangeText={setAmount}
+              keyboardType="decimal-pad"
+              onFocus={() => setAmountFocused(true)}
+              onBlur={() => setAmountFocused(false)}
+            />
+          </View>
 
-        <Text style={styles.label}>Tags (optional)</Text>
-        <View style={styles.tagInputRow}>
-          <TextInput
-            style={[styles.input, styles.tagInputField]}
-            placeholder="Add a tag e.g. #work #food"
-            placeholderTextColor="#8890A0"
-            value={tagInput}
-            onChangeText={setTagInput}
-            onSubmitEditing={handleAddTag}
-            returnKeyType="done"
-          />
-          <TouchableOpacity style={styles.tagAddButton} onPress={handleAddTag} activeOpacity={0.7}>
-            <Text style={styles.tagAddText}>Add</Text>
-          </TouchableOpacity>
-        </View>
-
-        {tags.length > 0 && (
-          <View style={styles.tagsContainer}>
-            {tags.map((tag) => (
-              <View key={tag} style={styles.tagPill}>
-                <Text style={styles.tagText}>{tag}</Text>
-                <TouchableOpacity onPress={() => handleRemoveTag(tag)} activeOpacity={0.7}>
-                  <Text style={styles.tagRemove}>✕</Text>
-                </TouchableOpacity>
-              </View>
+          {/* Categories capsule selection list */}
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Select Category</Text>
+          <View style={styles.categoryList}>
+            {CATEGORIES.map((cat) => (
+              <TouchableOpacity
+                key={cat}
+                style={[
+                  styles.categoryCapsule,
+                  { backgroundColor: colors.inputBg, borderColor: colors.border },
+                  selectedCategory === cat && { borderColor: colors.primary, borderWidth: 1.5 },
+                ]}
+                onPress={() => handleCategorySelect(cat)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.categoryLeft}>
+                  <Text style={styles.categoryEmoji}>{CATEGORY_ICONS[cat]}</Text>
+                  <Text style={[styles.categoryNameText, { color: colors.text }]}>{cat}</Text>
+                </View>
+                <View style={styles.categoryRight}>
+                  <Text style={[styles.categoryAmountText, { color: colors.textSecondary }]}>
+                    GHS {(spent[cat] || 0).toFixed(2)}
+                  </Text>
+                </View>
+              </TouchableOpacity>
             ))}
           </View>
-        )}
-
-        <TouchableOpacity
-          style={[
-            styles.button,
-            loading && styles.buttonDisabled,
-            paymentMethod === "MOMO" && styles.buttonMomo,
-          ]}
-          onPress={handleAddExpense}
-          disabled={loading}
-          activeOpacity={0.7}
-        >
-          {loading ? (
-            <ActivityIndicator color="#000000" />
-          ) : (
-            <Text style={styles.buttonText}>
-              {paymentMethod === "MOMO" ? "Pay Vendor via MoMo →" : "Add Expense"}
+          {showHint && (
+            <Text style={[styles.lastUsedHint, { color: colors.textSecondary }]}>
+              ↩ Remembered from last {transactionType === 'income' ? 'income' : 'expense'}
             </Text>
           )}
-        </TouchableOpacity>
+
+          {/* Payment Method Selector */}
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Payment Method</Text>
+          <View style={styles.paymentMethodRow}>
+            <TouchableOpacity
+              style={[
+                styles.paymentChip,
+                { backgroundColor: colors.inputBg, borderColor: colors.border },
+                paymentMethod === "CASH" && { backgroundColor: colors.primary + '15', borderColor: colors.primary, borderWidth: 1.5 }
+              ]}
+              onPress={() => handlePaymentMethodSelect("CASH")}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.paymentChipIcon}>💵</Text>
+              <Text style={[
+                styles.paymentChipText,
+                { color: colors.textSecondary },
+                paymentMethod === "CASH" && { color: colors.primary, fontWeight: 'bold' }
+              ]}>
+                Cash
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.paymentChip,
+                { backgroundColor: colors.inputBg, borderColor: colors.border },
+                paymentMethod === "MOMO" && { backgroundColor: colors.accent + '15', borderColor: colors.accent, borderWidth: 1.5 }
+              ]}
+              onPress={() => handlePaymentMethodSelect("MOMO")}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.paymentChipIcon}>📱</Text>
+              <Text style={[
+                styles.paymentChipText,
+                { color: colors.textSecondary },
+                paymentMethod === "MOMO" && { color: colors.accent, fontWeight: 'bold' }
+              ]}>
+                MoMo
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Description box */}
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Description (optional)</Text>
+          <TextInput
+            style={[
+              styles.descriptionBox,
+              styles.textArea,
+              { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text },
+              descFocused && { borderColor: colors.primary }
+            ]}
+            placeholder="What was this for?"
+            placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
+            value={description}
+            onChangeText={setDescription}
+            onFocus={() => setDescFocused(true)}
+            onBlur={() => setDescFocused(false)}
+            multiline
+            numberOfLines={3}
+          />
+
+          {/* Tags Section */}
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Tags (optional)</Text>
+          <View style={styles.tagInputRow}>
+            <TextInput
+              style={[
+                styles.tagInputField,
+                { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text },
+                tagFocused && { borderColor: colors.primary }
+              ]}
+              placeholder="Add a tag e.g. #work #food"
+              placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
+              value={tagInput}
+              onChangeText={setTagInput}
+              onFocus={() => setTagFocused(true)}
+              onBlur={() => setTagFocused(false)}
+              onSubmitEditing={handleAddTag}
+              returnKeyType="done"
+            />
+            <TouchableOpacity style={[styles.tagAddButton, { backgroundColor: colors.neutralBg }]} onPress={handleAddTag}>
+              <Text style={[styles.tagAddText, { color: colors.text }]}>Add</Text>
+            </TouchableOpacity>
+          </View>
+
+          {tags.length > 0 && (
+            <View style={styles.tagsContainer}>
+              {tags.map((tag) => (
+                <View key={tag} style={[styles.tagPill, { backgroundColor: colors.neutralBg }]}>
+                  <Text style={[styles.tagText, { color: colors.textSecondary }]}>{tag}</Text>
+                  <TouchableOpacity onPress={() => handleRemoveTag(tag)}>
+                    <Text style={[styles.tagRemove, { color: colors.textSecondary }]}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Black capsule action button */}
+          <TouchableOpacity
+            style={[
+              styles.button,
+              { backgroundColor: paymentMethod === "MOMO" ? "#D97706" : colors.primary },
+              loading && styles.buttonDisabled,
+            ]}
+            onPress={handleAddExpense}
+            disabled={loading}
+            activeOpacity={0.85}
+          >
+            {loading ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Text style={styles.buttonText}>
+                {paymentMethod === "MOMO" 
+                  ? (transactionType === 'income' ? "Receive via MoMo →" : "Pay with MoMo →") 
+                  : (transactionType === 'income' ? "⊕ Add Income" : "⊕ Add Expense")}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </ScrollView>
+
+      {/* ── MoMo Payment Modal (Redesigned for Premium Light Capsule Theme) ── */}
+      <Modal
+        visible={showMomoModal}
+        transparent
+        animationType="slide"
+        onRequestClose={closeMomoModal}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={closeMomoModal}
+          />
+          <View style={[styles.modalCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+            {/* Header */}
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                {transactionType === 'income' ? 'Receive with MoMo 📱' : 'Pay with MoMo 📱'}
+              </Text>
+              {!momoLoading && (
+                <TouchableOpacity onPress={closeMomoModal} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                  <Text style={[styles.modalClose, { color: colors.textSecondary }]}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Amount box */}
+            <View style={[styles.momoAmountBox, { backgroundColor: colors.neutralBg }]}>
+              <Text style={[styles.momoAmountLabel, { color: colors.textSecondary }]}>
+                {transactionType === 'income' ? 'You are receiving' : 'You are paying'}
+              </Text>
+              <Text style={[styles.momoAmountValue, { color: colors.text }]}>
+                GHS {parseFloat(amount || "0").toFixed(2)}
+              </Text>
+              {(description || selectedCategory) && (
+                <Text style={[styles.momoAmountDesc, { color: colors.textSecondary }]}>
+                  {description || selectedCategory}
+                </Text>
+              )}
+            </View>
+
+            {/* Phone input — only shown while idle */}
+            {momoStatus === "idle" && (
+              <>
+                <Text style={[styles.momoPhoneLabel, { color: colors.textSecondary }]}>MoMo Number</Text>
+                <TextInput
+                  style={[styles.momoPhoneInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
+                  placeholder="e.g. 0241234567"
+                  placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
+                  value={momoPhone}
+                  onChangeText={setMomoPhone}
+                  keyboardType="phone-pad"
+                  maxLength={10}
+                  autoFocus
+                />
+              </>
+            )}
+
+            {/* Status feedback while processing */}
+            {momoStatus !== "idle" && (
+              <View style={styles.momoStatusBox}>
+                {momoStatus !== "done" && (
+                  <ActivityIndicator
+                    color="#D97706"
+                    size="large"
+                    style={{ marginBottom: 12 }}
+                  />
+                )}
+                {momoStatus === "done" && (
+                  <Text style={styles.momoStatusIcon}>✅</Text>
+                )}
+                <Text style={[styles.momoStatusText, { color: colors.text }]}>
+                  {momoStatus === "sending" && (transactionType === 'income' ? "Sending request to your MoMo number..." : "Sending payment request to your MoMo number...")}
+                  {momoStatus === "confirming" && "Confirming transaction..."}
+                  {momoStatus === "done" && (transactionType === 'income' ? "Funds received confirmed!" : "Payment confirmed!")}
+                </Text>
+              </View>
+            )}
+
+            {/* Buttons — hidden while processing */}
+            {momoStatus === "idle" && (
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalCancelBtn, { backgroundColor: colors.neutralBg }]}
+                  onPress={closeMomoModal}
+                >
+                  <Text style={[styles.modalCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalPayBtn, { backgroundColor: '#D97706' }]}
+                  onPress={handleMomoPayment}
+                >
+                  <Text style={styles.modalPayText}>
+                    {transactionType === 'income' ? "Request Money" : "Pay Now"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       <Toast
         message={toastMessage}
@@ -366,69 +641,6 @@ export default function AddScreen() {
         visible={toastVisible}
         onHide={hideToast}
       />
-
-      {/* ── Create Custom Category Modal ─────────────────────────────── */}
-      <Modal
-        visible={showAddCategory}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowAddCategory(false)}
-      >
-        <KeyboardAvoidingView
-          style={styles.modalOverlay}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-        >
-          <TouchableOpacity
-            style={styles.modalBackdrop}
-            activeOpacity={1}
-            onPress={() => setShowAddCategory(false)}
-          />
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Create Custom Category</Text>
-
-            <Text style={styles.modalLabel}>Choose an emoji</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={newCategoryEmoji}
-              onChangeText={setNewCategoryEmoji}
-              placeholder="e.g. 🏠 💊 📚"
-              placeholderTextColor="#8890A060"
-              autoFocus
-            />
-
-            <Text style={styles.modalLabel}>Category name</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={newCategoryName}
-              onChangeText={setNewCategoryName}
-              placeholder="e.g. Healthcare, Rent"
-              placeholderTextColor="#8890A060"
-              returnKeyType="done"
-              onSubmitEditing={handleCreateCategory}
-            />
-
-            <TouchableOpacity
-              style={styles.createButton}
-              onPress={handleCreateCategory}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.createButtonText}>Create</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={() => {
-                setShowAddCategory(false);
-                setNewCategoryName("");
-                setNewCategoryEmoji("");
-              }}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -436,104 +648,165 @@ export default function AddScreen() {
 const styles = StyleSheet.create({
   flex: {
     flex: 1,
-    backgroundColor: "#0F1117",
   },
   container: {
     flex: 1,
-    backgroundColor: "#0F1117",
+    backgroundColor: '#F2F4F7', // Soft light gray backdrop
+  },
+  centered: {
+    flex: 1,
+    backgroundColor: '#F2F4F7',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: {
+    paddingHorizontal: 20,
+    paddingTop: 30,
+    paddingBottom: 40,
+  },
+  mainCard: {
+    backgroundColor: '#ffffff', // Card wrapper
+    borderRadius: 28,
     padding: 24,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    elevation: 3,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#ffffff",
-    marginBottom: 24,
-  },
-  label: {
-    fontSize: 14,
-    color: "#ffffff",
-    fontWeight: "500",
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: "#1A1F2E",
-    borderRadius: 12,
-    padding: 16,
-    color: "#ffffff",
-    fontSize: 15,
-    borderWidth: 1,
-    borderColor: "#ffffff15",
+  cardHeaderTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#111111',
     marginBottom: 20,
   },
-  inputError: {
-    borderColor: "#E05C5C",
-    marginBottom: 4,
-  },
-  fieldError: {
-    color: "#E05C5C",
-    fontSize: 12,
+  typeSelectorRow: {
+    flexDirection: 'row',
+    borderRadius: 12,
+    padding: 4,
     marginBottom: 16,
   },
-  textArea: {
-    height: 100,
-    textAlignVertical: "top",
+  typeBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
   },
-  categoryGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    marginBottom: 20,
+  typeBtnText: {
+    fontSize: 14,
+    fontWeight: 'bold',
   },
-  categoryCard: {
-    width: "18%",
-    flexGrow: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 6,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: "#ffffff10",
-    backgroundColor: "#1A1F2E",
-    gap: 6,
-  },
-  categoryCardActive: {
-    borderColor: "#00C896",
-    backgroundColor: "#00C89615",
-  },
-  categoryEmoji: {
-    fontSize: 26,
-  },
-  categoryName: {
+  label: {
     fontSize: 11,
-    fontWeight: "600",
-    color: "#8890A0",
-    textAlign: "center",
-  },
-  categoryNameActive: {
-    color: "#00C896",
-  },
-  button: {
-    backgroundColor: "#00C896",
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
+    fontWeight: 'bold',
+    color: '#8E9AA6',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
     marginTop: 8,
   },
-  buttonMomo: {
-    backgroundColor: "#FFC107",
+  amountBox: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
   },
-  buttonDisabled: {
-    opacity: 0.6,
+  amountBoxFocused: {
+    borderColor: '#111111', // Black border on focus
   },
-  buttonText: {
-    color: "#000000",
-    fontSize: 16,
-    fontWeight: "bold",
+  amountPrefix: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111111',
+    marginRight: 8,
   },
-  // Payment method chips
+  amountInput: {
+    flex: 1,
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#111111',
+    padding: 0,
+  },
+  categoryList: {
+    marginBottom: 16,
+  },
+  categoryCapsule: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  categoryCapsuleActive: {
+    borderColor: '#111111', // Rounded black outline on selection
+    borderWidth: 1.5,
+  },
+  categoryLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  categoryEmoji: {
+    fontSize: 20,
+  },
+  categoryNameText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111111',
+    marginLeft: 4,
+  },
+  categoryRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  categoryAmountText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111111',
+    marginRight: 6,
+  },
+
+  descriptionBox: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+    color: '#111111',
+    fontSize: 15,
+    marginBottom: 16,
+  },
+  descriptionBoxFocused: {
+    borderColor: '#111111',
+  },
+  textArea: {
+    height: 80,
+    textAlignVertical: 'top',
+  },
+  lastUsedHint: {
+    fontSize: 11,
+    color: "#8890A0",
+    textAlign: "center",
+    marginTop: -8,
+    marginBottom: 12,
+  },
   paymentMethodRow: {
     flexDirection: "row",
     gap: 12,
@@ -546,18 +819,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: "#1A1F2E",
-    borderWidth: 2,
-    borderColor: "#ffffff15",
+    borderRadius: 16,
+    backgroundColor: "#F8F9FA",
+    borderWidth: 1,
+    borderColor: "#EAEBEF",
   },
   paymentChipActive: {
-    borderColor: "#00C896",
-    backgroundColor: "#00C89615",
+    borderColor: "#111111",
+    backgroundColor: "#11111105",
   },
   paymentChipActiveMomo: {
-    borderColor: "#FFC107",
-    backgroundColor: "#FFC10715",
+    borderColor: "#F59E0B",
+    backgroundColor: "#F59E0B0a",
   },
   paymentChipIcon: {
     fontSize: 18,
@@ -565,142 +838,223 @@ const styles = StyleSheet.create({
   paymentChipText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#8890A0",
+    color: "#8E9AA6",
   },
   paymentChipTextActive: {
-    color: "#00C896",
+    color: "#111111",
   },
   paymentChipTextMomo: {
-    color: "#FFC107",
+    color: "#D97706",
   },
-  // Tags
+  button: {
+    backgroundColor: '#111111', // Black background button
+    borderRadius: 28,
+    padding: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    marginTop: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  buttonMomo: {
+    backgroundColor: "#D97706",
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  buttonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
   tagInputRow: {
-    flexDirection: "row",
+    flexDirection: 'row',
     gap: 8,
-    alignItems: "center",
-    marginBottom: 0,
+    alignItems: 'center',
+    marginBottom: 12,
   },
   tagInputField: {
     flex: 1,
-    marginBottom: 0,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+    color: '#111111',
+    fontSize: 15,
+  },
+  tagInputFieldFocused: {
+    borderColor: '#111111',
   },
   tagAddButton: {
-    backgroundColor: "#00C896",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 20,
+    backgroundColor: '#111111',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    height: 56,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   tagAddText: {
-    color: "#000000",
-    fontWeight: "bold",
-    fontSize: 13,
+    color: '#ffffff',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
   tagsContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 6,
-    marginTop: 4,
     marginBottom: 20,
   },
   tagPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#00C89620",
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F2F4F7',
     borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderWidth: 1,
-    borderColor: "#00C896",
-    gap: 4,
+    borderColor: '#EAEBEF',
+    gap: 6,
   },
   tagText: {
-    fontSize: 12,
-    color: "#00C896",
-    fontWeight: "500",
+    fontSize: 13,
+    color: '#111111',
+    fontWeight: '500',
   },
   tagRemove: {
     fontSize: 12,
-    color: "#00C896",
+    color: '#8E9AA6',
+    fontWeight: 'bold',
   },
-  // Add Category button
-  addCategoryButton: {
-    borderWidth: 1,
-    borderColor: "#00C896",
-    borderStyle: "dashed",
-    borderRadius: 12,
-    padding: 12,
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  addCategoryText: {
-    color: "#00C896",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  // Create category modal
+  // MoMo modal (Light Redesign)
   modalOverlay: {
     flex: 1,
     justifyContent: "flex-end",
   },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.65)",
+    backgroundColor: "rgba(0,0,0,0.4)",
   },
   modalCard: {
-    backgroundColor: "#1A1F2E",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     padding: 24,
     paddingBottom: 40,
     borderTopWidth: 1,
-    borderColor: "#00C89630",
+    borderColor: "#EAEBEF",
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 10,
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#ffffff",
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 20,
   },
-  modalLabel: {
-    fontSize: 13,
-    color: "#8890A0",
-    fontWeight: "500",
-    marginBottom: 6,
-  },
-  modalInput: {
-    backgroundColor: "#0F1117",
-    borderRadius: 12,
-    padding: 14,
-    color: "#ffffff",
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: "#ffffff15",
-    marginBottom: 16,
-  },
-  createButton: {
-    backgroundColor: "#00C896",
-    borderRadius: 12,
-    padding: 14,
-    alignItems: "center",
-    marginTop: 4,
-    marginBottom: 10,
-  },
-  createButtonText: {
-    color: "#000000",
+  modalTitle: {
+    fontSize: 20,
     fontWeight: "bold",
-    fontSize: 15,
+    color: "#111111",
   },
-  cancelButton: {
-    borderRadius: 12,
-    padding: 14,
+  modalClose: {
+    fontSize: 18,
+    color: "#8E9AA6",
+    padding: 4,
+  },
+  momoAmountBox: {
+    backgroundColor: "#F8F9FA",
+    borderRadius: 16,
+    padding: 20,
     alignItems: "center",
+    marginBottom: 20,
     borderWidth: 1,
-    borderColor: "#ffffff20",
+    borderColor: "#F59E0B1a",
   },
-  cancelButtonText: {
-    color: "#8890A0",
-    fontSize: 15,
+  momoAmountLabel: {
+    fontSize: 12,
+    color: "#8E9AA6",
+    marginBottom: 6,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  momoAmountValue: {
+    fontSize: 40,
+    fontWeight: "bold",
+    color: "#D97706",
+    marginBottom: 4,
+  },
+  momoAmountDesc: {
+    fontSize: 13,
+    color: "#8E9AA6",
+  },
+  momoPhoneLabel: {
+    fontSize: 13,
+    color: "#1E293B",
     fontWeight: "600",
+    marginBottom: 8,
+  },
+  momoPhoneInput: {
+    backgroundColor: "#F8F9FA",
+    borderRadius: 12,
+    padding: 16,
+    color: "#111111",
+    fontSize: 18,
+    fontWeight: "600",
+    borderWidth: 1,
+    borderColor: "#EAEBEF",
+    marginBottom: 20,
+    letterSpacing: 1,
+  },
+  momoStatusBox: {
+    alignItems: "center",
+    paddingVertical: 24,
+  },
+  momoStatusIcon: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  momoStatusText: {
+    fontSize: 15,
+    color: "#D97706",
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  modalButtons: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#EAEBEF",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+  },
+  modalCancelText: {
+    fontSize: 15,
+    color: "#8E9AA6",
+    fontWeight: "600",
+  },
+  modalPayBtn: {
+    flex: 2,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: "#F59E0B",
+    alignItems: "center",
+  },
+  modalPayText: {
+    color: "#ffffff",
+    fontWeight: "bold",
+    fontSize: 16,
   },
 });

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,51 +6,128 @@ import {
   ScrollView,
   ActivityIndicator,
   TouchableOpacity,
+  Image,
+  Dimensions,
   Modal,
   TextInput,
   Alert,
   KeyboardAvoidingView,
   Platform,
   RefreshControl,
-} from "react-native";
-import { useFocusEffect, router } from "expo-router";
-import { expenseAPI, remindersAPI, budgetAPI, momoAPI } from "../../services/api";
-import { getUserId, getUserName } from "../../services/storage";
+} from 'react-native';
+import { useFocusEffect, router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { expenseAPI, remindersAPI, budgetAPI, momoAPI } from '../../services/api';
+import { getUserId, getUserName, safeStorage } from '../../services/storage';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useTheme } from '../../hooks/useTheme';
+import { Svg, Path } from 'react-native-svg';
 import {
   addHistoryItem,
   shouldFireBudgetAlert,
   getUnreadCount,
-} from "../../services/notificationHistory";
-import { consumeMomoRefresh } from "../../services/momoRefresh";
-import { formatDate } from "../../services/format";
+} from '../../services/notificationHistory';
+import { consumeMomoRefresh } from '../../services/momoRefresh';
 
 const CATEGORY_ICONS: { [key: string]: string } = {
-  Food: "🍔",
-  Transport: "🚗",
-  Entertainment: "🎮",
-  Utilities: "💡",
-  Other: "📦",
+  Food: '🍔',
+  Transport: '🚗',
+  Entertainment: '🎮',
+  Utilities: '💡',
+  Other: '📦',
+  Shared: '👥',
 };
 
 const CATEGORIES = ["Food", "Transport", "Entertainment", "Utilities", "Other"];
 
+const getLineStyle = (x1: number, y1: number, x2: number, y2: number) => {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  const angle = Math.atan2(dy, dx);
+  
+  return {
+    position: 'absolute' as const,
+    left: x1,
+    top: y1,
+    width: distance + 0.6,
+    height: 3,
+    backgroundColor: '#8B5CF6',
+    transform: [{ rotate: `${angle}rad` }] as any,
+    transformOrigin: ['0%', '50%', 0] as any,
+  };
+};
+
+function parseTagsFromDescription(description: string | null | undefined): {
+  cleanDescription: string;
+  tags: string[];
+} {
+  if (!description) return { cleanDescription: "", tags: [] };
+  const words = description.split(" ");
+  const tags = words.filter((w) => w.startsWith("#"));
+  const cleanDescription = words.filter((w) => !w.startsWith("#")).join(" ").trim();
+  return { cleanDescription, tags };
+}
+
+const EyelashClosedIcon = ({ size = 20, color = "#D97706" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M2 10C6 15 18 15 22 10"
+      stroke={color}
+      strokeWidth={2.2}
+      strokeLinecap="round"
+    />
+    <Path d="M4 12L2 14.5" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
+    <Path d="M8 13.5L7 16.5" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
+    <Path d="M12 14L12 17.5" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
+    <Path d="M16 13.5L17 16.5" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
+    <Path d="M20 12L22 14.5" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
+  </Svg>
+);
+
+const EyelashOpenIcon = ({ size = 20, color = "#D97706" }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M2 12C6 6 18 6 22 12C18 18 6 18 2 12Z"
+      stroke={color}
+      strokeWidth={2.2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Path
+      d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z"
+      stroke={color}
+      strokeWidth={2.2}
+      fill={color}
+    />
+  </Svg>
+);
+
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
+  const { colors, theme } = useTheme();
   const [expenses, setExpenses] = useState<any[]>([]);
+  const [budgets, setBudgets] = useState<any[]>([]);
   const [upcomingReminders, setUpcomingReminders] = useState<any[]>([]);
   const [budgetAlerts, setBudgetAlerts] = useState<{ category: string; isOverBudget: boolean; isNearLimit: boolean; percentage: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [userName, setUserName] = useState("");
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [userName, setUserName] = useState("User");
+
+  // Chart timeline switcher state
+  const [chartTimeline, setChartTimeline] = useState<'day' | 'week' | 'month' | 'year'>('week');
 
   // Notification badge
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // MoMo wallet — flat state instead of a nested object
+  // MoMo wallet states
   const [momoBalance, setMomoBalance] = useState("0.00");
   const [momoStatus, setMomoStatus] = useState<"loading" | "available" | "unavailable">("loading");
   const [momoBalanceLoading, setMomoBalanceLoading] = useState(false);
   const [momoMonthlySpent, setMomoMonthlySpent] = useState("0.00");
+  const [hideMomoBalance, setHideMomoBalance] = useState(false);
 
   // Quick add state
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -58,18 +135,89 @@ export default function HomeScreen() {
   const [quickCategory, setQuickCategory] = useState("Food");
   const [quickDescription, setQuickDescription] = useState("");
   const [savingExpense, setSavingExpense] = useState(false);
-  const [quickAmountError, setQuickAmountError] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
-      fetchExpenses();
-      // consumeMomoRefresh() clears the flag set by the Add screen after a MoMo payment
+      fetchData(true);
+      loadProfileImage();
       consumeMomoRefresh();
-      fetchMomoBalance();
-      // Refresh badge whenever screen comes into focus (e.g. returning from notif screen)
       getUnreadCount().then(setUnreadCount);
-    }, []),
+      safeStorage.getItem('hide_momo_balance').then((val) => {
+        if (val !== null) {
+          setHideMomoBalance(val === 'true');
+        }
+      });
+    }, [])
   );
+
+  async function loadProfileImage() {
+    try {
+      const userId = getUserId();
+      const saved = await safeStorage.getItem(`profile_image_${userId}`);
+      if (saved) {
+        setProfileImage(saved);
+      } else {
+        setProfileImage(null);
+      }
+    } catch (e) {
+      console.log('Error loading profile image on home screen:', e);
+    }
+  }
+
+  async function toggleHideMomoBalance() {
+    try {
+      const newVal = !hideMomoBalance;
+      setHideMomoBalance(newVal);
+      await safeStorage.setItem('hide_momo_balance', String(newVal));
+    } catch (e) {
+      console.log('Error toggling hide momo balance:', e);
+    }
+  }
+
+  async function fetchData(showLoading = true) {
+    if (showLoading) setLoading(true);
+    setError(null);
+    try {
+      const userId = getUserId();
+      const name = getUserName();
+      setUserName(name);
+
+      const [expensesRes, budgetsRes, remindersRes] = await Promise.all([
+        expenseAPI.getCombinedHistory(userId),
+        budgetAPI.getUserBudgets(userId),
+        remindersAPI.getUpcomingReminders(userId).catch(() => ({ data: [] }))
+      ]);
+
+      const expenseList = expensesRes.data || [];
+      setExpenses(expenseList);
+      setBudgets(budgetsRes.data || []);
+      setUpcomingReminders(remindersRes.data || []);
+
+      // Calculate MoMo spending for this month
+      const now = new Date();
+      const momoTotal = expenseList
+        .filter((e: any) => e.paymentMethod === "MOMO")
+        .filter((e: any) => {
+          if (!e.date) return false;
+          const d = new Date(e.date);
+          return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        })
+        .filter((e: any) => parseFloat(e.amount || "0") < 0)
+        .reduce((sum: number, e: any) => sum + Math.abs(parseFloat(e.amount || "0")), 0);
+      setMomoMonthlySpent(momoTotal.toFixed(2));
+
+      // Fetch wallet balance
+      await fetchMomoBalance();
+
+      // Fetch budget alerts and register in history
+      await checkBudgetAlerts(userId);
+    } catch (err: any) {
+      console.log('Error fetching dashboard data:', err);
+      setError('Failed to load dashboard data. Please check your connection.');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function fetchMomoBalance() {
     setMomoBalanceLoading(true);
@@ -94,56 +242,10 @@ export default function HomeScreen() {
     }
   }
 
-  async function onRefresh() {
-    setRefreshing(true);
+  async function checkBudgetAlerts(userId: string) {
     try {
-      await fetchExpenses();
-      await fetchMomoBalance();
-    } finally {
-      setRefreshing(false);
-    }
-  }
-
-  async function fetchExpenses() {
-    try {
-      const userId = getUserId();
-      const name = getUserName();
-      setUserName(name);
-      const response = await expenseAPI.getUserExpenses(userId);
-      const expenseList = response.data;
-      setExpenses(expenseList);
-      // Calculate MoMo and card spending for this month
-      const now = new Date();
-      const isThisMonth = (e: any) => {
-        const d = new Date(e.date);
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      };
-      const monthlyTotal = (method: string) =>
-        expenseList
-          .filter((e: any) => e.paymentMethod === method)
-          .filter(isThisMonth)
-          .reduce((sum: number, e: any) => sum + parseFloat(e.amount || "0"), 0);
-      setMomoMonthlySpent(monthlyTotal("MOMO").toFixed(2));
-      setError(null);
-    } catch (err) {
-      setError("Could not load data. Pull down to refresh.");
-    } finally {
-      setLoading(false);
-    }
-
-    // Fetch upcoming reminders independently — failure won't break the home screen
-    try {
-      const remindersResponse = await remindersAPI.getUpcomingReminders(getUserId());
-      setUpcomingReminders(remindersResponse.data);
-    } catch {
-      // Non-critical — the reminders section simply stays empty
-    }
-
-    // Fetch budget alerts independently
-    try {
-      const userId = getUserId();
       const budgetRes = await budgetAPI.getBudgetSummary(userId);
-      const summary = budgetRes.data;
+      const summary = budgetRes.data || {};
       const alerts = Object.entries(summary)
         .filter(([, data]: any) => data.isOverBudget || data.isNearLimit)
         .map(([category, data]: any) => ({
@@ -154,7 +256,7 @@ export default function HomeScreen() {
         }));
       setBudgetAlerts(alerts);
 
-      // Record each alert in the in-app notification history (once per day)
+      // Record alerts in history
       for (const alert of alerts) {
         if (alert.isOverBudget) {
           const fire = await shouldFireBudgetAlert(alert.category, "over");
@@ -163,7 +265,7 @@ export default function HomeScreen() {
               type: "budget_over",
               title: `Over budget — ${alert.category}`,
               body: `You've used ${alert.percentage.toFixed(0)}% of your ${alert.category} budget this month.`,
-              data: { screen: "budget-overview" },
+              data: { screen: "budget" },
             });
           }
         } else if (alert.isNearLimit) {
@@ -173,45 +275,51 @@ export default function HomeScreen() {
               type: "budget_near",
               title: `Near limit — ${alert.category}`,
               body: `${alert.percentage.toFixed(0)}% of your ${alert.category} budget used. Slow down!`,
-              data: { screen: "budget-overview" },
+              data: { screen: "budget" },
             });
           }
         }
       }
-      // Refresh badge
       getUnreadCount().then(setUnreadCount);
-    } catch {
-      // Non-critical — budget alerts simply won't show this pass
+    } catch (e) {
+      console.log('Error fetching budget alerts:', e);
     }
+  }
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await fetchData(false);
+    setRefreshing(false);
   }
 
   async function handleQuickAdd() {
     if (!quickAmount.trim()) {
-      setQuickAmountError("Please enter an amount");
+      Alert.alert("Missing amount", "Please enter an amount.");
       return;
     }
     const parsed = parseFloat(quickAmount);
     if (isNaN(parsed) || parsed <= 0) {
-      setQuickAmountError("Amount must be a number greater than 0");
+      Alert.alert("Invalid amount", "Please enter a valid amount greater than 0.");
       return;
     }
-    setQuickAmountError(null);
 
     setSavingExpense(true);
     try {
       const today = new Date().toISOString().split("T")[0];
       await expenseAPI.createExpense(
         getUserId(),
-        quickAmount,
+        quickAmount.trim(),
         quickCategory,
-        quickDescription,
+        quickDescription.trim(),
         today,
+        "CASH"
       );
       // Reset form
       setQuickAmount("");
       setQuickCategory("Food");
       setQuickDescription("");
       setShowQuickAdd(false);
+      
       // Record in notification history
       await addHistoryItem({
         type: "expense_added",
@@ -220,36 +328,202 @@ export default function HomeScreen() {
         data: { screen: "history" },
       });
       getUnreadCount().then(setUnreadCount);
+      
       // Refresh data
-      await fetchExpenses();
+      await fetchData(false);
       Alert.alert("✅ Added", `GHS ${parsed.toFixed(2)} in ${quickCategory} recorded.`);
-    } catch {
+    } catch (error) {
       Alert.alert("Error", "Could not save expense. Please try again.");
+      console.log("Quick add error:", error);
     } finally {
       setSavingExpense(false);
     }
   }
 
-  const totalSpent = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
-  const categoryTotals = expenses.reduce((acc: any, e) => {
-    acc[e.category] = (acc[e.category] || 0) + parseFloat(e.amount);
+  // Calculate Dynamic Spending & Budget sums
+  const totalSpent = expenses
+    .filter(e => parseFloat(e.amount || '0') < 0)
+    .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || '0')), 0);
+  const totalIncome = expenses
+    .filter(e => parseFloat(e.amount || '0') > 0)
+    .reduce((sum, e) => sum + parseFloat(e.amount || '0'), 0);
+  const totalBudget = budgets.reduce((sum, b) => sum + parseFloat(b.monthlyLimit || '0'), 0);
+  const remaining = totalBudget - totalSpent;
+
+  // Split formatted total spent for premium large-integer / small-decimal layout
+  const formattedTotal = totalSpent.toFixed(2);
+  const parts = formattedTotal.split('.');
+  const integerPart = parseFloat(parts[0]).toLocaleString();
+  const decimalPart = parts[1];
+
+  // Group expenses dynamically by Category (spending only)
+  const categoryTotals = expenses.reduce((acc: { [key: string]: number }, e) => {
+    const category = e.category || 'Other';
+    const numAmt = parseFloat(e.amount || '0');
+    if (numAmt < 0) {
+      acc[category] = (acc[category] || 0) + Math.abs(numAmt);
+    }
     return acc;
   }, {});
+
+  // Sort and slice recent 3 expenses
   const recentExpenses = [...expenses]
     .sort((a, b) => {
       const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
       if (dateDiff !== 0) return dateDiff;
-      // Same date — sort by creation time so newest shows first
       const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return bCreated - aCreated;
     })
     .slice(0, 3);
 
+  // Dynamic chart data calculation based on selected timeline
+  const getChartData = () => {
+    const now = new Date();
+    
+    const parseLocalDate = (dateStr: string) => {
+      if (!dateStr) return new Date();
+      const parts = dateStr.split('-');
+      if (parts.length < 3) return new Date(dateStr);
+      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    };
+
+    const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const SHORT_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+    if (chartTimeline === 'day') {
+      // Last 7 days
+      const chartBars = [];
+      let sum = 0;
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const dayLabel = SHORT_DAYS[d.getDay()];
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const dateKey = `${year}-${month}-${day}`;
+        
+        const daySpend = expenses
+          .filter(e => e.date === dateKey && parseFloat(e.amount || '0') < 0)
+          .reduce((s, e) => s + Math.abs(parseFloat(e.amount) || 0), 0);
+        
+        sum += daySpend;
+        chartBars.push({ day: dayLabel, spend: daySpend });
+      }
+      return { chartBars, chartSum: sum };
+    }
+
+    if (chartTimeline === 'week') {
+      // Last 4 weeks relative to today
+      const chartBars = [];
+      let sum = 0;
+      for (let i = 3; i >= 0; i--) {
+        const start = new Date(now);
+        start.setDate(now.getDate() - (i + 1) * 7 + 1);
+        start.setHours(0, 0, 0, 0);
+        
+        const end = new Date(now);
+        end.setDate(now.getDate() - i * 7);
+        end.setHours(23, 59, 59, 999);
+
+        const weekSpend = expenses.filter(e => {
+          if (!e.date) return false;
+          const ed = parseLocalDate(e.date);
+          return ed >= start && ed <= end && parseFloat(e.amount || '0') < 0;
+        }).reduce((s, e) => s + Math.abs(parseFloat(e.amount) || 0), 0);
+
+        sum += weekSpend;
+        chartBars.push({ day: `W${4 - i}`, spend: weekSpend });
+      }
+      return { chartBars, chartSum: sum };
+    }
+
+    if (chartTimeline === 'month') {
+      // Last 6 months
+      const chartBars = [];
+      let sum = 0;
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const label = SHORT_MONTHS[d.getMonth()];
+        const yr = d.getFullYear();
+        const mo = d.getMonth() + 1;
+
+        const monthSpend = expenses.filter(e => {
+          if (!e.date) return false;
+          const ed = parseLocalDate(e.date);
+          return ed.getFullYear() === yr && (ed.getMonth() + 1) === mo && parseFloat(e.amount || '0') < 0;
+        }).reduce((s, e) => s + Math.abs(parseFloat(e.amount) || 0), 0);
+
+        sum += monthSpend;
+        chartBars.push({ day: label, spend: monthSpend });
+      }
+      return { chartBars, chartSum: sum };
+    }
+
+    // Yearly: Last 3 years
+    const chartBars = [];
+    let sum = 0;
+    for (let i = 2; i >= 0; i--) {
+      const yr = now.getFullYear() - i;
+      const yearSpend = expenses.filter(e => {
+        if (!e.date) return false;
+        const ed = parseLocalDate(e.date);
+        return ed.getFullYear() === yr && parseFloat(e.amount || '0') < 0;
+      }).reduce((s, e) => s + Math.abs(parseFloat(e.amount) || 0), 0);
+
+      sum += yearSpend;
+      chartBars.push({ day: String(yr), spend: yearSpend });
+    }
+    return { chartBars, chartSum: sum };
+  };
+
+  const { chartBars, chartSum } = getChartData();
+
+  const { width: screenWidth } = Dimensions.get('window');
+  const chartWidth = screenWidth - 88; // 20*2 screen horizontal padding + 24*2 card padding
+  const chartHeight = 140;
+  const paddingVertical = 25;
+  const chartInset = 16;
+  const plotWidth = chartWidth - 2 * chartInset;
+  const plotHeight = chartHeight - 2 * paddingVertical;
+  const maxSpendVal = Math.max(...chartBars.map(b => b.spend), 0);
+
+  const points = chartBars.map((bar, idx) => {
+    const x = chartBars.length > 1
+      ? chartInset + (plotWidth / (chartBars.length - 1)) * idx
+      : chartInset + plotWidth / 2;
+    const y = maxSpendVal > 0 
+      ? chartHeight - (paddingVertical + (bar.spend / maxSpendVal) * plotHeight)
+      : chartHeight / 2;
+    return { x, y, ...bar };
+  });
+
+  const curveSegments: { x1: number; y1: number; x2: number; y2: number }[] = [];
+  const steps = 12;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    for (let j = 0; j < steps; j++) {
+      const t1 = j / steps;
+      const t2 = (j + 1) / steps;
+      
+      const mu1 = (1 - Math.cos(t1 * Math.PI)) / 2;
+      const mu2 = (1 - Math.cos(t2 * Math.PI)) / 2;
+      
+      const x1 = p1.x + t1 * (p2.x - p1.x);
+      const x2 = p1.x + t2 * (p2.x - p1.x);
+      const y1 = p1.y + mu1 * (p2.y - p1.y);
+      const y2 = p1.y + mu2 * (p2.y - p1.y);
+      
+      curveSegments.push({ x1, y1, x2, y2 });
+    }
+  }
+
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#00C896" />
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -257,22 +531,78 @@ export default function HomeScreen() {
   if (error && expenses.length === 0) {
     return (
       <ScrollView
-        style={{ flex: 1, backgroundColor: "#0F1117" }}
-        contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "center" }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+        style={[styles.container, { backgroundColor: colors.background }]}
+        contentContainerStyle={[styles.centered, { backgroundColor: colors.background }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
-        <Text style={styles.errorText}>{error}</Text>
+        <Text style={styles.errorIcon}>⚠️</Text>
+        <Text style={[styles.errorText, { color: colors.textSecondary }]}>{error}</Text>
+        <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={() => fetchData(true)}>
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
       </ScrollView>
     );
   }
 
   return (
-    <View style={styles.wrapper}>
+    <View style={[styles.wrapper, { backgroundColor: colors.background }]}>
       <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+        style={[styles.container, { backgroundColor: colors.background }]}
+        contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 24) }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
+        keyboardShouldPersistTaps="handled"
       >
+        {/* Header Row */}
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={[styles.welcomeText, { color: colors.textSecondary }]}>Welcome back 👋</Text>
+            <Text style={[styles.greetingText, { color: colors.text }]}>Good day, {userName}</Text>
+          </View>
+          <View style={styles.headerRightActions}>
+            {/* Notification bell */}
+            <TouchableOpacity
+              style={[styles.headerActionButton, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
+              onPress={() => router.push('/notification-history')}
+              activeOpacity={0.8}
+            >
+              <Feather name="bell" size={20} color={colors.text} />
+              {unreadCount > 0 && (
+                <View style={styles.bellBadge}>
+                  <Text style={styles.bellBadgeText}>
+                    {unreadCount > 9 ? "9+" : String(unreadCount)}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* Reminders icon */}
+            <TouchableOpacity
+              style={[styles.headerActionButton, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
+              onPress={() => router.push('/(tabs)/reminders')}
+              activeOpacity={0.8}
+            >
+              <Feather name="calendar" size={20} color={colors.text} />
+            </TouchableOpacity>
+
+            {/* Profile Avatar */}
+            <TouchableOpacity
+              style={[styles.avatarButton, { borderColor: colors.border }]}
+              onPress={() => router.push('/(tabs)/profile')}
+              activeOpacity={0.8}
+            >
+              {profileImage ? (
+                <Image source={{ uri: profileImage }} style={styles.avatarImage} />
+              ) : (
+                <View style={[styles.avatarPlaceholder, { backgroundColor: colors.neutralBg }]}>
+                  <Text style={[styles.avatarText, { color: colors.textSecondary }]}>
+                    {userName.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* Budget Alerts */}
         {budgetAlerts.length > 0 && (
           <View style={styles.alertsSection}>
@@ -283,12 +613,12 @@ export default function HomeScreen() {
                   styles.alertCard,
                   alert.isOverBudget ? styles.alertCardOver : styles.alertCardNear,
                 ]}
-                onPress={() => router.push('/(tabs)/budget-overview')}
-                activeOpacity={0.7}
+                onPress={() => router.push('/(tabs)/budget')}
+                activeOpacity={0.75}
               >
                 <Text style={styles.alertIcon}>{alert.isOverBudget ? "🚨" : "⚠️"}</Text>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.alertTitle, { color: alert.isOverBudget ? "#E05C5C" : "#F7A84F" }]}>
+                  <Text style={[styles.alertTitle, alert.isOverBudget ? styles.alertTitleOver : styles.alertTitleNear]}>
                     {alert.isOverBudget ? "Over budget" : "Near limit"} — {alert.category}
                   </Text>
                   <Text style={styles.alertSub}>
@@ -301,58 +631,101 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Top row: greeting + notification bell */}
-        <View style={styles.topRow}>
-          <View>
-            <Text style={styles.greeting}>Good day, {userName} 👋</Text>
-            <Text style={styles.subtitle}>Here's your spending summary</Text>
+        {/* Expenses Overview Card */}
+        <View style={styles.expensesCard}>
+          <View style={styles.radialCircle1} />
+          <View style={styles.radialCircle2} />
+          <View style={styles.radialCircle3} />
+
+          <View style={styles.expensesCardHeader}>
+            <Text style={styles.expensesCardLabel}>your Expenses</Text>
           </View>
-          <TouchableOpacity
-            style={styles.bellBtn}
-            onPress={() => router.push("/notification-history")}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.bellIcon}>🔔</Text>
-            {unreadCount > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>
-                  {unreadCount > 9 ? "9+" : String(unreadCount)}
+
+          <View style={styles.amountRow}>
+            <Text style={styles.currencySymbol}>GHS </Text>
+            <Text style={styles.amountInteger}>{integerPart}</Text>
+            <Text style={styles.amountFraction}>.{decimalPart}</Text>
+          </View>
+
+          <View style={[styles.trendRow, { gap: 8 }]}>
+            <View style={styles.trendBadge}>
+              <Text style={styles.trendText}>
+                {expenses.length} transaction{expenses.length !== 1 ? 's' : ''}
+              </Text>
+            </View>
+            {totalIncome > 0 && (
+              <View style={[styles.trendBadge, { backgroundColor: colors.positive + '20' }]}>
+                <Text style={[styles.trendText, { color: colors.positive, fontWeight: 'bold' }]}>
+                  +GHS {totalIncome.toFixed(2)}
                 </Text>
               </View>
             )}
-          </TouchableOpacity>
+          </View>
+
+          {totalBudget > 0 && (
+            <>
+              <View style={styles.progressContainer}>
+                <View style={styles.progressBg}>
+                  <View
+                    style={[
+                      styles.progressBar,
+                      {
+                        width: `${Math.min((totalSpent / totalBudget) * 100, 100)}%` as any,
+                      },
+                    ]}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.budgetStatsRow}>
+                <Text style={styles.budgetValue}>Budget: GHS {totalBudget.toLocaleString()}</Text>
+                <Text style={styles.remainingValue}>
+                  {remaining >= 0
+                    ? `Remaining: GHS ${remaining.toLocaleString()}`
+                    : `Overspent: GHS ${Math.abs(remaining).toLocaleString()}`}
+                </Text>
+              </View>
+            </>
+          )}
         </View>
-        <View style={styles.totalCard}>
-          <Text style={styles.totalLabel}>Total Spent</Text>
-          <Text style={styles.totalAmount}>GHS {totalSpent.toFixed(2)}</Text>
-          <Text style={styles.totalSub}>{expenses.length} expenses recorded</Text>
-        </View>
-        {/* Payment Methods Card */}
+
+        {/* MTN MoMo Wallet Balance Card */}
         <View style={[
           styles.momoCard,
           momoStatus === "unavailable" && styles.momoCardUnavailable,
         ]}>
-          {/* Card header — always visible */}
           <View style={styles.momoCardHeader}>
-            <Text style={styles.momoCardIcon}>💳</Text>
-            <Text style={styles.momoCardTitle}>Payment Methods</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+              <Text style={styles.momoCardIcon}>📱</Text>
+              <Text style={styles.momoCardTitle}>MTN MoMo Sandbox Wallet</Text>
+            </View>
+            {!momoBalanceLoading && momoStatus === "available" && (
+              <TouchableOpacity
+                onPress={toggleHideMomoBalance}
+                style={styles.hideMomoBtn}
+                activeOpacity={0.7}
+              >
+                {hideMomoBalance ? (
+                  <EyelashClosedIcon size={18} color="#D97706" />
+                ) : (
+                  <EyelashOpenIcon size={18} color="#D97706" />
+                )}
+              </TouchableOpacity>
+            )}
           </View>
 
-          {/* MoMo subsection */}
-          <Text style={styles.pmSubheader}>📱 MTN MoMo Wallet</Text>
-
-          {/* State 1 — Loading */}
           {momoBalanceLoading && (
             <View style={styles.momoStateRow}>
-              <ActivityIndicator color="#FFC107" size="small" />
-              <Text style={styles.momoLoadingText}>Fetching balance...</Text>
+              <ActivityIndicator color="#D97706" size="small" />
+              <Text style={styles.momoLoadingText}>Fetching sandbox balance...</Text>
             </View>
           )}
 
-          {/* State 2 — Available */}
           {!momoBalanceLoading && momoStatus === "available" && (
             <View>
-              <Text style={styles.momoBalance}>GHS {momoBalance}</Text>
+              <Text style={styles.momoBalance}>
+                {hideMomoBalance ? "GHS ••••••" : `GHS ${momoBalance}`}
+              </Text>
               <Text style={styles.momoSpentSub}>
                 GHS {momoMonthlySpent} spent via MoMo this month
               </Text>
@@ -366,7 +739,6 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* State 3 — Unavailable */}
           {!momoBalanceLoading && momoStatus === "unavailable" && (
             <View>
               <View style={styles.momoStateRow}>
@@ -390,117 +762,195 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
           )}
-
         </View>
 
-        {/* Pay Vendor button */}
-        <TouchableOpacity
-          style={styles.payVendorButton}
-          onPress={() => router.push("/pay-vendor")}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.payVendorButtonText}>📤  Pay Vendor via MoMo</Text>
-        </TouchableOpacity>
+        {/* Spending Activity Chart Card */}
+        <View style={styles.chartCard}>
+          <View style={styles.chartHeader}>
+            <View>
+              <Text style={styles.chartTitle}>Spending Activity</Text>
+              <Text style={styles.chartTotal}>
+                GHS {chartSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Text>
+            </View>
 
-        {Object.keys(categoryTotals).length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>By Category</Text>
-            {Object.entries(categoryTotals).map(([category, total]: any) => (
-              <View key={category} style={styles.categoryRow}>
-                <Text style={styles.categoryIcon}>
-                  {CATEGORY_ICONS[category] || "📦"}
-                </Text>
-                <Text style={styles.categoryName}>{category}</Text>
-                <Text style={styles.categoryAmount}>GHS {total.toFixed(2)}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-        {recentExpenses.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Recent Expenses</Text>
-            {recentExpenses.map((expense) => (
-              <View key={expense.id} style={styles.expenseRow}>
-                <View>
-                  <Text style={styles.expenseName}>
-                    {expense.description || expense.category}
-                  </Text>
-                  <Text style={styles.expenseDate}>{formatDate(expense.date)}</Text>
-                </View>
-                <Text style={styles.expenseAmount}>
-                  GHS {parseFloat(expense.amount).toFixed(2)}
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
-        {upcomingReminders.length > 0 && (() => {
-          const today = new Date().toISOString().split("T")[0];
-          const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0];
-          return (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Upcoming Bills 🔔</Text>
-              {upcomingReminders.map((reminder) => {
-                const isUrgent = reminder.dueDate === today || reminder.dueDate === tomorrow;
+            {/* Timeline Filter Segmented Control */}
+            <View style={styles.timelineFilterMini}>
+              {(['day', 'week', 'month', 'year'] as const).map((filter) => {
+                const labelMap = { day: 'D', week: 'W', month: 'M', year: 'Y' };
+                const isActive = chartTimeline === filter;
                 return (
                   <TouchableOpacity
-                    key={reminder.id}
-                    style={[styles.reminderCard, isUrgent && styles.reminderCardUrgent]}
-                    onPress={() => router.push('/(tabs)/reminders')}
-                    activeOpacity={0.7}
+                    key={filter}
+                    style={[styles.timelineMiniBtn, isActive && styles.timelineMiniBtnActive]}
+                    onPress={() => setChartTimeline(filter)}
+                    activeOpacity={0.8}
                   >
-                    <View style={styles.reminderIcon}>
-                      <Text style={{ fontSize: 18 }}>🔔</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.reminderTitle}>{reminder.title}</Text>
-                      {reminder.dueDate && (
-                        <Text style={styles.reminderDate}>Due: {formatDate(reminder.dueDate)}</Text>
-                      )}
-                    </View>
-                    {reminder.isPaid ? (
-                      <View style={styles.paidBadge}>
-                        <Text style={styles.paidBadgeText}>Paid</Text>
-                      </View>
-                    ) : reminder.amount != null ? (
-                      <Text style={styles.reminderAmount}>
-                        GHS {parseFloat(reminder.amount).toFixed(2)}
-                      </Text>
-                    ) : null}
-                    <Text style={styles.cardChevron}>›</Text>
+                    <Text style={[styles.timelineMiniText, isActive && styles.timelineMiniTextActive]}>
+                      {labelMap[filter]}
+                    </Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
-          );
-        })()}
+          </View>
 
-        {expenses.length === 0 && (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>💰</Text>
-            <Text style={styles.emptyText}>No expenses yet</Text>
-            <Text style={styles.emptySubtext}>
-              Start tracking your spending by adding your first expense
-            </Text>
-            <TouchableOpacity
-              style={styles.emptyButton}
-              onPress={() => router.push("/(tabs)/add")}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.emptyButtonText}>Add Your First Expense</Text>
-            </TouchableOpacity>
+          <View style={styles.chartContainer}>
+            {/* Horizontal Grid Lines */}
+            <View style={[styles.gridLineHorizontal, { top: paddingVertical }]} />
+            <View style={[styles.gridLineHorizontal, { top: chartHeight / 2 }]} />
+            <View style={[styles.gridLineHorizontal, { top: chartHeight - paddingVertical }]} />
+
+            {/* Connection Line Segments (Smooth Cosine Wave Curve) */}
+            {curveSegments.map((seg, idx) => {
+              const lineStyle = getLineStyle(seg.x1, seg.y1, seg.x2, seg.y2);
+              return (
+                <View
+                  key={`line-${idx}`}
+                  style={lineStyle}
+                />
+              );
+            })}
+
+            {/* Data Points (Dots) */}
+            {points.map((point, idx) => (
+              <View
+                key={`dot-${idx}`}
+                style={[
+                  styles.chartDot,
+                  {
+                    left: point.x - 6,
+                    top: point.y - 6,
+                  }
+                ]}
+              />
+            ))}
+          </View>
+
+          {/* Separated Timeline Labels */}
+          <View style={styles.chartDaysContainer}>
+            {points.map((point, idx) => (
+              <View
+                key={`timeline-label-${idx}`}
+                style={[
+                  styles.chartDayCol,
+                  {
+                    left: point.x - 20,
+                  }
+                ]}
+              >
+                <Text style={styles.chartDayText}>{point.day}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* By Category Section */}
+        {Object.keys(categoryTotals).length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>By Category</Text>
+            {Object.entries(categoryTotals).map(([category, total]: any) => {
+              const percentage = totalSpent > 0 ? (total / totalSpent) * 100 : 0;
+              return (
+                <View key={category} style={styles.categoryRow}>
+                  <View style={styles.categoryInfoLeft}>
+                    <View style={styles.categoryIconCircle}>
+                      <Text style={styles.categoryIcon}>{CATEGORY_ICONS[category] || '📦'}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.categoryName}>{category}</Text>
+                      <Text style={styles.categoryDetails}>
+                        GHS {total.toFixed(2)} spent • {percentage.toFixed(0)}%
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.categoryPercentage}>
+                    {percentage.toFixed(0)}%
+                  </Text>
+                </View>
+              );
+            })}
           </View>
         )}
+
+        {/* Recent Expenses List */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>Recent Transactions</Text>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/history')} activeOpacity={0.7}>
+              <Text style={styles.seeAllText}>See All</Text>
+            </TouchableOpacity>
+          </View>
+
+          {recentExpenses.length === 0 ? (
+            <Text style={styles.emptyText}>No expenses yet</Text>
+          ) : (
+            recentExpenses.map((item) => {
+              const isShared = item.isShared || item.type === "shared";
+              const isMomo = item.paymentMethod === "MOMO";
+              const { cleanDescription, tags } = parseTagsFromDescription(item.description);
+              
+              return (
+                <View key={item.id} style={[styles.expenseCard, isShared && styles.sharedCard]}>
+                  <View style={styles.expenseLeft}>
+                    <View style={styles.iconBox}>
+                      <Text style={styles.icon}>{CATEGORY_ICONS[isShared ? 'Shared' : item.category] || '📦'}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={styles.descRow}>
+                        <Text style={styles.expenseDescription} numberOfLines={1}>
+                          {cleanDescription || item.category}
+                        </Text>
+                      </View>
+                      <Text style={styles.expenseCategory}>{item.category} • {item.date}</Text>
+
+                      <View style={styles.badgeRow}>
+                        {isShared && (
+                          <View style={styles.sharedBadge}>
+                            <Text style={styles.sharedBadgeText}>👥 Shared</Text>
+                          </View>
+                        )}
+                        <View style={[styles.paymentBadge, isMomo && styles.momoBadge]}>
+                          <Text style={[styles.paymentBadgeText, isMomo && styles.momoBadgeText]}>
+                            {isMomo ? "📱 MoMo" : "💵 Cash"}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {tags.length > 0 && (
+                        <View style={styles.tagsContainer}>
+                          {tags.map((tag: string) => (
+                            <View key={tag} style={styles.tagPill}>
+                              <Text style={styles.tagText}>{tag}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                  <Text style={[
+                    styles.expenseAmount,
+                    { color: parseFloat(item.amount || '0') >= 0 ? colors.positive : colors.negative }
+                  ]}>
+                    {parseFloat(item.amount || '0') >= 0 
+                      ? `+GHS ${parseFloat(item.amount || '0').toFixed(2)}` 
+                      : `-GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`}
+                  </Text>
+                </View>
+              );
+            })
+          )}
+        </View>
 
         {/* Bottom padding so FAB doesn't cover last item */}
         <View style={{ height: 80 }} />
       </ScrollView>
 
-      {/* Floating "+" button */}
+      {/* Floating Action Button (FAB) */}
       <TouchableOpacity
         style={styles.fab}
         onPress={() => setShowQuickAdd(true)}
-        activeOpacity={0.7}
+        activeOpacity={0.85}
       >
         <Text style={styles.fabText}>+</Text>
       </TouchableOpacity>
@@ -524,22 +974,16 @@ export default function HomeScreen() {
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Quick Add Expense</Text>
 
-            {/* Amount */}
+            {/* Amount input */}
             <TextInput
-              style={styles.amountInput}
+              style={styles.quickAmountInput}
               value={quickAmount}
-              onChangeText={(text) => {
-                setQuickAmount(text);
-                if (quickAmountError) setQuickAmountError(null);
-              }}
+              onChangeText={setQuickAmount}
               placeholder="0.00"
-              placeholderTextColor="#8890A040"
+              placeholderTextColor="#8E9AA640"
               keyboardType="decimal-pad"
               autoFocus
             />
-            {quickAmountError && (
-              <Text style={styles.fieldError}>{quickAmountError}</Text>
-            )}
 
             {/* Category selector */}
             <ScrollView
@@ -556,7 +1000,7 @@ export default function HomeScreen() {
                     quickCategory === cat && styles.categoryChipActive,
                   ]}
                   onPress={() => setQuickCategory(cat)}
-                  activeOpacity={0.7}
+                  activeOpacity={0.8}
                 >
                   <Text style={styles.categoryChipIcon}>{CATEGORY_ICONS[cat]}</Text>
                   <Text style={[
@@ -575,7 +1019,7 @@ export default function HomeScreen() {
               value={quickDescription}
               onChangeText={setQuickDescription}
               placeholder="Description (optional)"
-              placeholderTextColor="#8890A080"
+              placeholderTextColor="#8E9AA680"
             />
 
             {/* Buttons */}
@@ -587,7 +1031,6 @@ export default function HomeScreen() {
                   setQuickAmount("");
                   setQuickCategory("Food");
                   setQuickDescription("");
-                  setQuickAmountError(null);
                 }}
                 activeOpacity={0.7}
               >
@@ -598,10 +1041,10 @@ export default function HomeScreen() {
                 style={[styles.addBtn, savingExpense && { opacity: 0.7 }]}
                 onPress={handleQuickAdd}
                 disabled={savingExpense}
-                activeOpacity={0.7}
+                activeOpacity={0.85}
               >
                 {savingExpense ? (
-                  <ActivityIndicator color="#000000" size="small" />
+                  <ActivityIndicator color="#ffffff" size="small" />
                 ) : (
                   <Text style={styles.addBtnText}>Add Expense</Text>
                 )}
@@ -615,240 +1058,306 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  wrapper: { flex: 1, backgroundColor: "#0F1117", position: "relative" },
-  container: { flex: 1, backgroundColor: "#0F1117" },
+  wrapper: {
+    flex: 1,
+    backgroundColor: '#F2F4F7',
+    position: 'relative'
+  },
+  container: {
+    flex: 1,
+    backgroundColor: '#F2F4F7',
+  },
   centered: {
     flex: 1,
-    backgroundColor: "#0F1117",
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: '#F2F4F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
   },
-  errorText: {
-    color: "#E05C5C",
-    fontSize: 14,
-    textAlign: "center",
-    paddingHorizontal: 24,
+  content: {
+    paddingHorizontal: 20,
+    paddingBottom: 40,
   },
-  content: { padding: 24 },
-  topRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 24,
   },
-  greeting: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#ffffff",
-    marginBottom: 4,
+  welcomeText: {
+    fontSize: 13,
+    color: '#8E9AA6',
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  subtitle: { fontSize: 14, color: "#8890A0" },
-  bellBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#1A1F2E",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#ffffff15",
+  greetingText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#111111',
     marginTop: 2,
   },
-  bellIcon: { fontSize: 20 },
-  badge: {
-    position: "absolute",
-    top: -4,
-    right: -4,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: "#E05C5C",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 3,
-    borderWidth: 2,
-    borderColor: "#0F1117",
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
-  badgeText: { fontSize: 10, color: "#ffffff", fontWeight: "800" },
-  totalCard: {
-    backgroundColor: "#1A1F2E",
-    borderRadius: 16,
-    padding: 24,
-    alignItems: "center",
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: "#00C89630",
-  },
-  totalLabel: { fontSize: 13, color: "#8890A0", marginBottom: 6 },
-  totalAmount: {
-    fontSize: 40,
-    fontWeight: "bold",
-    color: "#00C896",
-    marginBottom: 4,
-  },
-  totalSub: { fontSize: 12, color: "#8890A0" },
-  section: { marginBottom: 24 },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#ffffff",
-    marginBottom: 12,
-  },
-  categoryRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1A1F2E",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: "#ffffff10",
-  },
-  categoryIcon: { fontSize: 20, marginRight: 12 },
-  categoryName: { flex: 1, fontSize: 14, color: "#ffffff", fontWeight: "500" },
-  categoryAmount: { fontSize: 14, fontWeight: "bold", color: "#00C896" },
-  expenseRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#1A1F2E",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: "#ffffff10",
-  },
-  expenseName: {
-    fontSize: 14,
-    color: "#ffffff",
-    fontWeight: "500",
-    marginBottom: 3,
-  },
-  expenseDate: { fontSize: 12, color: "#8890A0" },
-  expenseAmount: { fontSize: 14, fontWeight: "bold", color: "#00C896" },
-  emptyState: { alignItems: "center", paddingTop: 40 },
-  emptyIcon: { fontSize: 48, marginBottom: 16 },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#ffffff",
-    marginBottom: 8,
-  },
-  emptySubtext: { fontSize: 14, color: "#8890A0", textAlign: "center", marginBottom: 24 },
-  emptyButton: {
-    backgroundColor: "#00C896",
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-  },
-  emptyButtonText: {
-    color: "#000000",
-    fontSize: 15,
-    fontWeight: "bold",
-  },
-  reminderCard: {
-    backgroundColor: "#1A1F2E",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#ffffff10",
-  },
-  reminderCardUrgent: {
-    borderColor: "#F7A84F",
-  },
-  reminderIcon: {
+  headerActionButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#00C89620",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  reminderTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#ffffff",
-  },
-  reminderDate: {
-    fontSize: 12,
-    color: "#8890A0",
-    marginTop: 2,
-  },
-  reminderAmount: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#00C896",
-  },
-  paidBadge: {
-    backgroundColor: "#ffffff10",
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  paidBadgeText: {
-    fontSize: 12,
-    color: "#8890A0",
-    fontWeight: "600",
-  },
-  cardChevron: {
-    fontSize: 20,
-    color: "#8890A0",
+  bellBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#FF3B30',
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 4,
-    alignSelf: "center",
   },
+  bellBadgeText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: 'bold',
+  },
+  avatarButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#111111',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  
+  // Budget Alerts
   alertsSection: {
-    marginBottom: 16,
+    marginBottom: 20,
     gap: 8,
   },
   alertCard: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: 20,
+    padding: 16,
     borderWidth: 1,
-    gap: 10,
   },
   alertCardOver: {
-    backgroundColor: "#E05C5C15",
-    borderColor: "#E05C5C",
+    backgroundColor: "#FF3B300a",
+    borderColor: "#FF3B3020",
   },
   alertCardNear: {
-    backgroundColor: "#F7A84F15",
-    borderColor: "#F7A84F",
+    backgroundColor: "#FF95000a",
+    borderColor: "#FF950020",
   },
   alertIcon: {
-    fontSize: 20,
+    fontSize: 24,
+    marginRight: 12,
   },
   alertTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     marginBottom: 2,
   },
+  alertTitleOver: {
+    color: "#FF3B30",
+  },
+  alertTitleNear: {
+    color: "#FF9500",
+  },
   alertSub: {
     fontSize: 12,
-    color: "#8890A0",
+    color: "#8E9AA6",
+  },
+  cardChevron: {
+    fontSize: 20,
+    color: "#8E9AA6",
+    marginLeft: 8,
   },
 
-  // MoMo wallet card
+  // Expenses Overview Card
+  expensesCard: {
+    backgroundColor: '#111111', // Black card backdrop
+    borderRadius: 32,
+    padding: 24,
+    marginBottom: 20,
+    position: 'relative',
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  radialCircle1: {
+    position: 'absolute',
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: '#8B5CF6',
+    opacity: 0.15,
+    top: -120,
+    right: -80,
+  },
+  radialCircle2: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: '#D97706',
+    opacity: 0.1,
+    bottom: -90,
+    left: -40,
+  },
+  radialCircle3: {
+    position: 'absolute',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: '#FF3B30',
+    opacity: 0.05,
+    top: 40,
+    left: 80,
+  },
+  expensesCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  expensesCardLabel: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#8E9AA6',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  amountRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 12,
+  },
+  currencySymbol: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#8E9AA6',
+  },
+  amountInteger: {
+    fontSize: 38,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    letterSpacing: -0.5,
+  },
+  amountFraction: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#8E9AA6',
+  },
+  trendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  trendBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  trendText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  progressContainer: {
+    marginBottom: 10,
+  },
+  progressBg: {
+    height: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: '#8B5CF6', // Purple progress bar
+    borderRadius: 3,
+  },
+  budgetStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  budgetValue: {
+    fontSize: 12,
+    color: '#8E9AA6',
+    fontWeight: '600',
+  },
+  remainingValue: {
+    fontSize: 12,
+    color: '#ffffff',
+    fontWeight: '700',
+  },
+
+  // MoMo Card (Light Premium Redesign)
   momoCard: {
-    backgroundColor: "#1A1F2E",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 24,
+    backgroundColor: "#ffffff",
+    borderRadius: 28,
+    padding: 20,
+    marginBottom: 20,
     borderWidth: 1,
-    borderColor: "#FFC10730",
+    borderColor: "#F59E0B",
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.04,
+    shadowRadius: 16,
+    elevation: 3,
   },
   momoCardUnavailable: {
-    borderColor: "#FFC10730",
+    borderColor: "#F59E0B40",
   },
   momoCardHeader: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 12,
+  },
+  hideMomoBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#F59E0B10',
+    borderWidth: 1,
+    borderColor: '#F59E0B20',
   },
   momoCardIcon: {
     fontSize: 20,
@@ -858,29 +1367,8 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontWeight: "700",
-    color: "#FFC107",
+    color: "#D97706",
   },
-  momoCardTitleGrey: {
-    color: "#8890A0",
-  },
-  pmSubheader: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#8890A0",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 8,
-  },
-  pmDivider: {
-    height: 1,
-    backgroundColor: "#ffffff10",
-    marginVertical: 12,
-  },
-  momoUnavailableIcon: {
-    fontSize: 14,
-    marginRight: 6,
-  },
-  // State 1 — Loading
   momoStateRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -889,28 +1377,22 @@ const styles = StyleSheet.create({
   },
   momoLoadingText: {
     fontSize: 13,
-    color: "#8890A0",
+    color: "#8E9AA6",
   },
-  // State 2 — Available
   momoBalance: {
     fontSize: 28,
     fontWeight: "bold",
-    color: "#FFC107",
+    color: "#D97706",
     marginBottom: 6,
-  },
-  momoSub: {
-    fontSize: 12,
-    color: "#8890A0",
-    marginBottom: 4,
   },
   momoSpentSub: {
     fontSize: 12,
-    color: "#8890A0",
+    color: "#8E9AA6",
     marginBottom: 12,
   },
   momoSpentSubYellow: {
     fontSize: 12,
-    color: "#FFC107",
+    color: "#D97706",
     marginBottom: 12,
   },
   momoRefreshBtn: {
@@ -918,163 +1400,483 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: "#FFC10715",
+    backgroundColor: "#F59E0B10",
     borderWidth: 1,
-    borderColor: "#FFC10740",
+    borderColor: "#F59E0B30",
   },
   momoRefreshText: {
     fontSize: 12,
-    color: "#FFC107",
+    color: "#D97706",
     fontWeight: "600",
   },
-  // State 3 — Unavailable
+  momoUnavailableIcon: {
+    fontSize: 14,
+    marginRight: 6,
+  },
   momoUnavailableTitle: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#8890A0",
-    flexShrink: 1,
+    color: "#D97706",
   },
   momoUnavailableSub: {
-    fontSize: 11,
-    color: "#8890A0",
-    lineHeight: 16,
-    marginBottom: 10,
-    marginTop: 6,
+    fontSize: 12,
+    color: "#8E9AA6",
+    marginBottom: 8,
   },
   momoRetryBtn: {
     alignSelf: "flex-start",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: "#FFC10715",
+    backgroundColor: "#F59E0B10",
     borderWidth: 1,
-    borderColor: "#FFC10740",
+    borderColor: "#F59E0B30",
   },
   momoRetryText: {
     fontSize: 12,
-    color: "#FFC107",
+    color: "#D97706",
     fontWeight: "600",
   },
-  // Pay Vendor button
-  payVendorButton: {
-    borderRadius: 14,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    alignItems: "center",
-    marginBottom: 20,
-    borderWidth: 1.5,
-    borderColor: "#FFC107",
-    backgroundColor: "#FFC10715",
-  },
-  payVendorButtonText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#FFC107",
-  },
-  // FAB
-  fab: {
-    position: "absolute",
-    bottom: 20,
-    right: 20,
-    width: 56,
-    height: 56,
+
+  // Spending Activity Chart Card
+  chartCard: {
+    backgroundColor: '#ffffff',
     borderRadius: 28,
-    backgroundColor: "#00C896",
-    alignItems: "center",
-    justifyContent: "center",
-    elevation: 5,
-    shadowColor: "#000",
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.04,
+    shadowRadius: 16,
+    elevation: 3,
+  },
+  chartHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  chartTitle: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#8E9AA6',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  chartTotal: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#111111',
+    marginTop: 2,
+  },
+  timelineFilterMini: {
+    flexDirection: 'row',
+    backgroundColor: '#F2F4F7',
+    borderRadius: 14,
+    padding: 3,
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+  },
+  timelineMiniBtn: {
+    width: 28,
+    height: 24,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timelineMiniBtnActive: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  timelineMiniText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#8E9AA6',
+  },
+  timelineMiniTextActive: {
+    color: '#111111',
+  },
+  chartContainer: {
+    height: 140,
+    position: 'relative',
+    marginTop: 4,
+  },
+  gridLineHorizontal: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: '#F2F4F7',
+  },
+  chartDot: {
+    position: 'absolute',
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#8B5CF6',
+    borderWidth: 2.5,
+    borderColor: '#ffffff',
+    shadowColor: '#8B5CF6',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
+    elevation: 2,
+    zIndex: 3,
+  },
+  chartDaysContainer: {
+    position: 'relative',
+    height: 20,
+    marginTop: 10,
+  },
+  chartDayCol: {
+    position: 'absolute',
+    width: 40,
+    alignItems: 'center',
+  },
+  chartDayText: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    color: '#8E9AA6',
+  },
+
+  // Category & Recent Sections
+  section: {
+    marginBottom: 24,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#111111',
+  },
+  seeAllText: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: '#8B5CF6', // Purple see all link
+  },
+  categoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.02,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  categoryInfoLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 16,
+  },
+  categoryIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F8F9FA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+  },
+  categoryIcon: {
+    fontSize: 18,
+  },
+  categoryName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111111',
+  },
+  categoryDetails: {
+    fontSize: 11,
+    color: '#8E9AA6',
+    marginTop: 2,
+  },
+  categoryPercentage: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#111111',
+    marginRight: 4,
+  },
+
+  // Expenses & Cards
+  expenseCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 16,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.02,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  sharedCard: {
+    borderColor: '#8B5CF640',
+  },
+  expenseLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 16,
+  },
+  iconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F8F9FA',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+  },
+  icon: {
+    fontSize: 20,
+  },
+  descRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
+  },
+  expenseDescription: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111111',
+  },
+  expenseCategory: {
+    fontSize: 11,
+    color: '#8E9AA6',
+    marginBottom: 6,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 6,
+    flexWrap: 'wrap',
+  },
+  sharedBadge: {
+    backgroundColor: '#8B5CF610',
+    borderWidth: 1,
+    borderColor: '#8B5CF625',
+    borderRadius: 12,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+  },
+  sharedBadgeText: {
+    color: '#8B5CF6',
+    fontSize: 10,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  paymentBadge: {
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+    borderRadius: 12,
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+  },
+  paymentBadgeText: {
+    color: '#8E9AA6',
+    fontSize: 10,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  momoBadge: {
+    backgroundColor: '#F59E0B10',
+    borderColor: '#F59E0B25',
+  },
+  momoBadgeText: {
+    color: '#D97706',
+  },
+  expenseAmount: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#111111',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#8E9AA6',
+    textAlign: 'center',
+    paddingVertical: 20,
+    fontStyle: 'italic',
+  },
+  errorIcon: {
+    fontSize: 48,
+    marginBottom: 16,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#8E9AA6',
+    textAlign: 'center',
+    marginBottom: 24,
+    paddingHorizontal: 24,
+  },
+  retryButton: {
+    backgroundColor: '#111111',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  retryButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+
+  // FAB
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    backgroundColor: '#111111',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 6,
+    zIndex: 999,
   },
   fabText: {
+    color: '#ffffff',
     fontSize: 28,
-    color: "#000000",
-    fontWeight: "bold",
+    fontWeight: '300',
     lineHeight: 32,
+    textAlign: 'center',
   },
-  // Modal
+
+  // Tags styles
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  tagPill: {
+    backgroundColor: '#F2F4F7',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: '#EAEBEF',
+  },
+  tagText: {
+    fontSize: 10,
+    color: '#8E9AA6',
+    fontWeight: '500',
+  },
+
+  // Quick Add Modal (Premium Light Capsule Theme)
   modalOverlay: {
     flex: 1,
     justifyContent: "flex-end",
   },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.4)",
   },
   modalCard: {
-    backgroundColor: "#1A1F2E",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     padding: 24,
     paddingBottom: 40,
+    borderTopWidth: 1,
+    borderColor: "#EAEBEF",
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 10,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#ffffff",
+    color: "#111111",
+    textAlign: 'center',
     marginBottom: 16,
-    textAlign: "center",
   },
-  amountInput: {
+  quickAmountInput: {
     fontSize: 40,
     fontWeight: "bold",
-    color: "#00C896",
+    color: "#111111",
     textAlign: "center",
-    paddingVertical: 12,
-    marginBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#00C89640",
-  },
-  fieldError: {
-    color: "#E05C5C",
-    fontSize: 12,
-    textAlign: "center",
-    marginTop: -14,
-    marginBottom: 14,
+    marginVertical: 12,
+    paddingHorizontal: 16,
+    height: 60,
   },
   categoryScroll: {
-    marginBottom: 16,
+    marginVertical: 12,
   },
   categoryScrollContent: {
-    gap: 8,
-    paddingHorizontal: 2,
+    gap: 10,
+    paddingHorizontal: 4,
   },
   categoryChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    backgroundColor: "#ffffff10",
+    backgroundColor: "#F8F9FA",
     borderWidth: 1,
-    borderColor: "#ffffff15",
+    borderColor: "#EAEBEF",
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    gap: 6,
   },
   categoryChipActive: {
-    backgroundColor: "#00C89620",
-    borderColor: "#00C896",
+    borderColor: "#111111",
+    backgroundColor: "#11111105",
   },
-  categoryChipIcon: { fontSize: 16 },
+  categoryChipIcon: {
+    fontSize: 16,
+  },
   categoryChipText: {
     fontSize: 13,
-    color: "#8890A0",
-    fontWeight: "500",
+    fontWeight: "600",
+    color: "#8E9AA6",
   },
   categoryChipTextActive: {
-    color: "#00C896",
-    fontWeight: "700",
+    color: "#111111",
   },
   descriptionInput: {
-    backgroundColor: "#0F1117",
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 14,
-    color: "#ffffff",
-    marginBottom: 20,
+    backgroundColor: "#F8F9FA",
+    borderRadius: 16,
+    padding: 16,
+    color: "#111111",
+    fontSize: 15,
     borderWidth: 1,
-    borderColor: "#ffffff15",
+    borderColor: "#EAEBEF",
+    marginTop: 8,
+    marginBottom: 20,
   },
   modalButtons: {
     flexDirection: "row",
@@ -1085,24 +1887,26 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#ffffff30",
+    borderColor: "#EAEBEF",
     alignItems: "center",
+    backgroundColor: "#ffffff",
   },
   cancelBtnText: {
     fontSize: 15,
-    color: "#8890A0",
+    color: "#8E9AA6",
     fontWeight: "600",
   },
   addBtn: {
     flex: 2,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: "#00C896",
+    backgroundColor: "#111111",
     alignItems: "center",
+    justifyContent: "center",
   },
   addBtnText: {
-    fontSize: 15,
-    color: "#000000",
+    color: "#ffffff",
     fontWeight: "bold",
+    fontSize: 16,
   },
 });

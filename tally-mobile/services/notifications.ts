@@ -3,6 +3,17 @@ import * as Device from "expo-device";
 import { Platform } from "react-native";
 import { addHistoryItem } from "./notificationHistory";
 
+// This tells Expo how to show notifications when the app is open
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
+
 // Ask the user for permission and get their push token
 export async function registerForPushNotifications(): Promise<string | null> {
   if (!Device.isDevice) {
@@ -80,7 +91,7 @@ export async function notifyBudgetWarning(
   await sendLocalNotification(
     "⚠️ Budget Warning",
     `You've used ${percentage.toFixed(0)}% of your ${category} budget`,
-    { screen: "budget-overview" },
+    { screen: "budget" },
   );
 }
 
