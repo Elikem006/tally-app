@@ -26,6 +26,12 @@ public class MoMoController {
     @Autowired
     private ExpenseService expenseService;
 
+    // In-memory balance cache — avoids hitting the MoMo sandbox on every Home screen load
+    private String cachedBalance = null;
+    private String cachedCurrency = "EUR";
+    private long lastBalanceFetch = 0;
+    private static final long CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+
     // Exceptions like NullPointerException can carry a null message — Map.of rejects null values
     private static String errorMessage(Exception e) {
         return e.getMessage() != null ? e.getMessage() : "An unexpected error occurred";
@@ -100,26 +106,58 @@ public class MoMoController {
     /**
      * GET /api/momo/balance
      * Returns the MoMo collection account balance from the sandbox.
-     * The MoMo sandbox balance endpoint returns 503 occasionally — this is normal
-     * sandbox behaviour. We return a graceful fallback instead of propagating an error.
+     * Caches the result for 5 minutes to avoid hammering the sandbox on every Home screen load.
+     * Falls back to the last cached value when the sandbox is unavailable.
      */
     @GetMapping("/balance")
     public ResponseEntity<?> getBalance() {
+        long now = System.currentTimeMillis();
+
+        // Serve from cache if still fresh
+        if (cachedBalance != null && (now - lastBalanceFetch) < CACHE_DURATION_MS) {
+            Map<String, Object> cached = new HashMap<>();
+            cached.put("availableBalance", cachedBalance);
+            cached.put("currency", cachedCurrency);
+            cached.put("status", "available");
+            cached.put("cached", true);
+            cached.put("success", true);
+            return ResponseEntity.ok(cached);
+        }
+
         try {
             Map<String, String> balance = moMoService.getAccountBalance();
-            // Build a new Map<String, Object> so we can add the boolean success field
+
+            // Update cache
+            cachedBalance = balance.getOrDefault("availableBalance", "0.00");
+            cachedCurrency = balance.getOrDefault("currency", "EUR");
+            lastBalanceFetch = now;
+
             Map<String, Object> response = new HashMap<>();
-            response.put("availableBalance", balance.getOrDefault("availableBalance", "0"));
-            response.put("currency", balance.getOrDefault("currency", ""));
+            response.put("availableBalance", cachedBalance);
+            response.put("currency", cachedCurrency);
             response.put("status", "available");
+            response.put("cached", false);
             response.put("success", true);
             return ResponseEntity.ok(response);
+
         } catch (Exception e) {
             String msg = e.getMessage() != null ? e.getMessage() : "";
-            // Sandbox returns 503 SERVICE_UNAVAILABLE intermittently — treat it as
-            // a soft failure and return a fallback so the frontend can degrade gracefully.
-            if (msg.contains("503") || msg.contains("SERVICE_UNAVAILABLE")) {
-                log.warning("MoMo sandbox balance returned 503 — returning fallback response");
+
+            // If we have a stale cached value, return it rather than failing hard
+            if (cachedBalance != null) {
+                log.warning("MoMo balance fetch failed — serving stale cache: " + msg);
+                Map<String, Object> stale = new HashMap<>();
+                stale.put("availableBalance", cachedBalance);
+                stale.put("currency", cachedCurrency);
+                stale.put("status", "cached");
+                stale.put("cached", true);
+                stale.put("success", true);
+                return ResponseEntity.ok(stale);
+            }
+
+            // Sandbox 503 is common — return graceful fallback instead of an error
+            if (msg.contains("503") || msg.contains("SERVICE_UNAVAILABLE") || msg.contains("timeout")) {
+                log.warning("MoMo sandbox balance unavailable (503/timeout) — returning fallback");
                 return ResponseEntity.ok(Map.of(
                         "availableBalance", "0.00",
                         "currency",         "EUR",
@@ -128,9 +166,15 @@ public class MoMoController {
                         "success",          true
                 ));
             }
-            log.severe("MoMo balance error: " + e.getMessage());
-            return ResponseEntity.badRequest()
-                    .body(Map.of("error", errorMessage(e), "success", false));
+
+            log.severe("MoMo balance error: " + msg);
+            return ResponseEntity.ok(Map.of(
+                    "availableBalance", "0.00",
+                    "currency",         "EUR",
+                    "status",           "unavailable",
+                    "message",          "MoMo service temporarily unavailable",
+                    "success",          true
+            ));
         }
     }
 

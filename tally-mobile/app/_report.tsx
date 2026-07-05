@@ -82,8 +82,8 @@ export default function ReportScreen() {
       try {
         const res = await expenseAPI.getCombinedHistory(getUserId());
         setExpenses(res.data || []);
-      } catch (e) {
-        console.log("Error fetching expenses for report:", e);
+      } catch {
+        // Non-critical — chart renders empty
       }
     }
     fetchExpensesData();

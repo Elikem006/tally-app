@@ -53,12 +53,11 @@ export default function GroupsScreen() {
             ...prev,
             [String(group.id)]: summary,
           }));
-        } catch (e) {
-          console.log(`Error fetching details for group ${group.id}:`, e);
+        } catch {
+          // Non-critical — that group card just shows without totals
         }
       }
     } catch (err: any) {
-      console.log('Error fetching groups:', err);
       setError('Failed to load groups. Please check your connection.');
     } finally {
       setLoading(false);

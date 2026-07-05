@@ -79,8 +79,8 @@ function buildSections(items: HistoryNotif[]): ListItem[] {
 
 // ── Navigation helper ─────────────────────────────────────────────────────────
 const SCREEN_BY_TYPE: Record<HistoryNotif["type"], string> = {
-  budget_over:    "budget-overview",
-  budget_near:    "budget-overview",
+  budget_over:    "budget",
+  budget_near:    "budget",
   expense_added:  "history",
   income_added:   "history",
   reminder_due:   "reminders",
@@ -132,8 +132,10 @@ export default function NotificationHistoryScreen() {
 
     if (screen === "group-detail" && notification.data?.groupId) {
       router.push({ pathname: "/group-detail", params: { groupId: notification.data.groupId } });
-    } else if (screen === "budget-overview") {
-      router.push("/(tabs)/budget-overview");
+    } else if (screen === "budget-overview" || screen === "budget") {
+      // budget-overview was merged into the Budget screen in the redesign;
+      // legacy stored notifications may still carry the old screen name
+      router.push("/(tabs)/budget");
     } else if (screen === "reminders") {
       router.push("/(tabs)/reminders");
     } else if (screen === "report") {

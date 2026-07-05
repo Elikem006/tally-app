@@ -12,8 +12,7 @@ import {
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { momoAPI, expenseAPI } from "../services/api";
-import { getUserId } from "../services/storage";
-import { currentUser } from "./(auth)/login";
+import { getUserId, currentUser } from "../services/storage";
 import { addHistoryItem } from "../services/notificationHistory";
 
 const CATEGORIES = [

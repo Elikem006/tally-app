@@ -72,8 +72,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (saved === 'light' || saved === 'dark' || saved === 'system') {
           setThemeModeState(saved);
         }
-      } catch (e) {
-        console.warn('Failed to load theme preference', e);
+      } catch {
+        // Fall back to system theme
       }
     }
     loadTheme();
@@ -91,8 +91,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setThemeModeState(mode);
     try {
       await safeStorage.setItem('app_theme', mode);
-    } catch (e) {
-      console.warn('Failed to save theme preference', e);
+    } catch {
+      // Preference just won't persist this time
     }
   };
 

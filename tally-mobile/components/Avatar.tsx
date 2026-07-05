@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { View, Text, Image, StyleProp, ViewStyle, ImageStyle } from "react-native";
 
 const AVATAR_COLORS = [
@@ -13,7 +14,7 @@ interface AvatarProps {
   style?: StyleProp<ViewStyle & ImageStyle>;
 }
 
-export default function Avatar({ userId, name, size = 40, avatarData, style }: AvatarProps) {
+function Avatar({ userId, name, size = 40, avatarData, style }: AvatarProps) {
   const radius = size / 2;
 
   if (avatarData && avatarData.startsWith("data:image")) {
@@ -41,3 +42,6 @@ export default function Avatar({ userId, name, size = 40, avatarData, style }: A
     </View>
   );
 }
+
+// Memoized — avatars render inside long lists and their props rarely change
+export default memo(Avatar);

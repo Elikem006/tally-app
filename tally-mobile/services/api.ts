@@ -11,7 +11,7 @@ const api = axios.create({
 });
 
 // Set to true to use the local client-side mock backend, false to use the live Spring Boot server
-const USE_MOCK = true;
+const USE_MOCK = false;
 
 // Mock database states
 let mockUsers = [
@@ -514,12 +514,30 @@ export const momoAPI = {
 
   getBalance: async () => {
     if (!USE_MOCK) return api.get("/api/momo/balance");
-    
+
     return mockResponse({
       availableBalance: "1500.00",
       currency: "GHS"
     });
-  }
+  },
+
+  transfer: (
+    recipientPhone: string,
+    amount: string,
+    description: string,
+    userId: string,
+    category: string,
+  ) =>
+    api.post("/api/momo/transfer", {
+      recipientPhone,
+      amount,
+      description,
+      userId,
+      category,
+    }),
+
+  checkTransferStatus: (referenceId: string) =>
+    api.get(`/api/momo/transfer/status/${referenceId}`),
 };
 
 export const remindersAPI = {
@@ -583,6 +601,15 @@ export const remindersAPI = {
   },
 };
 
+export const categoriesAPI = {
+  getUserCategories: (userId: string) =>
+    api.get(`/api/categories/user/${userId}`),
+  createCategory: (userId: string, name: string, emoji: string) =>
+    api.post("/api/categories", { userId, name, emoji }),
+  deleteCategory: (id: string, userId: string) =>
+    api.delete(`/api/categories/${id}/user/${userId}`),
+};
+
 // ─── Response interceptor ────────────────────────────────────────────────────
 // Handles 401 (session expired) and 5xx (server errors) globally.
 // Uses lazy require() inside the callback to avoid circular dependencies with
@@ -593,33 +620,22 @@ api.interceptors.response.use(
     const status: number | undefined = error.response?.status;
 
     if (status === 401) {
-      console.warn("[Tally API] 401 Unauthorized — clearing session and redirecting to login.");
       try {
         // Lazy require avoids circular dep at module load time
-        const { currentUser } = require("./storage");
-        currentUser.token = "";
-        currentUser.userId = "1";
-        currentUser.userName = "";
-        currentUser.email = "";
-        currentUser.avatarType = "";
-        currentUser.avatarData = "";
-        currentUser.phoneNumber = "";
-      } catch (e) {
-        console.warn("[Tally API] Could not clear currentUser:", e);
+        const { resetCurrentUser, clearRememberedUser } = require("./storage");
+        resetCurrentUser();
+        // Expired session — forget the remembered login so we don't auto-restore it
+        clearRememberedUser();
+      } catch {
+        // storage module not loaded yet — nothing to clear
       }
       try {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const { router } = require("expo-router");
         router.replace("/(auth)/login");
-      } catch (e) {
-        console.warn("[Tally API] Could not navigate to login:", e);
+      } catch {
+        // navigation not ready — the guarded (tabs) layout will redirect
       }
-    }
-
-    if (status !== undefined && status >= 500) {
-      console.error(
-        error.response?.data || error.message,
-      );
     }
 
     return Promise.reject(error);

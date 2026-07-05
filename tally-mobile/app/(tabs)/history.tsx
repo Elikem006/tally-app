@@ -103,7 +103,6 @@ export default function HistoryScreen() {
       setExpenses(sorted);
       setBudgets(budgetsRes.data || []);
     } catch (err: any) {
-      console.log('Error fetching history data:', err);
       setError('Failed to load history data. Please check your connection.');
     } finally {
       setLoading(false);
@@ -132,7 +131,11 @@ export default function HistoryScreen() {
           onPress: async () => {
             try {
               await expenseAPI.deleteExpense(String(item.id));
-              setExpenses(expenses.filter((e) => e.id !== item.id));
+              // Only personal expenses reach here — match on id AND type so a
+              // shared entry with the same numeric id isn't removed too
+              setExpenses((prev) =>
+                prev.filter((e) => !(e.id === item.id && !(e.isShared || e.type === 'shared'))),
+              );
             } catch (error) {
               Alert.alert('Error', 'Failed to delete expense');
             }
@@ -420,7 +423,8 @@ export default function HistoryScreen() {
             const { cleanDescription, tags } = parseTagsFromDescription(item.description);
             return (
               <TouchableOpacity
-                key={item.id}
+                // type+id — personal and shared entries can share numeric ids
+                key={`${item.type ?? (isShared ? "shared" : "personal")}-${item.id}`}
                 style={[
                   styles.expenseCard,
                   { backgroundColor: colors.cardBg, borderColor: colors.border },

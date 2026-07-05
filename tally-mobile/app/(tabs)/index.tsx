@@ -29,6 +29,11 @@ import {
 } from '../../services/notificationHistory';
 import { consumeMomoRefresh } from '../../services/momoRefresh';
 
+// Module-level MoMo balance cache — survives re-renders, cleared on app restart
+let lastMomoFetch = 0;
+let cachedMomoBalance: string | null = null;
+let cachedMomoStatus: 'loading' | 'available' | 'unavailable' = 'loading';
+
 const CATEGORY_ICONS: { [key: string]: string } = {
   Food: '🍔',
   Transport: '🚗',
@@ -159,8 +164,8 @@ export default function HomeScreen() {
       } else {
         setProfileImage(null);
       }
-    } catch (e) {
-      console.log('Error loading profile image on home screen:', e);
+    } catch {
+      // Non-critical — the avatar placeholder renders instead
     }
   }
 
@@ -169,19 +174,20 @@ export default function HomeScreen() {
       const newVal = !hideMomoBalance;
       setHideMomoBalance(newVal);
       await safeStorage.setItem('hide_momo_balance', String(newVal));
-    } catch (e) {
-      console.log('Error toggling hide momo balance:', e);
+    } catch {
+      // Non-critical — preference just won't persist this time
     }
   }
 
   async function fetchData(showLoading = true) {
     if (showLoading) setLoading(true);
     setError(null);
+    const userId = getUserId();
     try {
-      const userId = getUserId();
       const name = getUserName();
       setUserName(name);
 
+      // Fast local-backend calls only — these decide when the screen renders
       const [expensesRes, budgetsRes, remindersRes] = await Promise.all([
         expenseAPI.getCombinedHistory(userId),
         budgetAPI.getUserBudgets(userId),
@@ -205,34 +211,52 @@ export default function HomeScreen() {
         .filter((e: any) => parseFloat(e.amount || "0") < 0)
         .reduce((sum: number, e: any) => sum + Math.abs(parseFloat(e.amount || "0")), 0);
       setMomoMonthlySpent(momoTotal.toFixed(2));
-
-      // Fetch wallet balance
-      await fetchMomoBalance();
-
-      // Fetch budget alerts and register in history
-      await checkBudgetAlerts(userId);
     } catch (err: any) {
-      console.log('Error fetching dashboard data:', err);
       setError('Failed to load dashboard data. Please check your connection.');
     } finally {
       setLoading(false);
     }
+
+    // Secondary work runs in the background AFTER main content renders.
+    // Budget alerts only need local DB — fire immediately.
+    checkBudgetAlerts(userId);
+    // MoMo balance hits an external sandbox API — delay on initial load so the
+    // main content paints first. Cache hits return instantly regardless of delay.
+    if (showLoading) {
+      setTimeout(() => fetchMomoBalance(), 1000);
+    } else {
+      fetchMomoBalance();
+    }
   }
 
-  async function fetchMomoBalance() {
+  async function fetchMomoBalance(force = false) {
+    const now = Date.now();
+    const FIVE_MINUTES = 5 * 60 * 1000;
+
+    // Serve from module-level cache if still fresh (and not a forced refresh)
+    if (!force && cachedMomoBalance !== null && (now - lastMomoFetch) < FIVE_MINUTES) {
+      setMomoBalance(cachedMomoBalance);
+      setMomoStatus(cachedMomoStatus);
+      setMomoBalanceLoading(false);
+      return;
+    }
+
     setMomoBalanceLoading(true);
     setMomoStatus("loading");
     try {
       const res = await momoAPI.getBalance();
       const data = res.data;
       if (data.status === "unavailable") {
+        cachedMomoStatus = "unavailable";
         setMomoStatus("unavailable");
       } else {
-        setMomoBalance(
-          data.availableBalance != null
-            ? String(Math.max(0, parseFloat(data.availableBalance)).toFixed(2))
-            : "0.00",
-        );
+        const bal = data.availableBalance != null
+          ? String(Math.max(0, parseFloat(data.availableBalance)).toFixed(2))
+          : "0.00";
+        cachedMomoBalance = bal;
+        cachedMomoStatus = "available";
+        lastMomoFetch = now;
+        setMomoBalance(bal);
         setMomoStatus("available");
       }
     } catch {
@@ -281,8 +305,8 @@ export default function HomeScreen() {
         }
       }
       getUnreadCount().then(setUnreadCount);
-    } catch (e) {
-      console.log('Error fetching budget alerts:', e);
+    } catch {
+      // Non-critical — budget alerts simply won't show this pass
     }
   }
 
@@ -306,9 +330,11 @@ export default function HomeScreen() {
     setSavingExpense(true);
     try {
       const today = new Date().toISOString().split("T")[0];
+      // Quick Add is always an expense — send as negative so history displays correctly
+      const negativeAmt = String(-Math.abs(parsed));
       await expenseAPI.createExpense(
         getUserId(),
-        quickAmount.trim(),
+        negativeAmt,
         quickCategory,
         quickDescription.trim(),
         today,
@@ -332,9 +358,8 @@ export default function HomeScreen() {
       // Refresh data
       await fetchData(false);
       Alert.alert("✅ Added", `GHS ${parsed.toFixed(2)} in ${quickCategory} recorded.`);
-    } catch (error) {
+    } catch {
       Alert.alert("Error", "Could not save expense. Please try again.");
-      console.log("Quick add error:", error);
     } finally {
       setSavingExpense(false);
     }
@@ -714,7 +739,8 @@ export default function HomeScreen() {
             )}
           </View>
 
-          {momoBalanceLoading && (
+          {/* Skeleton/placeholder while the balance loads in the background */}
+          {(momoBalanceLoading || momoStatus === "loading") && (
             <View style={styles.momoStateRow}>
               <ActivityIndicator color="#D97706" size="small" />
               <Text style={styles.momoLoadingText}>Fetching sandbox balance...</Text>
@@ -729,13 +755,22 @@ export default function HomeScreen() {
               <Text style={styles.momoSpentSub}>
                 GHS {momoMonthlySpent} spent via MoMo this month
               </Text>
-              <TouchableOpacity
-                onPress={fetchMomoBalance}
-                style={styles.momoRefreshBtn}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.momoRefreshText}>Refresh ↻</Text>
-              </TouchableOpacity>
+              <View style={styles.momoActionRow}>
+                <TouchableOpacity
+                  onPress={() => fetchMomoBalance(true)}
+                  style={styles.momoRefreshBtn}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.momoRefreshText}>Refresh ↻</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => router.push('/pay-vendor')}
+                  style={styles.momoPayVendorBtn}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.momoPayVendorText}>Pay Vendor →</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
 
@@ -753,16 +788,66 @@ export default function HomeScreen() {
               <Text style={styles.momoSpentSubYellow}>
                 GHS {momoMonthlySpent} spent via MoMo this month
               </Text>
-              <TouchableOpacity
-                onPress={fetchMomoBalance}
-                style={styles.momoRetryBtn}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.momoRetryText}>Retry ↻</Text>
-              </TouchableOpacity>
+              <View style={styles.momoActionRow}>
+                <TouchableOpacity
+                  onPress={() => fetchMomoBalance(true)}
+                  style={styles.momoRetryBtn}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.momoRetryText}>Retry ↻</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => router.push('/pay-vendor')}
+                  style={styles.momoPayVendorBtn}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.momoPayVendorText}>Pay Vendor →</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
         </View>
+
+        {/* Upcoming Bills / Reminders */}
+        {upcomingReminders.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Upcoming Bills</Text>
+            {upcomingReminders.slice(0, 3).map((reminder: any) => (
+              <TouchableOpacity
+                key={reminder.id}
+                style={[styles.expenseCard, { borderColor: colors.border }]}
+                onPress={() => router.push('/(tabs)/reminders')}
+                activeOpacity={0.8}
+              >
+                <View style={styles.expenseLeft}>
+                  <View style={styles.iconBox}>
+                    <Text style={styles.icon}>📅</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.expenseDescription, { color: colors.text }]} numberOfLines={1}>
+                      {reminder.title || reminder.description || 'Upcoming bill'}
+                    </Text>
+                    <Text style={[styles.expenseCategory, { color: colors.textSecondary }]}>
+                      Due: {reminder.dueDate || reminder.date || 'Soon'}
+                    </Text>
+                  </View>
+                </View>
+                {reminder.amount && (
+                  <Text style={[styles.expenseAmount, { color: colors.negative }]}>
+                    GHS {parseFloat(reminder.amount || '0').toFixed(2)}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            ))}
+            {upcomingReminders.length > 3 && (
+              <TouchableOpacity onPress={() => router.push('/(tabs)/reminders')} activeOpacity={0.7}>
+                <Text style={[styles.seeAllText, { textAlign: 'center', paddingVertical: 8 }]}>
+                  +{upcomingReminders.length - 3} more →
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
         {/* Spending Activity Chart Card */}
         <View style={styles.chartCard}>
@@ -891,7 +976,8 @@ export default function HomeScreen() {
               const { cleanDescription, tags } = parseTagsFromDescription(item.description);
               
               return (
-                <View key={item.id} style={[styles.expenseCard, isShared && styles.sharedCard]}>
+                // type+id — personal and shared entries can share numeric ids
+                <View key={`${item.type ?? (isShared ? "shared" : "personal")}-${item.id}`} style={[styles.expenseCard, isShared && styles.sharedCard]}>
                   <View style={styles.expenseLeft}>
                     <View style={styles.iconBox}>
                       <Text style={styles.icon}>{CATEGORY_ICONS[isShared ? 'Shared' : item.category] || '📦'}</Text>
@@ -1424,7 +1510,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   momoRetryBtn: {
-    alignSelf: "flex-start",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -1436,6 +1521,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#D97706",
     fontWeight: "600",
+  },
+  momoActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  momoPayVendorBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#111111",
+  },
+  momoPayVendorText: {
+    fontSize: 12,
+    color: "#ffffff",
+    fontWeight: "700",
   },
 
   // Spending Activity Chart Card

@@ -88,7 +88,6 @@ export default function ReportScreen() {
       setReport(reportRes.data);
       setExpenses(expensesRes.data || []);
     } catch (e) {
-      console.log("Error loading reports data:", e);
       setError("Failed to load reports. Pull down to refresh.");
     } finally {
       setLoading(false);

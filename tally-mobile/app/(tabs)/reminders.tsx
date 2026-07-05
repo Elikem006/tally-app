@@ -110,7 +110,6 @@ export default function RemindersScreen() {
       setReminders(response.data || []);
       setError(null);
     } catch (error) {
-      console.log("Error loading reminders:", error);
       setError("Failed to load reminders. Pull down to refresh.");
     } finally {
       setLoading(false);

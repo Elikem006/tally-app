@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,12 @@ import { authAPI } from '../../services/api';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 
-import { currentUser } from '../../services/storage';
+import {
+  currentUser,
+  loadRememberedUser,
+  saveRememberedUser,
+  clearRememberedUser,
+} from '../../services/storage';
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
@@ -27,9 +32,27 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [checkingRemembered, setCheckingRemembered] = useState(true);
 
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
+
+  // Auto-login: restore a remembered session and skip the login screen entirely
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      const restored = await loadRememberedUser();
+      if (!active) return;
+      if (restored) {
+        router.replace('/(tabs)');
+      } else {
+        setCheckingRemembered(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function handleLogin() {
     if (!email || !password) {
@@ -41,7 +64,7 @@ export default function LoginScreen() {
     try {
       const response = await authAPI.login(email, password);
       const { token, userId, name, email: userEmail, avatarType, avatarData, phoneNumber } = response.data;
-      
+
       // Update global session store
       currentUser.token = token;
       currentUser.userId = String(userId);
@@ -50,6 +73,15 @@ export default function LoginScreen() {
       currentUser.avatarType = avatarType ?? '';
       currentUser.avatarData = avatarData ?? '';
       currentUser.phoneNumber = phoneNumber ?? '';
+      currentUser.lastCategory = 'Food';
+      currentUser.lastPaymentMethod = 'CASH';
+
+      // Persist (or clear) the session according to the Remember Me checkbox
+      if (rememberMe) {
+        await saveRememberedUser();
+      } else {
+        await clearRememberedUser();
+      }
 
       setLoading(false);
       router.replace('/(tabs)');
@@ -63,6 +95,15 @@ export default function LoginScreen() {
           : error.message || "Something went wrong");
       Alert.alert('Login Failed', message);
     }
+  }
+
+  // Avoid flashing the login form while we check for a remembered session
+  if (checkingRemembered) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
   }
 
   return (

@@ -119,14 +119,13 @@ export default function BudgetScreen() {
           if (data[category].isNearLimit || data[category].isOverBudget) {
             try {
               await notifyBudgetWarning(category, data[category].percentage);
-            } catch (notifyErr) {
-              console.log('Error triggering budget warning notification:', notifyErr);
+            } catch {
+              // Non-critical — the in-app alert banner still shows
             }
           }
         }
       }
     } catch (err: any) {
-      console.log('Error fetching budget summary:', err);
       setError(err?.message || 'Something went wrong. Pull down to refresh.');
     } finally {
       if (showLoading) setFetching(false);

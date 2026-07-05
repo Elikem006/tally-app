@@ -17,9 +17,7 @@ export default function RootLayout() {
 
   // Register for push notifications
   useEffect(() => {
-    registerForPushNotifications().then((result) => {
-      console.log("Notification permission:", result);
-    });
+    registerForPushNotifications();
   }, []);
 
   // Handle notification tap — navigate to correct screen
@@ -81,6 +79,14 @@ export default function RootLayout() {
           <Stack.Screen
             name="help"
             options={{ headerShown: true, title: "Help & Support" }}
+          />
+          <Stack.Screen
+            name="manage-categories"
+            options={{ headerShown: true, title: "Manage Categories" }}
+          />
+          <Stack.Screen
+            name="pay-vendor"
+            options={{ headerShown: false, title: "Pay Vendor" }}
           />
         </Stack>
       </SafeAreaProvider>

@@ -62,7 +62,8 @@ public class BudgetService {
         Map<String, BigDecimal> spent = new HashMap<>();
         for (Expense e : expenses) {
             if (e.getDate().getYear() == currentYear && e.getDate().getMonthValue() == currentMonth) {
-                spent.merge(e.getCategory(), e.getAmount(), BigDecimal::add);
+                // Use absolute value so negative expense amounts are summed correctly
+                spent.merge(e.getCategory(), e.getAmount().abs(), BigDecimal::add);
             }
         }
 

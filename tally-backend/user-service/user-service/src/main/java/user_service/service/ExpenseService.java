@@ -110,13 +110,13 @@ public class ExpenseService {
                 .filter(e -> e.getDate().getYear() == prevYear && e.getDate().getMonthValue() == prevMonth)
                 .collect(Collectors.toList());
 
-        // Totals
+        // Totals — use absolute values so negative expense amounts sum correctly
         BigDecimal currentTotal = currentMonthExpenses.stream()
-                .map(Expense::getAmount)
+                .map(e -> e.getAmount().abs())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal previousTotal = previousMonthExpenses.stream()
-                .map(Expense::getAmount)
+                .map(e -> e.getAmount().abs())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // Percentage change
@@ -128,10 +128,10 @@ public class ExpenseService {
                     .doubleValue();
         }
 
-        // Category breakdown for current month
+        // Category breakdown for current month — use abs() for negative expense amounts
         Map<String, BigDecimal> categoryBreakdown = new HashMap<>();
         for (Expense e : currentMonthExpenses) {
-            categoryBreakdown.merge(e.getCategory(), e.getAmount(), BigDecimal::add);
+            categoryBreakdown.merge(e.getCategory(), e.getAmount().abs(), BigDecimal::add);
         }
 
         // Highest category

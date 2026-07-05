@@ -19,7 +19,7 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { expenseAPI, authAPI } from '../../services/api';
-import { getUserId, safeStorage, currentUser } from '../../services/storage';
+import { getUserId, safeStorage, currentUser, resetCurrentUser, clearRememberedUser } from '../../services/storage';
 import Avatar from '../../components/Avatar';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
@@ -73,8 +73,8 @@ export default function ProfileScreen() {
       } else {
         setProfileImage(null);
       }
-    } catch (e) {
-      console.log('Error loading profile image:', e);
+    } catch {
+      // Non-critical — the generated avatar renders instead
     }
   }
 
@@ -83,8 +83,8 @@ export default function ProfileScreen() {
       await safeStorage.setItem(`profile_image_${currentUser.userId}`, uri);
       setProfileImage(uri);
       showToast("Profile image updated!", "success");
-    } catch (e) {
-      console.log('Error saving profile image:', e);
+    } catch {
+      showToast("Could not save profile image", "error");
     }
   }
 
@@ -119,7 +119,6 @@ export default function ProfileScreen() {
         topCategory: report.highestCategory,
       });
     } catch (err) {
-      console.log('Error fetching profile stats:', err);
       setError("Failed to load statistics. Pull down to refresh.");
     } finally {
       setLoadingStats(false);
@@ -170,8 +169,7 @@ export default function ProfileScreen() {
       if (!result.canceled && result.assets && result.assets.length > 0) {
         saveProfileImage(result.assets[0].uri);
       }
-    } catch (err) {
-      console.log('Error selecting photo:', err);
+    } catch {
       Alert.alert('Error', 'Failed to pick image from gallery.');
     }
   }
@@ -193,8 +191,7 @@ export default function ProfileScreen() {
       if (!result.canceled && result.assets && result.assets.length > 0) {
         saveProfileImage(result.assets[0].uri);
       }
-    } catch (err) {
-      console.log('Error taking photo:', err);
+    } catch {
       Alert.alert('Error', 'Failed to take photo with camera.');
     }
   }
@@ -205,14 +202,10 @@ export default function ProfileScreen() {
       {
         text: 'Log Out',
         style: 'destructive',
-        onPress: () => {
-          currentUser.token = "";
-          currentUser.userId = "1";
-          currentUser.userName = "";
-          currentUser.email = "";
-          currentUser.avatarType = "";
-          currentUser.avatarData = "";
-          currentUser.phoneNumber = "";
+        onPress: async () => {
+          resetCurrentUser();
+          // Forget the persisted session so the app doesn't auto-login again
+          await clearRememberedUser();
           router.replace("/(auth)/login");
         },
       },
@@ -253,8 +246,8 @@ export default function ProfileScreen() {
                   await safeStorage.removeItem(`profile_image_${currentUser.userId}`);
                   setProfileImage(null);
                   showToast("Profile image removed", "info");
-                } catch (e) {
-                  console.log('Error removing photo:', e);
+                } catch {
+                  showToast("Could not remove photo", "error");
                 }
               },
             }

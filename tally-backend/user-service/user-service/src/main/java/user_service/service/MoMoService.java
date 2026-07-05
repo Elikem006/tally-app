@@ -51,12 +51,16 @@ public class MoMoService {
     @Value("${momo.disbursement.base.url}")
     private String disbursementBaseUrl;
 
-    private final RestTemplate restTemplate = buildRestTemplate();
+    // Standard RestTemplate for payments and status checks (longer timeout)
+    private final RestTemplate restTemplate = buildRestTemplate(10_000, 30_000);
 
-    private static RestTemplate buildRestTemplate() {
+    // Short-timeout RestTemplate used only for the balance endpoint
+    private final RestTemplate balanceRestTemplate = buildRestTemplate(5_000, 5_000);
+
+    private static RestTemplate buildRestTemplate(int connectTimeoutMs, int readTimeoutMs) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(10_000); // 10 seconds
-        factory.setReadTimeout(30_000);    // 30 seconds
+        factory.setConnectTimeout(connectTimeoutMs);
+        factory.setReadTimeout(readTimeoutMs);
         return new RestTemplate(factory);
     }
 
@@ -157,7 +161,8 @@ public class MoMoService {
         HttpEntity<Void> entity = new HttpEntity<>(headers);
 
         try {
-            ResponseEntity<Map> response = restTemplate.exchange(
+            // Use short-timeout RestTemplate so a slow sandbox doesn't block the Home screen
+            ResponseEntity<Map> response = balanceRestTemplate.exchange(
                     baseUrl + "/collection/v1_0/account/balance",
                     HttpMethod.GET,
                     entity,

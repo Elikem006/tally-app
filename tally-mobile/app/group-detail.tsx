@@ -85,7 +85,6 @@ export default function GroupDetailScreen() {
       setDetails(detailsRes.data);
       setBalances(balancesRes.data || []);
     } catch (err: any) {
-      console.log('Error fetching group details:', err);
       setError('Failed to load group details. Please check your connection.');
     } finally {
       setLoading(false);
@@ -121,8 +120,8 @@ export default function GroupDetailScreen() {
       
       try {
         await notifyNewSharedExpense(String(groupId), "You", expenseAmount, expenseDescription);
-      } catch (notifyErr) {
-        console.log('Error sending split notification:', notifyErr);
+      } catch {
+        // Non-critical — the expense itself was saved
       }
     } catch (error) {
       showToast("Failed to add expense", "error");

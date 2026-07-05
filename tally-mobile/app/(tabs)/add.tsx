@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,8 @@ import {
   Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { expenseAPI, budgetAPI, momoAPI } from '../../services/api';
+import { router, useFocusEffect } from 'expo-router';
+import { expenseAPI, budgetAPI, categoriesAPI, momoAPI } from '../../services/api';
 import { getUserId, currentUser } from '../../services/storage';
 import { addHistoryItem } from '../../services/notificationHistory';
 import { signalMomoRefresh } from '../../services/momoRefresh';
@@ -33,9 +34,7 @@ const CATEGORY_ICONS: { [key: string]: string } = {
 
 type MomoStatus = "idle" | "sending" | "confirming" | "done";
 
-// Module-level vars persist for the whole app session — no async needed
-let lastUsedCategory = "Food";
-let lastUsedPaymentMethod: "CASH" | "MOMO" = "CASH";
+// Session-scoped "last used" defaults live on currentUser (see services/storage.ts)
 
 export default function AddScreen() {
   const insets = useSafeAreaInsets();
@@ -43,10 +42,12 @@ export default function AddScreen() {
   const [transactionType, setTransactionType] = useState<'expense' | 'income'>('expense');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState(lastUsedCategory);
+  const [selectedCategory, setSelectedCategory] = useState(currentUser.lastCategory || "Food");
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
-  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "MOMO">(lastUsedPaymentMethod);
+  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "MOMO">(
+    currentUser.lastPaymentMethod === "MOMO" ? "MOMO" : "CASH",
+  );
 
   // Dynamic monthly totals and budget limits
   const [spent, setSpent] = useState<{ [key: string]: number }>({});
@@ -63,7 +64,10 @@ export default function AddScreen() {
   const [showHint, setShowHint] = useState(true);
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
 
-  // MoMo payment modal
+  // Custom categories
+  const [customCategories, setCustomCategories] = useState<{ id: string; name: string; emoji: string }[]>([]);
+
+  // MoMo payment modal (kept for potential income receive flow)
   const [showMomoModal, setShowMomoModal] = useState(false);
   const [momoPhone, setMomoPhone] = useState(currentUser.phoneNumber || "");
   const [momoStatus, setMomoStatus] = useState<MomoStatus>("idle");
@@ -78,6 +82,23 @@ export default function AddScreen() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Reload custom categories every time screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchCustomCategories();
+    }, [])
+  );
+
+  async function fetchCustomCategories() {
+    try {
+      const userId = getUserId();
+      const res = await categoriesAPI.getUserCategories(userId);
+      setCustomCategories(res.data || []);
+    } catch {
+      // Non-critical — the default categories remain available
+    }
+  }
 
   async function loadData() {
     setFetching(true);
@@ -100,8 +121,8 @@ export default function AddScreen() {
         budgetMap[budget.category] = parseFloat(budget.monthlyLimit) || 0;
       });
       setLimits(budgetMap);
-    } catch (err) {
-      console.log('Error loading dynamic metrics for categories:', err);
+    } catch {
+      // Non-critical — category cards show without spend/limit metrics
     } finally {
       setFetching(false);
     }
@@ -110,12 +131,12 @@ export default function AddScreen() {
   function handleCategorySelect(cat: string) {
     setSelectedCategory(cat);
     setShowHint(false);
-    lastUsedCategory = cat;
+    currentUser.lastCategory = cat;
   }
 
   function handlePaymentMethodSelect(method: "CASH" | "MOMO") {
     setPaymentMethod(method);
-    lastUsedPaymentMethod = method;
+    currentUser.lastPaymentMethod = method;
   }
 
   function handleAddTag() {
@@ -146,9 +167,18 @@ export default function AddScreen() {
       return;
     }
 
-    // MoMo → open payment modal instead of saving directly
+    // MoMo → navigate to Pay Vendor screen to handle the MoMo payment flow
     if (paymentMethod === "MOMO") {
-      setShowMomoModal(true);
+      router.push({
+        pathname: '/pay-vendor',
+        params: {
+          amount: amount,
+          description: description.trim(),
+          category: selectedCategory,
+          fromAddExpense: 'true',
+          transactionType: transactionType,
+        },
+      });
       return;
     }
 
@@ -403,6 +433,41 @@ export default function AddScreen() {
                 </View>
               </TouchableOpacity>
             ))}
+
+            {/* Custom categories */}
+            {customCategories.map((cat) => (
+              <TouchableOpacity
+                key={cat.id}
+                style={[
+                  styles.categoryCapsule,
+                  { backgroundColor: colors.inputBg, borderColor: colors.border },
+                  selectedCategory === cat.name && { borderColor: colors.primary, borderWidth: 1.5 },
+                ]}
+                onPress={() => handleCategorySelect(cat.name)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.categoryLeft}>
+                  <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
+                  <Text style={[styles.categoryNameText, { color: colors.text }]}>{cat.name}</Text>
+                </View>
+                <View style={styles.categoryRight}>
+                  <Text style={[styles.categoryAmountText, { color: colors.textSecondary }]}>
+                    GHS {(spent[cat.name] || 0).toFixed(2)}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+
+            {/* Add New Category button */}
+            <TouchableOpacity
+              style={[styles.addCategoryBtn, { borderColor: colors.border }]}
+              onPress={() => router.push('/manage-categories')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.addCategoryBtnText, { color: colors.textSecondary }]}>
+                + New Category
+              </Text>
+            </TouchableOpacity>
           </View>
           {showHint && (
             <Text style={[styles.lastUsedHint, { color: colors.textSecondary }]}>
@@ -735,6 +800,21 @@ const styles = StyleSheet.create({
   },
   categoryList: {
     marginBottom: 16,
+  },
+  addCategoryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 8,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+  },
+  addCategoryBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   categoryCapsule: {
     flexDirection: 'row',

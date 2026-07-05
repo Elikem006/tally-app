@@ -46,9 +46,9 @@ public class ExpenseController {
             Long userId = Long.parseLong(userIdStr);
             BigDecimal amount = new BigDecimal(amountStr);
 
-            if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            if (amount.compareTo(BigDecimal.ZERO) == 0) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "Amount must be greater than zero", "success", false));
+                        .body(Map.of("error", "Amount must not be zero", "success", false));
             }
 
             String description = request.get("description");
