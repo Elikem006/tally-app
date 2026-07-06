@@ -14,8 +14,11 @@ import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Svg, Path } from 'react-native-svg';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
 import { expenseAPI, budgetAPI } from '../../services/api';
-import { getUserId } from '../../services/storage';
+import { getUserId, currentUser } from '../../services/storage';
 import { useTheme } from '../../hooks/useTheme';
 
 const CATEGORY_ICONS: { [key: string]: string } = {
@@ -113,6 +116,134 @@ export default function HistoryScreen() {
     setRefreshing(true);
     await fetchData(false);
     setRefreshing(false);
+  }
+
+  // ── Export (CSV via backend + expo-sharing, PDF via expo-print) ────────────
+
+  const [exporting, setExporting] = useState(false);
+
+  function handleExportPress() {
+    Alert.alert('Export Expenses', 'Choose a format', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Export CSV', onPress: exportCsv },
+      { text: 'Export PDF', onPress: exportPdf },
+    ]);
+  }
+
+  async function exportCsv() {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const res = await expenseAPI.exportExpenses(getUserId(), 'csv');
+      const csv = typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
+      const fileUri = `${FileSystem.cacheDirectory}tally-expenses.csv`;
+      await FileSystem.writeAsStringAsync(fileUri, csv);
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Export Tally expenses' });
+      } else {
+        Alert.alert('Sharing unavailable', 'Sharing is not supported on this device.');
+      }
+    } catch (e: any) {
+      Alert.alert('Export failed', e?.response?.data?.error || 'Could not export CSV. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  function htmlEscape(v: string): string {
+    return String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function buildPdfHtml(): string {
+    const list = [...expenses].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    const from = list.length > 0 ? list[0].date : '—';
+    const to = list.length > 0 ? list[list.length - 1].date : '—';
+    const totalSpentAbs = expenses
+      .filter((e) => parseFloat(e.amount || '0') < 0)
+      .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || '0')), 0);
+
+    const rows = [...expenses]
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+      .map((e) => {
+        const amt = parseFloat(e.amount || '0');
+        return `<tr>
+          <td>${htmlEscape(e.date)}</td>
+          <td>${htmlEscape(e.category)}</td>
+          <td>${htmlEscape(e.description || '')}</td>
+          <td style="text-align:right">${amt >= 0 ? '+' : '-'}GHS ${Math.abs(amt).toFixed(2)}</td>
+          <td>${htmlEscape(e.paymentMethod || 'CASH')}</td>
+        </tr>`;
+      })
+      .join('');
+
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+      body{font-family:Helvetica,Arial,sans-serif;padding:24px;color:#111}
+      h1{font-size:22px;margin-bottom:2px}
+      .sub{color:#666;font-size:12px;margin-bottom:16px}
+      table{width:100%;border-collapse:collapse;font-size:11px}
+      th{background:#111;color:#fff;text-align:left;padding:8px}
+      td{padding:7px 8px;border-bottom:1px solid #eee}
+      tr:nth-child(even){background:#fafafa}
+      .total{margin-top:14px;font-size:14px;font-weight:bold;text-align:right}
+    </style></head><body>
+      <h1>💰 Tally</h1>
+      <div class="sub">${htmlEscape(currentUser.userName || 'User')} • ${htmlEscape(String(from))} to ${htmlEscape(String(to))} • ${expenses.length} transactions</div>
+      <table><thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Amount</th><th>Payment</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+      <div class="total">Total spent: GHS ${totalSpentAbs.toFixed(2)}</div>
+    </body></html>`;
+  }
+
+  async function exportPdf() {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const { uri } = await Print.printToFileAsync({ html: buildPdfHtml() });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Export Tally expenses' });
+      } else {
+        Alert.alert('Sharing unavailable', 'Sharing is not supported on this device.');
+      }
+    } catch {
+      Alert.alert('Export failed', 'Could not generate the PDF. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  // ── Recurring (long-press menu) ─────────────────────────────────────────────
+
+  function handleLongPress(item: any) {
+    if (item.isShared || item.type === 'shared') {
+      Alert.alert('Shared Expense', 'Shared expenses can only be managed from the group screen.');
+      return;
+    }
+    const options: any[] = [
+      { text: 'Cancel', style: 'cancel' },
+      item.isRecurring
+        ? { text: 'Remove recurring', onPress: () => setRecurring(item, false) }
+        : { text: 'Mark as recurring', onPress: () => pickRecurrence(item) },
+      { text: 'Delete expense', style: 'destructive', onPress: () => handleDelete(item) },
+    ];
+    Alert.alert('Expense options', item.description || item.category, options);
+  }
+
+  function pickRecurrence(item: any) {
+    Alert.alert('Repeat how often?', 'This expense will repeat automatically', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Daily', onPress: () => setRecurring(item, true, 'DAILY') },
+      { text: 'Weekly', onPress: () => setRecurring(item, true, 'WEEKLY') },
+      { text: 'Monthly', onPress: () => setRecurring(item, true, 'MONTHLY') },
+    ]);
+  }
+
+  async function setRecurring(item: any, isRecurring: boolean, recurrenceType = '') {
+    try {
+      await expenseAPI.updateRecurring(String(item.id), isRecurring, recurrenceType);
+      await fetchData(false);
+    } catch (e: any) {
+      Alert.alert('Error', e?.response?.data?.error || 'Could not update recurring setting.');
+    }
   }
 
   async function handleDelete(item: any) {
@@ -301,7 +432,21 @@ export default function HistoryScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>Analytics & History</Text>
+      <View style={styles.headerRow}>
+        <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>Analytics & History</Text>
+        <TouchableOpacity
+          style={[styles.exportBtn, { backgroundColor: colors.cardBg, borderColor: colors.border }, exporting && { opacity: 0.5 }]}
+          onPress={handleExportPress}
+          disabled={exporting}
+          activeOpacity={0.8}
+        >
+          {exporting ? (
+            <ActivityIndicator size="small" color={colors.text} />
+          ) : (
+            <Text style={[styles.exportBtnText, { color: colors.text }]}>📤 Export</Text>
+          )}
+        </TouchableOpacity>
+      </View>
       <View style={[styles.timeFilterContainer, { backgroundColor: colors.neutralBg }]}>
         {(['today', 'week', 'month', 'year'] as const).map((filter) => {
           const labelMap = { today: 'Today', week: 'This Week', month: 'This Month', year: 'This Year' };
@@ -430,7 +575,7 @@ export default function HistoryScreen() {
                   { backgroundColor: colors.cardBg, borderColor: colors.border },
                   isShared && { borderColor: colors.primary, borderWidth: 1.5 }
                 ]}
-                onLongPress={() => handleDelete(item)}
+                onLongPress={() => handleLongPress(item)}
                 activeOpacity={0.9}
               >
                 <View style={styles.expenseLeft}>
@@ -456,6 +601,15 @@ export default function HistoryScreen() {
                           {isMomo ? "📱 MoMo" : "💵 Cash"}
                         </Text>
                       </View>
+                      {item.isRecurring && (
+                        <View style={[styles.paymentBadge, { backgroundColor: colors.primary + '15' }]}>
+                          <Text style={[styles.paymentBadgeText, { color: colors.primary }]}>
+                            🔄 {item.recurrenceType
+                              ? item.recurrenceType.charAt(0) + item.recurrenceType.slice(1).toLowerCase()
+                              : 'Recurring'}
+                          </Text>
+                        </View>
+                      )}
                     </View>
 
                     {tags.length > 0 && (
@@ -527,6 +681,24 @@ const styles = StyleSheet.create({
     color: '#111111',
     marginBottom: 20,
     paddingLeft: 4,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  exportBtn: {
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginBottom: 20,
+    minWidth: 92,
+    alignItems: 'center',
+  },
+  exportBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
   },
   // Time filters styles (aligned with budget.tsx theme)
   timeFilterContainer: {

@@ -35,4 +35,15 @@ public class Expense {
     // One of: CASH, MOMO (MTN Mobile Money), PAYSTACK (card via Paystack)
     @Column(name = "payment_method", nullable = true)
     private String paymentMethod = "CASH";
+
+    // Recurring expense support
+    @Column(name = "is_recurring")
+    private Boolean isRecurring = false;
+
+    // DAILY, WEEKLY or MONTHLY — null when not recurring
+    @Column(name = "recurrence_type")
+    private String recurrenceType;
+
+    @Column(name = "next_due_date")
+    private LocalDate nextDueDate;
 }

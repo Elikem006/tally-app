@@ -1,7 +1,9 @@
 package user_service.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import user_service.model.Expense;
@@ -112,6 +114,65 @@ public class ExpenseController {
     public ResponseEntity<?> getCombinedHistory(@PathVariable Long userId) {
         try {
             return ResponseEntity.ok(expenseService.getCombinedHistory(userId));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", errorMessage(e), "success", false));
+        }
+    }
+
+    /**
+     * GET /api/expenses/user/{userId}/export?format=csv|pdf
+     * csv → text/csv attachment; pdf → cleanly styled HTML table
+     * (the app converts it to a PDF on-device with expo-print).
+     */
+    @GetMapping("/user/{userId}/export")
+    public ResponseEntity<?> exportExpenses(@PathVariable Long userId,
+                                            @RequestParam(defaultValue = "csv") String format) {
+        try {
+            if ("csv".equalsIgnoreCase(format)) {
+                String csv = expenseService.buildCsvExport(userId);
+                return ResponseEntity.ok()
+                        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=tally-expenses.csv")
+                        .contentType(MediaType.parseMediaType("text/csv"))
+                        .body(csv);
+            }
+            if ("pdf".equalsIgnoreCase(format)) {
+                String html = expenseService.buildHtmlExport(userId);
+                return ResponseEntity.ok()
+                        .contentType(MediaType.TEXT_HTML)
+                        .body(html);
+            }
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "format must be csv or pdf", "success", false));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", errorMessage(e), "success", false));
+        }
+    }
+
+    /** GET /api/expenses/user/{userId}/recurring — all recurring expenses, soonest due first. */
+    @GetMapping("/user/{userId}/recurring")
+    public ResponseEntity<?> getRecurringExpenses(@PathVariable Long userId) {
+        try {
+            return ResponseEntity.ok(expenseService.getRecurringExpenses(userId));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", errorMessage(e), "success", false));
+        }
+    }
+
+    /**
+     * PUT /api/expenses/{expenseId}/recurring
+     * Body: { "isRecurring": "true"|"false", "recurrenceType": "DAILY"|"WEEKLY"|"MONTHLY" }
+     */
+    @PutMapping("/{expenseId}/recurring")
+    public ResponseEntity<?> updateRecurring(@PathVariable Long expenseId,
+                                             @RequestBody Map<String, String> request) {
+        try {
+            boolean isRecurring = Boolean.parseBoolean(request.get("isRecurring"));
+            String recurrenceType = request.get("recurrenceType");
+            Expense updated = expenseService.updateRecurring(expenseId, isRecurring, recurrenceType);
+            return ResponseEntity.ok(updated);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", errorMessage(e), "success", false));

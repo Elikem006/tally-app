@@ -52,6 +52,11 @@ export default function GroupDetailScreen() {
   const [expenseDescription, setExpenseDescription] = useState("");
   const [addingExpense, setAddingExpense] = useState(false);
 
+  // Split ratio state — EQUAL splits evenly; CUSTOM uses per-member percentages
+  const [splitType, setSplitType] = useState<"EQUAL" | "CUSTOM">("EQUAL");
+  const [customRatios, setCustomRatios] = useState<{ [userId: string]: string }>({});
+  const [ratioError, setRatioError] = useState("");
+
   const [showAddMember, setShowAddMember] = useState(false);
   const [memberUserId, setMemberUserId] = useState("");
   const [addingMember, setAddingMember] = useState(false);
@@ -97,34 +102,100 @@ export default function GroupDetailScreen() {
     setRefreshing(false);
   }
 
+  // Sum of the custom percentages entered so far (missing inputs count as 0)
+  const ratioTotal = (details?.members || []).reduce(
+    (sum: number, m: any) => sum + (parseFloat(customRatios[String(m.userId)] || "0") || 0),
+    0,
+  );
+  const ratiosComplete = Math.abs(ratioTotal - 100) < 0.001;
+
+  /** "Split equally", or a per-member breakdown like "Elikem 60% · Adam 40%" */
+  function splitLabel(expense: any): string {
+    if (expense.splitType === "CUSTOM" && expense.splitRatios) {
+      try {
+        const ratios: { [userId: string]: number } = JSON.parse(expense.splitRatios);
+        return Object.entries(ratios)
+          .map(([uid, pct]) => {
+            const member = details?.members?.find((m: any) => String(m.userId) === String(uid));
+            return `${member?.name || `User #${uid}`} ${pct}%`;
+          })
+          .join(" · ");
+      } catch {
+        return "Custom split";
+      }
+    }
+    return "Split equally";
+  }
+
+  function resetExpenseForm() {
+    setExpenseAmount("");
+    setExpenseDescription("");
+    setSplitType("EQUAL");
+    setCustomRatios({});
+    setRatioError("");
+  }
+
   async function handleAddExpense() {
     if (!expenseAmount || !expenseDescription) {
       showToast("Please enter amount and description", "error");
       return;
     }
 
+    // Build + validate custom split ratios before submitting
+    let splitRatiosJson: string | undefined;
+    if (splitType === "CUSTOM") {
+      const ratios: { [userId: string]: number } = {};
+      for (const m of details?.members || []) {
+        ratios[String(m.userId)] = parseFloat(customRatios[String(m.userId)] || "0") || 0;
+      }
+      const total = Object.values(ratios).reduce((a, b) => a + b, 0);
+      if (Math.abs(total - 100) > 0.001) {
+        setRatioError("Percentages must add up to exactly 100%.");
+        return;
+      }
+      setRatioError("");
+      splitRatiosJson = JSON.stringify(ratios);
+    }
+
     setAddingExpense(true);
     try {
       const userId = getUserId();
-      await groupAPI.addSharedExpense(
-        String(groupId),
-        userId,
-        expenseAmount,
-        expenseDescription,
-      );
-      setExpenseAmount("");
-      setExpenseDescription("");
+      if (splitType === "CUSTOM") {
+        await groupAPI.addSharedExpense(
+          String(groupId),
+          userId,
+          expenseAmount,
+          expenseDescription,
+          "CUSTOM",
+          splitRatiosJson,
+        );
+      } else {
+        await groupAPI.addSharedExpense(
+          String(groupId),
+          userId,
+          expenseAmount,
+          expenseDescription,
+        );
+      }
+      const savedAmount = expenseAmount;
+      const savedDescription = expenseDescription;
+      resetExpenseForm();
       setShowAddExpense(false);
       await fetchDetails(false);
-      showToast("Expense added and split equally!", "success");
-      
+      showToast(
+        splitType === "CUSTOM"
+          ? "Expense added with custom split!"
+          : "Expense added and split equally!",
+        "success",
+      );
+
       try {
-        await notifyNewSharedExpense(String(groupId), "You", expenseAmount, expenseDescription);
+        await notifyNewSharedExpense(String(groupId), "You", savedAmount, savedDescription);
       } catch {
         // Non-critical — the expense itself was saved
       }
-    } catch (error) {
-      showToast("Failed to add expense", "error");
+    } catch (error: any) {
+      showToast(error?.response?.data?.error || "Failed to add expense", "error");
     } finally {
       setAddingExpense(false);
     }
@@ -482,7 +553,7 @@ export default function GroupDetailScreen() {
                   <View style={{ flex: 1, marginRight: 10 }}>
                     <Text style={[styles.expenseName, { color: colors.text }]} numberOfLines={1}>{expense.description}</Text>
                     <Text style={[styles.expenseSub, { color: colors.textSecondary }]}>
-                      Paid by {expense.paidByName || `User #${expense.paidBy}`} • Split equally
+                      Paid by {expense.paidByName || `User #${expense.paidBy}`} • {splitLabel(expense)}
                     </Text>
                   </View>
                   <Text style={[styles.expenseAmount, { color: colors.text }]}>
@@ -524,19 +595,143 @@ export default function GroupDetailScreen() {
                 onBlur={() => setAmtFocused(false)}
                 keyboardType="decimal-pad"
               />
+
+              {/* Split type selector */}
+              <View style={styles.splitTypeRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.splitTypeBtn,
+                    { backgroundColor: colors.cardBg, borderColor: colors.border },
+                    splitType === "EQUAL" && { backgroundColor: colors.positive + "18", borderColor: colors.positive },
+                  ]}
+                  onPress={() => {
+                    setSplitType("EQUAL");
+                    setRatioError("");
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[
+                      styles.splitTypeText,
+                      { color: colors.textSecondary },
+                      splitType === "EQUAL" && { color: colors.positive, fontWeight: "700" },
+                    ]}
+                  >
+                    ⚖️ Equal Split
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.splitTypeBtn,
+                    { backgroundColor: colors.cardBg, borderColor: colors.border },
+                    splitType === "CUSTOM" && { backgroundColor: colors.positive + "18", borderColor: colors.positive },
+                  ]}
+                  onPress={() => {
+                    setSplitType("CUSTOM");
+                    setRatioError("");
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text
+                    style={[
+                      styles.splitTypeText,
+                      { color: colors.textSecondary },
+                      splitType === "CUSTOM" && { color: colors.positive, fontWeight: "700" },
+                    ]}
+                  >
+                    🎯 Custom Split
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Per-member percentage inputs (custom split only) */}
+              {splitType === "CUSTOM" && (
+                <View style={styles.ratioSection}>
+                  {details?.members?.map((member: any) => (
+                    <View key={member.userId} style={styles.ratioRow}>
+                      <Avatar
+                        userId={member.userId}
+                        name={member.name || String(member.userId)}
+                        size={32}
+                        avatarData={member.avatarData}
+                        style={{ marginRight: 10 }}
+                      />
+                      <Text style={[styles.ratioName, { color: colors.text }]} numberOfLines={1}>
+                        {member.name || `User #${member.userId}`}
+                      </Text>
+                      <TextInput
+                        style={[
+                          styles.ratioInput,
+                          { backgroundColor: colors.cardBg, borderColor: colors.border, color: colors.text },
+                        ]}
+                        value={customRatios[String(member.userId)] ?? ""}
+                        onChangeText={(text) => {
+                          setCustomRatios((prev) => ({
+                            ...prev,
+                            [String(member.userId)]: text.replace(/[^0-9]/g, ""),
+                          }));
+                          setRatioError("");
+                        }}
+                        keyboardType="numeric"
+                        maxLength={3}
+                        placeholder="0"
+                        placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
+                      />
+                      <Text style={[styles.ratioPercent, { color: colors.textSecondary }]}>%</Text>
+                    </View>
+                  ))}
+
+                  {/* Real-time total validator */}
+                  <Text
+                    style={[
+                      styles.ratioStatus,
+                      {
+                        color: ratiosComplete
+                          ? colors.positive
+                          : ratioTotal < 100
+                          ? "#FF9500"
+                          : colors.negative,
+                      },
+                    ]}
+                  >
+                    {ratiosComplete
+                      ? `Total: ${ratioTotal}% — ✓ Splits add up to 100%`
+                      : ratioTotal < 100
+                      ? `Total: ${ratioTotal}% — ${+(100 - ratioTotal).toFixed(2)}% remaining to allocate`
+                      : `Total: ${ratioTotal}% — ${+(ratioTotal - 100).toFixed(2)}% over 100% — reduce some values`}
+                  </Text>
+                  {!!ratioError && (
+                    <Text style={[styles.ratioStatus, { color: colors.negative }]}>{ratioError}</Text>
+                  )}
+                </View>
+              )}
+
               <TouchableOpacity
-                style={[styles.button, { backgroundColor: colors.primary }, addingExpense && styles.buttonDisabled]}
+                style={[
+                  styles.button,
+                  { backgroundColor: colors.primary },
+                  (addingExpense || (splitType === "CUSTOM" && !ratiosComplete)) && styles.buttonDisabled,
+                ]}
                 onPress={handleAddExpense}
-                disabled={addingExpense}
+                disabled={addingExpense || (splitType === "CUSTOM" && !ratiosComplete)}
                 activeOpacity={0.85}
               >
                 {addingExpense ? (
                   <ActivityIndicator color="#ffffff" />
                 ) : (
-                  <Text style={styles.buttonText}>Add & Split Equally</Text>
+                  <Text style={styles.buttonText}>
+                    {splitType === "CUSTOM" ? "Add & Split Custom" : "Add & Split Equally"}
+                  </Text>
                 )}
               </TouchableOpacity>
-              <TouchableOpacity style={styles.cancelLinkButton} onPress={() => setShowAddExpense(false)} activeOpacity={0.7}>
+              <TouchableOpacity
+                style={styles.cancelLinkButton}
+                onPress={() => {
+                  setShowAddExpense(false);
+                  resetExpenseForm();
+                }}
+                activeOpacity={0.7}
+              >
                 <Text style={[styles.cancelLinkText, { color: colors.textSecondary }]}>Cancel</Text>
               </TouchableOpacity>
             </View>
@@ -826,6 +1021,59 @@ const styles = StyleSheet.create({
   },
   inputFocused: {
     borderColor: '#111111',
+  },
+  // Split ratio controls
+  splitTypeRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  splitTypeBtn: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  splitTypeText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  ratioSection: {
+    marginBottom: 12,
+    gap: 8,
+  },
+  ratioRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  ratioName: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    marginRight: 10,
+  },
+  ratioInput: {
+    width: 64,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  ratioPercent: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
+    width: 18,
+  },
+  ratioStatus: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
   },
   button: {
     backgroundColor: '#111111',

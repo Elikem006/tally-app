@@ -81,6 +81,10 @@ public class BudgetService {
             categoryData.put("percentage", percentage);
             categoryData.put("isOverBudget", spentAmount.compareTo(b.getMonthlyLimit()) > 0);
             categoryData.put("isNearLimit", percentage >= 80);
+            // Milestone bands for notifications: exactly one of these is true once ≥50%
+            categoryData.put("reached50", percentage >= 50 && percentage < 80);
+            categoryData.put("reached80", percentage >= 80 && percentage < 100);
+            categoryData.put("reached100", percentage >= 100);
 
             summary.put(b.getCategory(), categoryData);
         }

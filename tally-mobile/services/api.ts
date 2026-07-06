@@ -255,6 +255,20 @@ export const expenseAPI = {
     });
   },
 
+  exportExpenses: (userId: string, format: string) =>
+    api.get(`/api/expenses/user/${userId}/export?format=${format}`, { responseType: "text" }),
+
+  getRecurringExpenses: async (userId: string) => {
+    if (!USE_MOCK) return api.get(`/api/expenses/user/${userId}/recurring`);
+    return mockResponse(mockExpenses.filter((e: any) => e.isRecurring));
+  },
+
+  updateRecurring: (expenseId: string, isRecurring: boolean, recurrenceType: string) =>
+    api.put(`/api/expenses/${expenseId}/recurring`, {
+      isRecurring: String(isRecurring),
+      recurrenceType,
+    }),
+
   getCombinedHistory: async (userId: string) => {
     if (!USE_MOCK) return api.get(`/api/expenses/user/${userId}/history`);
     
@@ -403,12 +417,16 @@ export const groupAPI = {
     paidBy: string,
     amount: string,
     description: string,
+    splitType?: string,
+    splitRatios?: string,
   ) => {
     if (!USE_MOCK) {
       return api.post(`/api/groups/${groupId}/expenses`, {
         paidBy,
         amount,
         description,
+        splitType: splitType || "EQUAL",
+        splitRatios,
       });
     }
     

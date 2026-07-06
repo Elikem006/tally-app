@@ -26,8 +26,16 @@ public class SharedExpense {
     @Column(nullable = false)
     private String description;
 
+    // EQUAL (default) or CUSTOM
     @Column(name = "split_type", nullable = false)
     private String splitType = "EQUAL";
+
+    /**
+     * JSON map of userId → percentage, only set when splitType is CUSTOM.
+     * Example: {"1": 60, "2": 40} — user 1 pays 60%, user 2 pays 40%.
+     */
+    @Column(name = "split_ratios", columnDefinition = "TEXT")
+    private String splitRatios;
 
     @Column(updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();

@@ -17,7 +17,7 @@ import { useFocusEffect, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { budgetAPI, expenseAPI } from '../../services/api';
 import { getUserId } from '../../services/storage';
-import { notifyBudgetWarning } from '../../services/notifications';
+import { notifyBudgetMilestone } from '../../services/notifications';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import { useTheme } from '../../hooks/useTheme';
@@ -33,6 +33,17 @@ const CATEGORY_ICONS: { [key: string]: string } = {
   Utilities: '💡',
   Other: '📦',
 };
+
+// Tracks "category-tier" milestone notifications already sent this app session,
+// so re-visiting the screen doesn't re-fire the same alert
+const notifiedCategories = new Set<string>();
+
+function milestoneTier(percentage: number): 50 | 80 | 100 | null {
+  if (percentage >= 100) return 100;
+  if (percentage >= 80) return 80;
+  if (percentage >= 50) return 50;
+  return null;
+}
 
 export default function BudgetScreen() {
   const insets = useSafeAreaInsets();
@@ -112,16 +123,19 @@ export default function BudgetScreen() {
       setLimits(newLimits);
       setSpent(newSpent);
 
-      // Trigger local push notifications for limits warning best-effort
+      // Milestone notifications at 50% / 80% / 100% — each tier fires once per session
       if (!notificationsSentRef.current) {
         notificationsSentRef.current = true;
         for (const category in data) {
-          if (data[category].isNearLimit || data[category].isOverBudget) {
-            try {
-              await notifyBudgetWarning(category, data[category].percentage);
-            } catch {
-              // Non-critical — the in-app alert banner still shows
-            }
+          const tier = milestoneTier(data[category].percentage || 0);
+          if (tier === null) continue;
+          const key = `${category}-${tier}`;
+          if (notifiedCategories.has(key)) continue;
+          notifiedCategories.add(key);
+          try {
+            await notifyBudgetMilestone(category, data[category].percentage);
+          } catch {
+            // Non-critical — the in-app alert banner still shows
           }
         }
       }

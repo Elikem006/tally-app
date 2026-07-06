@@ -91,6 +91,107 @@ public class ExpenseService {
         expenseRepository.deleteById(expenseId);
     }
 
+    // ─── Recurring expenses ──────────────────────────────────────────────────
+
+    public List<Expense> getRecurringExpenses(Long userId) {
+        return expenseRepository.findByUserIdAndIsRecurringTrueOrderByNextDueDateAsc(userId);
+    }
+
+    /**
+     * Toggle recurring on/off for an expense. When enabling, recurrenceType must be
+     * DAILY, WEEKLY or MONTHLY and nextDueDate is computed from today accordingly.
+     */
+    public Expense updateRecurring(Long expenseId, boolean isRecurring, String recurrenceType) {
+        Expense expense = expenseRepository.findById(expenseId)
+                .orElseThrow(() -> new RuntimeException("Expense not found: " + expenseId));
+
+        if (isRecurring) {
+            String type = recurrenceType != null ? recurrenceType.trim().toUpperCase() : "";
+            LocalDate next = switch (type) {
+                case "DAILY"   -> LocalDate.now().plusDays(1);
+                case "WEEKLY"  -> LocalDate.now().plusWeeks(1);
+                case "MONTHLY" -> LocalDate.now().plusMonths(1);
+                default -> throw new RuntimeException("recurrenceType must be DAILY, WEEKLY or MONTHLY");
+            };
+            expense.setIsRecurring(true);
+            expense.setRecurrenceType(type);
+            expense.setNextDueDate(next);
+        } else {
+            expense.setIsRecurring(false);
+            expense.setRecurrenceType(null);
+            expense.setNextDueDate(null);
+        }
+        return expenseRepository.save(expense);
+    }
+
+    // ─── Export ──────────────────────────────────────────────────────────────
+
+    private static String csvEscape(String value) {
+        if (value == null) return "";
+        // Quote fields containing commas, quotes or newlines; double any quotes
+        if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+            return "\"" + value.replace("\"", "\"\"") + "\"";
+        }
+        return value;
+    }
+
+    /** CSV export: Date,Category,Description,Amount,PaymentMethod */
+    public String buildCsvExport(Long userId) {
+        List<Expense> expenses = expenseRepository.findByUserIdOrderByDateDesc(userId);
+        StringBuilder sb = new StringBuilder("Date,Category,Description,Amount,PaymentMethod\n");
+        for (Expense e : expenses) {
+            sb.append(e.getDate() != null ? e.getDate().toString() : "").append(",")
+              .append(csvEscape(e.getCategory())).append(",")
+              .append(csvEscape(e.getDescription())).append(",")
+              .append(e.getAmount() != null ? e.getAmount().toPlainString() : "0").append(",")
+              .append(e.getPaymentMethod() != null ? e.getPaymentMethod() : "CASH").append("\n");
+        }
+        return sb.toString();
+    }
+
+    private static String htmlEscape(String value) {
+        if (value == null) return "";
+        return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
+    /** Cleanly styled HTML table version of the expense list (frontend renders/prints it). */
+    public String buildHtmlExport(Long userId) {
+        List<Expense> expenses = expenseRepository.findByUserIdOrderByDateDesc(userId);
+
+        BigDecimal total = expenses.stream()
+                .map(e -> e.getAmount() != null ? e.getAmount().abs() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        StringBuilder rows = new StringBuilder();
+        for (Expense e : expenses) {
+            rows.append("<tr>")
+                .append("<td>").append(e.getDate() != null ? e.getDate() : "").append("</td>")
+                .append("<td>").append(htmlEscape(e.getCategory())).append("</td>")
+                .append("<td>").append(htmlEscape(e.getDescription())).append("</td>")
+                .append("<td style=\"text-align:right\">GHS ")
+                .append(e.getAmount() != null ? e.getAmount().abs().setScale(2, RoundingMode.HALF_UP) : "0.00")
+                .append("</td>")
+                .append("<td>").append(e.getPaymentMethod() != null ? e.getPaymentMethod() : "CASH").append("</td>")
+                .append("</tr>");
+        }
+
+        return "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><style>"
+                + "body{font-family:Helvetica,Arial,sans-serif;padding:24px;color:#111}"
+                + "h1{font-size:20px;margin-bottom:2px} .sub{color:#666;font-size:12px;margin-bottom:16px}"
+                + "table{width:100%;border-collapse:collapse;font-size:12px}"
+                + "th{background:#111;color:#fff;text-align:left;padding:8px}"
+                + "td{padding:8px;border-bottom:1px solid #eee}"
+                + "tr:nth-child(even){background:#fafafa}"
+                + ".total{margin-top:14px;font-size:14px;font-weight:bold;text-align:right}"
+                + "</style></head><body>"
+                + "<h1>💰 Tally — Expense Report</h1>"
+                + "<div class=\"sub\">Generated " + LocalDate.now() + " • " + expenses.size() + " transactions</div>"
+                + "<table><thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Amount</th><th>Payment</th></tr></thead>"
+                + "<tbody>" + rows + "</tbody></table>"
+                + "<div class=\"total\">Total: GHS " + total.setScale(2, RoundingMode.HALF_UP) + "</div>"
+                + "</body></html>";
+    }
+
     public Map<String, Object> getMonthlyReport(Long userId, Integer month, Integer year) {
         List<Expense> allExpenses = expenseRepository.findByUserIdOrderByDateDesc(userId);
 
@@ -191,6 +292,9 @@ public class ExpenseService {
             entry.put("type", "personal");
             entry.put("groupId", null);
             entry.put("paymentMethod", e.getPaymentMethod() != null ? e.getPaymentMethod() : "CASH");
+            entry.put("isRecurring", Boolean.TRUE.equals(e.getIsRecurring()));
+            entry.put("recurrenceType", e.getRecurrenceType());
+            entry.put("nextDueDate", e.getNextDueDate() != null ? e.getNextDueDate().toString() : null);
             entry.put("createdAt", e.getCreatedAt() != null ? e.getCreatedAt().toString() : null);
             combined.add(entry);
         }

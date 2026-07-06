@@ -114,6 +114,7 @@ export default function HomeScreen() {
   const [expenses, setExpenses] = useState<any[]>([]);
   const [budgets, setBudgets] = useState<any[]>([]);
   const [upcomingReminders, setUpcomingReminders] = useState<any[]>([]);
+  const [recurringExpenses, setRecurringExpenses] = useState<any[]>([]);
   const [budgetAlerts, setBudgetAlerts] = useState<{ category: string; isOverBudget: boolean; isNearLimit: boolean; percentage: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -188,16 +189,18 @@ export default function HomeScreen() {
       setUserName(name);
 
       // Fast local-backend calls only — these decide when the screen renders
-      const [expensesRes, budgetsRes, remindersRes] = await Promise.all([
+      const [expensesRes, budgetsRes, remindersRes, recurringRes] = await Promise.all([
         expenseAPI.getCombinedHistory(userId),
         budgetAPI.getUserBudgets(userId),
-        remindersAPI.getUpcomingReminders(userId).catch(() => ({ data: [] }))
+        remindersAPI.getUpcomingReminders(userId).catch(() => ({ data: [] })),
+        expenseAPI.getRecurringExpenses(userId).catch(() => ({ data: [] }))
       ]);
 
       const expenseList = expensesRes.data || [];
       setExpenses(expenseList);
       setBudgets(budgetsRes.data || []);
       setUpcomingReminders(remindersRes.data || []);
+      setRecurringExpenses(recurringRes.data || []);
 
       // Calculate MoMo spending for this month
       const now = new Date();
@@ -846,6 +849,47 @@ export default function HomeScreen() {
                 </Text>
               </TouchableOpacity>
             )}
+          </View>
+        )}
+
+        {/* Recurring Expenses */}
+        {recurringExpenses.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Recurring Expenses</Text>
+            {recurringExpenses.map((item: any) => (
+              <TouchableOpacity
+                key={`recurring-${item.id}`}
+                style={[styles.expenseCard, { borderColor: colors.border }]}
+                onPress={() => router.push('/(tabs)/history')}
+                activeOpacity={0.8}
+              >
+                <View style={styles.expenseLeft}>
+                  <View style={styles.iconBox}>
+                    <Text style={styles.icon}>🔄</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.expenseDescription, { color: colors.text }]} numberOfLines={1}>
+                      {item.description || item.category}
+                    </Text>
+                    <Text style={[styles.expenseCategory, { color: colors.textSecondary }]}>
+                      {item.nextDueDate ? `Next: ${item.nextDueDate}` : 'Repeats automatically'}
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                  <Text style={[styles.expenseAmount, { color: colors.negative }]}>
+                    GHS {Math.abs(parseFloat(item.amount || '0')).toFixed(2)}
+                  </Text>
+                  <View style={[styles.recurrenceBadge, { backgroundColor: colors.primary + '15' }]}>
+                    <Text style={[styles.recurrenceBadgeText, { color: colors.primary }]}>
+                      {item.recurrenceType
+                        ? item.recurrenceType.charAt(0) + item.recurrenceType.slice(1).toLowerCase()
+                        : 'Recurring'}
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))}
           </View>
         )}
 
@@ -1819,6 +1863,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: 'bold',
     color: '#111111',
+  },
+  recurrenceBadge: {
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  recurrenceBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
   emptyText: {
     fontSize: 14,

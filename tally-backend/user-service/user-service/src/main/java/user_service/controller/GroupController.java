@@ -127,8 +127,22 @@ public class GroupController {
                         .body(Map.of("error", "Amount must be greater than zero", "success", false));
             }
 
+            // Split type: EQUAL (default) or CUSTOM with a userId → percentage JSON map
+            String splitType = request.getOrDefault("splitType", "EQUAL");
+            String splitRatios = request.get("splitRatios");
+
+            if ("CUSTOM".equalsIgnoreCase(splitType)) {
+                if (splitRatios == null || splitRatios.isBlank()) {
+                    return ResponseEntity.badRequest()
+                            .body(Map.of("error", "splitRatios is required when splitType is CUSTOM", "success", false));
+                }
+            } else {
+                splitType = "EQUAL";
+                splitRatios = null; // ignored for equal splits
+            }
+
             SharedExpense expense = groupService.addSharedExpense(
-                    groupId, paidBy, amount, description);
+                    groupId, paidBy, amount, description, splitType, splitRatios);
             return ResponseEntity.status(HttpStatus.CREATED).body(expense);
         } catch (Exception e) {
             return ResponseEntity.badRequest()

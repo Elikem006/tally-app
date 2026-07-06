@@ -1,5 +1,6 @@
 package user_service.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import user_service.model.Group;
@@ -32,6 +33,48 @@ public class GroupService {
 
     @Autowired
     private MoMoService moMoService;
+
+    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
+
+    /**
+     * Parse a splitRatios JSON string ({"1": 60, "2": 40}) into userId → percentage.
+     * Throws with a user-readable message when the JSON is malformed.
+     */
+    private Map<Long, BigDecimal> parseSplitRatios(String splitRatios) {
+        try {
+            Map<String, Object> raw = objectMapper.readValue(
+                    splitRatios, objectMapper.getTypeFactory()
+                            .constructMapType(HashMap.class, String.class, Object.class));
+            Map<Long, BigDecimal> ratios = new HashMap<>();
+            for (Map.Entry<String, Object> e : raw.entrySet()) {
+                ratios.put(Long.parseLong(e.getKey().trim()), new BigDecimal(String.valueOf(e.getValue())));
+            }
+            return ratios;
+        } catch (Exception e) {
+            throw new RuntimeException("splitRatios must be valid JSON mapping userId to percentage, e.g. {\"1\": 60, \"2\": 40}");
+        }
+    }
+
+    /**
+     * A member's share of an expense: percentage-based when the expense uses a
+     * CUSTOM split, otherwise an equal share. Falls back to equal split if a
+     * stored ratio string can no longer be parsed.
+     */
+    private BigDecimal shareFor(SharedExpense expense, Long memberId, int memberCount) {
+        if ("CUSTOM".equals(expense.getSplitType()) && expense.getSplitRatios() != null) {
+            try {
+                Map<Long, BigDecimal> ratios = parseSplitRatios(expense.getSplitRatios());
+                BigDecimal pct = ratios.getOrDefault(memberId, BigDecimal.ZERO);
+                return expense.getAmount().multiply(pct)
+                        .divide(ONE_HUNDRED, 2, RoundingMode.HALF_UP);
+            } catch (Exception ignored) {
+                // fall through to equal split
+            }
+        }
+        return expense.getAmount()
+                .divide(BigDecimal.valueOf(Math.max(memberCount, 1)), 2, RoundingMode.HALF_UP);
+    }
 
     // Fetch a user once and return it (null-safe)
     private User findUser(Long userId) {
@@ -120,6 +163,8 @@ public class GroupService {
             entry.put("paidByAvatarType",payer != null ? payer.getAvatarType() : null);
             entry.put("amount",          se.getAmount());
             entry.put("description",     se.getDescription());
+            entry.put("splitType",       se.getSplitType() != null ? se.getSplitType() : "EQUAL");
+            entry.put("splitRatios",     se.getSplitRatios());
             entry.put("createdAt",       se.getCreatedAt() != null ? se.getCreatedAt().toString() : null);
             enrichedExpenses.add(entry);
         }
@@ -131,12 +176,55 @@ public class GroupService {
         return details;
     }
 
-    // Add a shared expense to a group
+    // Add a shared expense to a group (EQUAL split)
     public SharedExpense addSharedExpense(Long groupId, Long paidBy, BigDecimal amount, String description) {
+        return addSharedExpense(groupId, paidBy, amount, description, "EQUAL", null);
+    }
+
+    /**
+     * Add a shared expense with either an EQUAL split or a CUSTOM percentage split.
+     * For CUSTOM, splitRatios is a JSON map of userId → percentage that must cover
+     * every group member and sum to exactly 100.
+     */
+    public SharedExpense addSharedExpense(Long groupId, Long paidBy, BigDecimal amount,
+                                          String description, String splitType, String splitRatios) {
         // Sanitize description: trim whitespace; treat blank as null
         if (description != null) {
             description = description.trim();
             if (description.isEmpty()) description = null;
+        }
+
+        boolean custom = "CUSTOM".equalsIgnoreCase(splitType) && splitRatios != null && !splitRatios.isBlank();
+
+        if (custom) {
+            Map<Long, BigDecimal> ratios = parseSplitRatios(splitRatios);
+            List<GroupMember> members = groupMemberRepository.findByGroupId(groupId);
+
+            // Every group member must have a ratio
+            for (GroupMember m : members) {
+                if (!ratios.containsKey(m.getUserId())) {
+                    throw new RuntimeException("Split ratios must include every group member (missing user #" + m.getUserId() + ")");
+                }
+            }
+            // No ratios for people outside the group
+            Set<Long> memberIds = new HashSet<>();
+            for (GroupMember m : members) memberIds.add(m.getUserId());
+            for (Long ratioUserId : ratios.keySet()) {
+                if (!memberIds.contains(ratioUserId)) {
+                    throw new RuntimeException("Split ratios include user #" + ratioUserId + " who is not a group member");
+                }
+            }
+            // Percentages must be non-negative and sum to exactly 100
+            BigDecimal sum = BigDecimal.ZERO;
+            for (BigDecimal pct : ratios.values()) {
+                if (pct.compareTo(BigDecimal.ZERO) < 0) {
+                    throw new RuntimeException("Split percentages cannot be negative");
+                }
+                sum = sum.add(pct);
+            }
+            if (sum.compareTo(ONE_HUNDRED) != 0) {
+                throw new RuntimeException("Split percentages must add up to exactly 100 (got " + sum.stripTrailingZeros().toPlainString() + ")");
+            }
         }
 
         SharedExpense expense = new SharedExpense();
@@ -144,6 +232,8 @@ public class GroupService {
         expense.setPaidBy(paidBy);
         expense.setAmount(amount);
         expense.setDescription(description);
+        expense.setSplitType(custom ? "CUSTOM" : "EQUAL");
+        expense.setSplitRatios(custom ? splitRatios : null);
         return sharedExpenseRepository.save(expense);
     }
 
@@ -163,12 +253,14 @@ public class GroupService {
         for (SharedExpense expense : expenses) {
             if ("SETTLED".equals(expense.getDescription())) continue;
             if (expense.getAmount() == null) continue;
-            BigDecimal share = expense.getAmount()
-                    .divide(BigDecimal.valueOf(memberCount), 2, RoundingMode.HALF_UP);
 
+            // Payer is credited the full amount…
             balances.merge(expense.getPaidBy(), expense.getAmount(), BigDecimal::add);
 
+            // …and every member (payer included) is debited their share:
+            // percentage-based for CUSTOM splits, equal otherwise.
             for (GroupMember m : members) {
+                BigDecimal share = shareFor(expense, m.getUserId(), memberCount);
                 balances.merge(m.getUserId(), share.negate(), BigDecimal::add);
             }
         }
@@ -213,10 +305,9 @@ public class GroupService {
             for (SharedExpense se : expenses) {
                 if ("SETTLED".equals(se.getDescription())) continue;
                 if (se.getAmount() == null || se.getPaidBy() == null) continue;
-                java.math.BigDecimal share = se.getAmount()
-                        .divide(java.math.BigDecimal.valueOf(memberCount), 2, java.math.RoundingMode.HALF_UP);
                 if (!se.getPaidBy().equals(userId)) {
-                    owedAmount = owedAmount.add(share);
+                    // Respect custom split ratios when computing what this user owes
+                    owedAmount = owedAmount.add(shareFor(se, userId, memberCount));
                 }
             }
 

@@ -95,6 +95,34 @@ export async function notifyBudgetWarning(
   );
 }
 
+/**
+ * Milestone notification at 50%, 80% and 100% of a category budget.
+ * Sends the highest applicable tier only; does nothing below 50%.
+ * (screen "budget" — the redesign merged budget-overview into the Budget tab.)
+ */
+export async function notifyBudgetMilestone(category: string, percentage: number) {
+  const pct = percentage.toFixed(0);
+  if (percentage >= 100) {
+    await sendLocalNotification(
+      "Budget Exceeded! 🚨",
+      `Your ${category} budget is over 100%`,
+      { screen: "budget" },
+    );
+  } else if (percentage >= 80) {
+    await sendLocalNotification(
+      "Budget Warning ⚠️",
+      `Your ${category} budget is at ${pct}%`,
+      { screen: "budget" },
+    );
+  } else if (percentage >= 50) {
+    await sendLocalNotification(
+      "Budget Update 💰",
+      `You've used ${pct}% of your ${category} budget`,
+      { screen: "budget" },
+    );
+  }
+}
+
 export async function notifySettleUp(groupName: string, payerName: string) {
   const body = `${payerName} has settled up in ${groupName}`;
   await sendLocalNotification("✅ Settled Up", body, { screen: "groups" });
