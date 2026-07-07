@@ -17,7 +17,7 @@ import { Svg, Path } from 'react-native-svg';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
-import { expenseAPI, budgetAPI } from '../../services/api';
+import { expenseAPI, budgetAPI, categoriesAPI } from '../../services/api';
 import { getUserId, currentUser } from '../../services/storage';
 import { useTheme } from '../../hooks/useTheme';
 
@@ -74,6 +74,15 @@ export default function HistoryScreen() {
   const { colors, theme } = useTheme();
   const [expenses, setExpenses] = useState<any[]>([]);
   const [budgets, setBudgets] = useState<any[]>([]);
+  const [customCategories, setCustomCategories] = useState<any[]>([]);
+
+  // Emoji for default categories first, then user-created custom categories
+  function getCategoryIcon(categoryName: string): string {
+    if (CATEGORY_ICONS[categoryName]) return CATEGORY_ICONS[categoryName];
+    const custom = customCategories.find((c: any) => c.name === categoryName);
+    if (custom?.emoji) return custom.emoji;
+    return '📦';
+  }
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,10 +104,12 @@ export default function HistoryScreen() {
     setError(null);
     try {
       const userId = getUserId();
-      const [expensesRes, budgetsRes] = await Promise.all([
+      const [expensesRes, budgetsRes, categoriesRes] = await Promise.all([
         expenseAPI.getCombinedHistory(userId),
         budgetAPI.getUserBudgets(userId),
+        categoriesAPI.getUserCategories(userId).catch(() => ({ data: [] })),
       ]);
+      setCustomCategories(categoriesRes.data || []);
       
       const sorted = [...(expensesRes.data || [])].sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
@@ -159,18 +170,19 @@ export default function HistoryScreen() {
     const from = list.length > 0 ? list[0].date : '—';
     const to = list.length > 0 ? list[list.length - 1].date : '—';
     const totalSpentAbs = expenses
-      .filter((e) => parseFloat(e.amount || '0') < 0)
+      .filter((e) => e.type !== 'income')
       .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || '0')), 0);
 
     const rows = [...expenses]
       .sort((a, b) => String(b.date).localeCompare(String(a.date)))
       .map((e) => {
         const amt = parseFloat(e.amount || '0');
+        const sign = e.type === 'income' ? '+' : '-';
         return `<tr>
           <td>${htmlEscape(e.date)}</td>
           <td>${htmlEscape(e.category)}</td>
           <td>${htmlEscape(e.description || '')}</td>
-          <td style="text-align:right">${amt >= 0 ? '+' : '-'}GHS ${Math.abs(amt).toFixed(2)}</td>
+          <td style="text-align:right">${sign}GHS ${Math.abs(amt).toFixed(2)}</td>
           <td>${htmlEscape(e.paymentMethod || 'CASH')}</td>
         </tr>`;
       })
@@ -352,9 +364,11 @@ export default function HistoryScreen() {
     return baseBudget * 12;
   }, [totalBudget, activeTimeFilter]);
 
+  // Total spent = every non-income transaction (personal AND shared), regardless
+  // of stored sign — expenses are always money going out.
   const totalSpent = useMemo(() => {
     return filteredExpenses
-      .filter(e => parseFloat(e.amount || '0') < 0)
+      .filter(e => e.type !== 'income')
       .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || '0')), 0);
   }, [filteredExpenses]);
 
@@ -487,7 +501,7 @@ export default function HistoryScreen() {
               <Feather name="upload" size={14} color="#FF9500" />
             </View>
           </View>
-          <Text style={[styles.gaugeLabel, { color: colors.textSecondary }]}>Total Spend</Text>
+          <Text style={[styles.gaugeLabel, { color: colors.textSecondary }]}>Total Spent</Text>
           <Text style={[styles.gaugeValue, { color: colors.text }]}>GHS {totalSpent.toFixed(0)}</Text>
         </View>
 
@@ -580,7 +594,7 @@ export default function HistoryScreen() {
               >
                 <View style={styles.expenseLeft}>
                   <View style={[styles.iconBox, { backgroundColor: colors.neutralBg }]}>
-                    <Text style={styles.icon}>{CATEGORY_ICONS[isShared ? 'Shared' : item.category] || '📦'}</Text>
+                    <Text style={styles.icon}>{isShared ? '👥' : getCategoryIcon(item.category)}</Text>
                   </View>
                   <View style={{ flex: 1 }}>
                     <View style={styles.descRow}>
@@ -624,12 +638,13 @@ export default function HistoryScreen() {
                   </View>
                 </View>
                 <View style={styles.expenseRight}>
+                  {/* Everything is money going OUT unless explicitly an income transaction */}
                   <Text style={[
                     styles.expenseAmount,
-                    { color: parseFloat(item.amount || '0') >= 0 ? colors.positive : colors.negative }
+                    { color: item.type === 'income' ? colors.positive : colors.negative }
                   ]}>
-                    {parseFloat(item.amount || '0') >= 0 
-                      ? `+GHS ${parseFloat(item.amount || '0').toFixed(2)}` 
+                    {item.type === 'income'
+                      ? `+GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`
                       : `-GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`}
                   </Text>
                   <TouchableOpacity

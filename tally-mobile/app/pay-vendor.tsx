@@ -170,6 +170,20 @@ export default function PayVendorScreen() {
         {/* ──────────────────── STEP 1 — Enter Details ──────────────────── */}
         {step === 1 && (
           <View>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => {
+                if (fromAddExpense === 'true') {
+                  router.back(); // Goes back to Add Expense screen
+                } else {
+                  router.push('/(tabs)/'); // Goes back to Home
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.backButtonText}>← Back</Text>
+            </TouchableOpacity>
+
             <Text style={styles.title}>Pay Vendor via MoMo</Text>
             <Text style={styles.subtitle}>
               Send money directly to a vendor's MoMo wallet.
@@ -451,6 +465,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#2A2F3E",
   },
   stepDotActive: { backgroundColor: "#FFC107" },
+
+  backButton: {
+    padding: 8,
+    marginBottom: 16,
+  },
+  backButtonText: {
+    color: "#00C896",
+    fontSize: 16,
+    fontWeight: "600",
+  },
 
   title: {
     fontSize: 22,

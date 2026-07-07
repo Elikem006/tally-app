@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { budgetAPI, expenseAPI } from '../../services/api';
+import { budgetAPI, expenseAPI, categoriesAPI } from '../../services/api';
 import { getUserId } from '../../services/storage';
 import { notifyBudgetMilestone } from '../../services/notifications';
 import Toast from '../../components/Toast';
@@ -53,6 +53,15 @@ export default function BudgetScreen() {
   
   // Data States
   const [summary, setSummary] = useState<{ [key: string]: any }>({});
+  const [customCategories, setCustomCategories] = useState<any[]>([]);
+
+  // Emoji for default categories first, then user-created custom categories
+  function getCategoryIcon(categoryName: string): string {
+    if (CATEGORY_ICONS[categoryName]) return CATEGORY_ICONS[categoryName];
+    const custom = customCategories.find((c: any) => c.name === categoryName);
+    if (custom?.emoji) return custom.emoji;
+    return '📦';
+  }
   const [report, setReport] = useState<any>(null);
   const [limits, setLimits] = useState<{ [key: string]: string }>({
     Food: '',
@@ -97,10 +106,12 @@ export default function BudgetScreen() {
     setError(null);
     try {
       const userId = getUserId();
-      const [response, reportResponse] = await Promise.all([
+      const [response, reportResponse, categoriesRes] = await Promise.all([
         budgetAPI.getBudgetSummary(userId),
-        expenseAPI.getMonthlyReport(userId)
+        expenseAPI.getMonthlyReport(userId),
+        categoriesAPI.getUserCategories(userId).catch(() => ({ data: [] }))
       ]);
+      setCustomCategories(categoriesRes.data || []);
       const data = response.data || {};
       setSummary(data);
       setReport(reportResponse.data || null);
@@ -340,7 +351,7 @@ export default function BudgetScreen() {
                           <Text style={[styles.insightLabel, { color: colors.textSecondary }]}>Top Spending Category</Text>
                           <View style={styles.topCatRow}>
                             <Text style={styles.topCatEmoji}>
-                              {CATEGORY_ICONS[highCat.category] || "📦"}
+                              {getCategoryIcon(highCat.category)}
                             </Text>
                             <View>
                               <Text style={[styles.topCatName, { color: colors.text }]}>{highCat.category}</Text>
@@ -386,7 +397,7 @@ export default function BudgetScreen() {
                       <View style={styles.cardHeader}>
                         <View style={styles.cardLeft}>
                           <View style={[styles.iconCircle, { backgroundColor: colors.neutralBg }]}>
-                            <Text style={styles.icon}>{CATEGORY_ICONS[category] || '📦'}</Text>
+                            <Text style={styles.icon}>{getCategoryIcon(category)}</Text>
                           </View>
                           <Text style={[styles.categoryTitle, { color: colors.text }]}>{category}</Text>
                         </View>
@@ -483,7 +494,7 @@ export default function BudgetScreen() {
                     <View key={category} style={[styles.categoryCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
                       <View style={[styles.categoryLeft, { flex: 1, marginRight: 12 }]}>
                         <View style={[styles.categoryIconCircle, { backgroundColor: colors.neutralBg }]}>
-                          <Text style={styles.categoryIcon}>{CATEGORY_ICONS[category]}</Text>
+                          <Text style={styles.categoryIcon}>{getCategoryIcon(category)}</Text>
                         </View>
                         <View style={{ flex: 1 }}>
                           <Text style={[styles.categoryLabelName, { color: colors.text }]}>{category}</Text>

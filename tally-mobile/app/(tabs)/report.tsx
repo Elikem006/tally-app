@@ -12,7 +12,7 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
-import { expenseAPI } from "../../services/api";
+import { expenseAPI, categoriesAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
 
 const CATEGORY_ICONS: { [key: string]: string } = {
@@ -63,6 +63,15 @@ export default function ReportScreen() {
 
   // Chart data states
   const [expenses, setExpenses] = useState<any[]>([]);
+  const [customCategories, setCustomCategories] = useState<any[]>([]);
+
+  // Emoji for default categories first, then user-created custom categories
+  function getCategoryIcon(categoryName: string): string {
+    if (CATEGORY_ICONS[categoryName]) return CATEGORY_ICONS[categoryName];
+    const custom = customCategories.find((c: any) => c.name === categoryName);
+    if (custom?.emoji) return custom.emoji;
+    return '📦';
+  }
   const [chartTimeline, setChartTimeline] = useState<'day' | 'week' | 'month' | 'year'>('week');
 
   const isCurrentMonth = selectedMonth === todayMonth && selectedYear === todayYear;
@@ -81,12 +90,14 @@ export default function ReportScreen() {
     setError(null);
     try {
       const userId = getUserId();
-      const [reportRes, expensesRes] = await Promise.all([
+      const [reportRes, expensesRes, categoriesRes] = await Promise.all([
         expenseAPI.getMonthlyReport(userId, month + 1, year),
         expenseAPI.getCombinedHistory(userId),
+        categoriesAPI.getUserCategories(userId).catch(() => ({ data: [] })),
       ]);
       setReport(reportRes.data);
       setExpenses(expensesRes.data || []);
+      setCustomCategories(categoriesRes.data || []);
     } catch (e) {
       setError("Failed to load reports. Pull down to refresh.");
     } finally {
@@ -472,7 +483,7 @@ export default function ReportScreen() {
                 <View style={styles.highlightRow}>
                   <View style={styles.iconBox}>
                     <Text style={styles.highlightEmoji}>
-                      {CATEGORY_ICONS[report.highestCategory.category] || "📦"}
+                      {getCategoryIcon(report.highestCategory.category)}
                     </Text>
                   </View>
                   <View style={{ flex: 1 }}>
@@ -500,7 +511,7 @@ export default function ReportScreen() {
                         <View style={styles.breakdownLeft}>
                           <View style={styles.iconBoxSmall}>
                             <Text style={styles.breakdownEmoji}>
-                              {CATEGORY_ICONS[cat] || "📦"}
+                              {getCategoryIcon(cat)}
                             </Text>
                           </View>
                           <Text style={styles.breakdownCat} numberOfLines={1}>{cat}</Text>
@@ -530,7 +541,7 @@ export default function ReportScreen() {
                         <View style={styles.perfLeft}>
                           <View style={styles.iconBoxSmall}>
                             <Text style={styles.perfEmoji}>
-                              {CATEGORY_ICONS[item.category] || "📦"}
+                              {getCategoryIcon(item.category)}
                             </Text>
                           </View>
                           <Text style={styles.perfCat}>{item.category}</Text>

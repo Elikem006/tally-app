@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { expenseAPI, remindersAPI, budgetAPI, momoAPI } from '../../services/api';
+import { expenseAPI, remindersAPI, budgetAPI, momoAPI, categoriesAPI } from '../../services/api';
 import { getUserId, getUserName, safeStorage } from '../../services/storage';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
@@ -45,19 +45,19 @@ const CATEGORY_ICONS: { [key: string]: string } = {
 
 const CATEGORIES = ["Food", "Transport", "Entertainment", "Utilities", "Other"];
 
-const getLineStyle = (x1: number, y1: number, x2: number, y2: number) => {
+const getLineStyle = (x1: number, y1: number, x2: number, y2: number, lineColor: string = '#8B5CF6') => {
   const dx = x2 - x1;
   const dy = y2 - y1;
   const distance = Math.sqrt(dx * dx + dy * dy);
   const angle = Math.atan2(dy, dx);
-  
+
   return {
     position: 'absolute' as const,
     left: x1,
     top: y1,
     width: distance + 0.6,
     height: 3,
-    backgroundColor: '#8B5CF6',
+    backgroundColor: lineColor,
     transform: [{ rotate: `${angle}rad` }] as any,
     transformOrigin: ['0%', '50%', 0] as any,
   };
@@ -111,6 +111,7 @@ const EyelashOpenIcon = ({ size = 20, color = "#D97706" }) => (
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { colors, theme } = useTheme();
+  const isDark = theme === 'dark';
   const [expenses, setExpenses] = useState<any[]>([]);
   const [budgets, setBudgets] = useState<any[]>([]);
   const [upcomingReminders, setUpcomingReminders] = useState<any[]>([]);
@@ -121,6 +122,15 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [userName, setUserName] = useState("User");
+  const [customCategories, setCustomCategories] = useState<any[]>([]);
+
+  // Emoji for default categories first, then user-created custom categories
+  function getCategoryIcon(categoryName: string): string {
+    if (CATEGORY_ICONS[categoryName]) return CATEGORY_ICONS[categoryName];
+    const custom = customCategories.find((c: any) => c.name === categoryName);
+    if (custom?.emoji) return custom.emoji;
+    return '📦';
+  }
 
   // Chart timeline switcher state
   const [chartTimeline, setChartTimeline] = useState<'day' | 'week' | 'month' | 'year'>('week');
@@ -189,11 +199,12 @@ export default function HomeScreen() {
       setUserName(name);
 
       // Fast local-backend calls only — these decide when the screen renders
-      const [expensesRes, budgetsRes, remindersRes, recurringRes] = await Promise.all([
+      const [expensesRes, budgetsRes, remindersRes, recurringRes, categoriesRes] = await Promise.all([
         expenseAPI.getCombinedHistory(userId),
         budgetAPI.getUserBudgets(userId),
         remindersAPI.getUpcomingReminders(userId).catch(() => ({ data: [] })),
-        expenseAPI.getRecurringExpenses(userId).catch(() => ({ data: [] }))
+        expenseAPI.getRecurringExpenses(userId).catch(() => ({ data: [] })),
+        categoriesAPI.getUserCategories(userId).catch(() => ({ data: [] }))
       ]);
 
       const expenseList = expensesRes.data || [];
@@ -201,6 +212,7 @@ export default function HomeScreen() {
       setBudgets(budgetsRes.data || []);
       setUpcomingReminders(remindersRes.data || []);
       setRecurringExpenses(recurringRes.data || []);
+      setCustomCategories(categoriesRes.data || []);
 
       // Calculate MoMo spending for this month
       const now = new Date();
@@ -211,7 +223,7 @@ export default function HomeScreen() {
           const d = new Date(e.date);
           return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
         })
-        .filter((e: any) => parseFloat(e.amount || "0") < 0)
+        .filter((e: any) => e.type !== "income")
         .reduce((sum: number, e: any) => sum + Math.abs(parseFloat(e.amount || "0")), 0);
       setMomoMonthlySpent(momoTotal.toFixed(2));
     } catch (err: any) {
@@ -368,13 +380,15 @@ export default function HomeScreen() {
     }
   }
 
-  // Calculate Dynamic Spending & Budget sums
+  // Calculate Dynamic Spending & Budget sums.
+  // Every transaction is money going OUT (personal AND shared) unless it is
+  // explicitly an income transaction — never infer income from a positive sign.
   const totalSpent = expenses
-    .filter(e => parseFloat(e.amount || '0') < 0)
+    .filter(e => e.type !== 'income')
     .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || '0')), 0);
   const totalIncome = expenses
-    .filter(e => parseFloat(e.amount || '0') > 0)
-    .reduce((sum, e) => sum + parseFloat(e.amount || '0'), 0);
+    .filter(e => e.type === 'income')
+    .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || '0')), 0);
   const totalBudget = budgets.reduce((sum, b) => sum + parseFloat(b.monthlyLimit || '0'), 0);
   const remaining = totalBudget - totalSpent;
 
@@ -388,7 +402,7 @@ export default function HomeScreen() {
   const categoryTotals = expenses.reduce((acc: { [key: string]: number }, e) => {
     const category = e.category || 'Other';
     const numAmt = parseFloat(e.amount || '0');
-    if (numAmt < 0) {
+    if (e.type !== 'income') {
       acc[category] = (acc[category] || 0) + Math.abs(numAmt);
     }
     return acc;
@@ -433,7 +447,7 @@ export default function HomeScreen() {
         const dateKey = `${year}-${month}-${day}`;
         
         const daySpend = expenses
-          .filter(e => e.date === dateKey && parseFloat(e.amount || '0') < 0)
+          .filter(e => e.date === dateKey && e.type !== 'income')
           .reduce((s, e) => s + Math.abs(parseFloat(e.amount) || 0), 0);
         
         sum += daySpend;
@@ -458,7 +472,7 @@ export default function HomeScreen() {
         const weekSpend = expenses.filter(e => {
           if (!e.date) return false;
           const ed = parseLocalDate(e.date);
-          return ed >= start && ed <= end && parseFloat(e.amount || '0') < 0;
+          return ed >= start && ed <= end && e.type !== 'income';
         }).reduce((s, e) => s + Math.abs(parseFloat(e.amount) || 0), 0);
 
         sum += weekSpend;
@@ -480,7 +494,7 @@ export default function HomeScreen() {
         const monthSpend = expenses.filter(e => {
           if (!e.date) return false;
           const ed = parseLocalDate(e.date);
-          return ed.getFullYear() === yr && (ed.getMonth() + 1) === mo && parseFloat(e.amount || '0') < 0;
+          return ed.getFullYear() === yr && (ed.getMonth() + 1) === mo && e.type !== 'income';
         }).reduce((s, e) => s + Math.abs(parseFloat(e.amount) || 0), 0);
 
         sum += monthSpend;
@@ -497,7 +511,7 @@ export default function HomeScreen() {
       const yearSpend = expenses.filter(e => {
         if (!e.date) return false;
         const ed = parseLocalDate(e.date);
-        return ed.getFullYear() === yr && parseFloat(e.amount || '0') < 0;
+        return ed.getFullYear() === yr && e.type !== 'income';
       }).reduce((s, e) => s + Math.abs(parseFloat(e.amount) || 0), 0);
 
       sum += yearSpend;
@@ -660,7 +674,7 @@ export default function HomeScreen() {
         )}
 
         {/* Expenses Overview Card */}
-        <View style={styles.expensesCard}>
+        <View style={[styles.expensesCard, isDark && { backgroundColor: colors.cardBg, borderWidth: 1, borderColor: colors.border }]}>
           <View style={styles.radialCircle1} />
           <View style={styles.radialCircle2} />
           <View style={styles.radialCircle3} />
@@ -720,6 +734,7 @@ export default function HomeScreen() {
         {/* MTN MoMo Wallet Balance Card */}
         <View style={[
           styles.momoCard,
+          { backgroundColor: colors.cardBg },
           momoStatus === "unavailable" && styles.momoCardUnavailable,
         ]}>
           <View style={styles.momoCardHeader}>
@@ -814,16 +829,16 @@ export default function HomeScreen() {
         {/* Upcoming Bills / Reminders */}
         {upcomingReminders.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Upcoming Bills</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Upcoming Bills</Text>
             {upcomingReminders.slice(0, 3).map((reminder: any) => (
               <TouchableOpacity
                 key={reminder.id}
-                style={[styles.expenseCard, { borderColor: colors.border }]}
+                style={[styles.expenseCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
                 onPress={() => router.push('/(tabs)/reminders')}
                 activeOpacity={0.8}
               >
                 <View style={styles.expenseLeft}>
-                  <View style={styles.iconBox}>
+                  <View style={[styles.iconBox, { backgroundColor: colors.neutralBg, borderColor: colors.border }]}>
                     <Text style={styles.icon}>📅</Text>
                   </View>
                   <View style={{ flex: 1 }}>
@@ -855,16 +870,16 @@ export default function HomeScreen() {
         {/* Recurring Expenses */}
         {recurringExpenses.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Recurring Expenses</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Recurring Expenses</Text>
             {recurringExpenses.map((item: any) => (
               <TouchableOpacity
                 key={`recurring-${item.id}`}
-                style={[styles.expenseCard, { borderColor: colors.border }]}
+                style={[styles.expenseCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
                 onPress={() => router.push('/(tabs)/history')}
                 activeOpacity={0.8}
               >
                 <View style={styles.expenseLeft}>
-                  <View style={styles.iconBox}>
+                  <View style={[styles.iconBox, { backgroundColor: colors.neutralBg, borderColor: colors.border }]}>
                     <Text style={styles.icon}>🔄</Text>
                   </View>
                   <View style={{ flex: 1 }}>
@@ -894,28 +909,28 @@ export default function HomeScreen() {
         )}
 
         {/* Spending Activity Chart Card */}
-        <View style={styles.chartCard}>
+        <View style={[styles.chartCard, { backgroundColor: colors.cardBg }]}>
           <View style={styles.chartHeader}>
             <View>
-              <Text style={styles.chartTitle}>Spending Activity</Text>
-              <Text style={styles.chartTotal}>
+              <Text style={[styles.chartTitle, { color: colors.textSecondary }]}>Spending Activity</Text>
+              <Text style={[styles.chartTotal, { color: colors.text }]}>
                 GHS {chartSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </Text>
             </View>
 
             {/* Timeline Filter Segmented Control */}
-            <View style={styles.timelineFilterMini}>
+            <View style={[styles.timelineFilterMini, { backgroundColor: colors.neutralBg, borderColor: colors.border }]}>
               {(['day', 'week', 'month', 'year'] as const).map((filter) => {
                 const labelMap = { day: 'D', week: 'W', month: 'M', year: 'Y' };
                 const isActive = chartTimeline === filter;
                 return (
                   <TouchableOpacity
                     key={filter}
-                    style={[styles.timelineMiniBtn, isActive && styles.timelineMiniBtnActive]}
+                    style={[styles.timelineMiniBtn, isActive && [styles.timelineMiniBtnActive, { backgroundColor: colors.cardBg }]]}
                     onPress={() => setChartTimeline(filter)}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.timelineMiniText, isActive && styles.timelineMiniTextActive]}>
+                    <Text style={[styles.timelineMiniText, { color: colors.textSecondary }, isActive && { color: colors.text }]}>
                       {labelMap[filter]}
                     </Text>
                   </TouchableOpacity>
@@ -926,13 +941,13 @@ export default function HomeScreen() {
 
           <View style={styles.chartContainer}>
             {/* Horizontal Grid Lines */}
-            <View style={[styles.gridLineHorizontal, { top: paddingVertical }]} />
-            <View style={[styles.gridLineHorizontal, { top: chartHeight / 2 }]} />
-            <View style={[styles.gridLineHorizontal, { top: chartHeight - paddingVertical }]} />
+            <View style={[styles.gridLineHorizontal, { top: paddingVertical, backgroundColor: colors.border }]} />
+            <View style={[styles.gridLineHorizontal, { top: chartHeight / 2, backgroundColor: colors.border }]} />
+            <View style={[styles.gridLineHorizontal, { top: chartHeight - paddingVertical, backgroundColor: colors.border }]} />
 
             {/* Connection Line Segments (Smooth Cosine Wave Curve) */}
             {curveSegments.map((seg, idx) => {
-              const lineStyle = getLineStyle(seg.x1, seg.y1, seg.x2, seg.y2);
+              const lineStyle = getLineStyle(seg.x1, seg.y1, seg.x2, seg.y2, colors.primary);
               return (
                 <View
                   key={`line-${idx}`}
@@ -950,6 +965,9 @@ export default function HomeScreen() {
                   {
                     left: point.x - 6,
                     top: point.y - 6,
+                    backgroundColor: colors.primary,
+                    borderColor: colors.cardBg,
+                    shadowColor: colors.primary,
                   }
                 ]}
               />
@@ -968,7 +986,7 @@ export default function HomeScreen() {
                   }
                 ]}
               >
-                <Text style={styles.chartDayText}>{point.day}</Text>
+                <Text style={[styles.chartDayText, { color: colors.textSecondary }]}>{point.day}</Text>
               </View>
             ))}
           </View>
@@ -977,23 +995,23 @@ export default function HomeScreen() {
         {/* By Category Section */}
         {Object.keys(categoryTotals).length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>By Category</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>By Category</Text>
             {Object.entries(categoryTotals).map(([category, total]: any) => {
               const percentage = totalSpent > 0 ? (total / totalSpent) * 100 : 0;
               return (
-                <View key={category} style={styles.categoryRow}>
+                <View key={category} style={[styles.categoryRow, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
                   <View style={styles.categoryInfoLeft}>
-                    <View style={styles.categoryIconCircle}>
-                      <Text style={styles.categoryIcon}>{CATEGORY_ICONS[category] || '📦'}</Text>
+                    <View style={[styles.categoryIconCircle, { backgroundColor: colors.neutralBg, borderColor: colors.border }]}>
+                      <Text style={styles.categoryIcon}>{getCategoryIcon(category)}</Text>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.categoryName}>{category}</Text>
-                      <Text style={styles.categoryDetails}>
+                      <Text style={[styles.categoryName, { color: colors.text }]}>{category}</Text>
+                      <Text style={[styles.categoryDetails, { color: colors.textSecondary }]}>
                         GHS {total.toFixed(2)} spent • {percentage.toFixed(0)}%
                       </Text>
                     </View>
                   </View>
-                  <Text style={styles.categoryPercentage}>
+                  <Text style={[styles.categoryPercentage, { color: colors.text }]}>
                     {percentage.toFixed(0)}%
                   </Text>
                 </View>
@@ -1005,14 +1023,14 @@ export default function HomeScreen() {
         {/* Recent Expenses List */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Recent Transactions</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Transactions</Text>
             <TouchableOpacity onPress={() => router.push('/(tabs)/history')} activeOpacity={0.7}>
               <Text style={styles.seeAllText}>See All</Text>
             </TouchableOpacity>
           </View>
 
           {recentExpenses.length === 0 ? (
-            <Text style={styles.emptyText}>No expenses yet</Text>
+            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No expenses yet</Text>
           ) : (
             recentExpenses.map((item) => {
               const isShared = item.isShared || item.type === "shared";
@@ -1021,18 +1039,18 @@ export default function HomeScreen() {
               
               return (
                 // type+id — personal and shared entries can share numeric ids
-                <View key={`${item.type ?? (isShared ? "shared" : "personal")}-${item.id}`} style={[styles.expenseCard, isShared && styles.sharedCard]}>
+                <View key={`${item.type ?? (isShared ? "shared" : "personal")}-${item.id}`} style={[styles.expenseCard, { backgroundColor: colors.cardBg, borderColor: colors.border }, isShared && styles.sharedCard]}>
                   <View style={styles.expenseLeft}>
-                    <View style={styles.iconBox}>
-                      <Text style={styles.icon}>{CATEGORY_ICONS[isShared ? 'Shared' : item.category] || '📦'}</Text>
+                    <View style={[styles.iconBox, { backgroundColor: colors.neutralBg, borderColor: colors.border }]}>
+                      <Text style={styles.icon}>{isShared ? '👥' : getCategoryIcon(item.category)}</Text>
                     </View>
                     <View style={{ flex: 1 }}>
                       <View style={styles.descRow}>
-                        <Text style={styles.expenseDescription} numberOfLines={1}>
+                        <Text style={[styles.expenseDescription, { color: colors.text }]} numberOfLines={1}>
                           {cleanDescription || item.category}
                         </Text>
                       </View>
-                      <Text style={styles.expenseCategory}>{item.category} • {item.date}</Text>
+                      <Text style={[styles.expenseCategory, { color: colors.textSecondary }]}>{item.category} • {item.date}</Text>
 
                       <View style={styles.badgeRow}>
                         {isShared && (
@@ -1040,8 +1058,8 @@ export default function HomeScreen() {
                             <Text style={styles.sharedBadgeText}>👥 Shared</Text>
                           </View>
                         )}
-                        <View style={[styles.paymentBadge, isMomo && styles.momoBadge]}>
-                          <Text style={[styles.paymentBadgeText, isMomo && styles.momoBadgeText]}>
+                        <View style={[styles.paymentBadge, { backgroundColor: colors.neutralBg, borderColor: colors.border }, isMomo && styles.momoBadge]}>
+                          <Text style={[styles.paymentBadgeText, { color: colors.textSecondary }, isMomo && styles.momoBadgeText]}>
                             {isMomo ? "📱 MoMo" : "💵 Cash"}
                           </Text>
                         </View>
@@ -1050,20 +1068,21 @@ export default function HomeScreen() {
                       {tags.length > 0 && (
                         <View style={styles.tagsContainer}>
                           {tags.map((tag: string) => (
-                            <View key={tag} style={styles.tagPill}>
-                              <Text style={styles.tagText}>{tag}</Text>
+                            <View key={tag} style={[styles.tagPill, { backgroundColor: colors.neutralBg, borderColor: colors.border }]}>
+                              <Text style={[styles.tagText, { color: colors.textSecondary }]}>{tag}</Text>
                             </View>
                           ))}
                         </View>
                       )}
                     </View>
                   </View>
+                  {/* Expenses (personal + shared) always show as money going out */}
                   <Text style={[
                     styles.expenseAmount,
-                    { color: parseFloat(item.amount || '0') >= 0 ? colors.positive : colors.negative }
+                    { color: item.type === 'income' ? colors.positive : colors.negative }
                   ]}>
-                    {parseFloat(item.amount || '0') >= 0 
-                      ? `+GHS ${parseFloat(item.amount || '0').toFixed(2)}` 
+                    {item.type === 'income'
+                      ? `+GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`
                       : `-GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`}
                   </Text>
                 </View>
@@ -1132,7 +1151,7 @@ export default function HomeScreen() {
                   onPress={() => setQuickCategory(cat)}
                   activeOpacity={0.8}
                 >
-                  <Text style={styles.categoryChipIcon}>{CATEGORY_ICONS[cat]}</Text>
+                  <Text style={styles.categoryChipIcon}>{getCategoryIcon(cat)}</Text>
                   <Text style={[
                     styles.categoryChipText,
                     quickCategory === cat && styles.categoryChipTextActive,

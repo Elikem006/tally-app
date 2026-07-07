@@ -51,6 +51,13 @@ public class MoMoService {
     @Value("${momo.disbursement.base.url}")
     private String disbursementBaseUrl;
 
+    // ── Token caching (sandbox tokens expire ~1h; refresh after 50 min) ──────
+    private static final long TOKEN_TTL_MS = 50 * 60 * 1000;
+    private String cachedCollectionToken;
+    private long collectionTokenExpiry = 0;
+    private String cachedDisbursementToken;
+    private long disbursementTokenExpiry = 0;
+
     // Standard RestTemplate for payments and status checks (longer timeout)
     private final RestTemplate restTemplate = buildRestTemplate(10_000, 30_000);
 
@@ -68,6 +75,11 @@ public class MoMoService {
      * Obtain a Bearer access token from the MoMo collections API.
      */
     public String getAccessToken() {
+        // Serve cached token while still fresh (< 50 min old)
+        if (cachedCollectionToken != null && System.currentTimeMillis() < collectionTokenExpiry) {
+            return cachedCollectionToken;
+        }
+
         String credentials = apiUser + ":" + apiKey;
         String basicAuth = "Basic " + Base64.getEncoder().encodeToString(credentials.getBytes());
 
@@ -79,6 +91,7 @@ public class MoMoService {
         HttpEntity<String> entity = new HttpEntity<>("", headers);
 
         try {
+            log.info("MoMo: requesting fresh collection access token from " + baseUrl + "/collection/token/");
             ResponseEntity<Map> response = restTemplate.exchange(
                     baseUrl + "/collection/token/",
                     HttpMethod.POST,
@@ -87,14 +100,22 @@ public class MoMoService {
             );
 
             if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                log.severe("MoMo: collection token request failed. Status: " + response.getStatusCode());
                 throw new RuntimeException("Failed to get MoMo access token. Status: " + response.getStatusCode());
             }
             if (!response.getBody().containsKey("access_token")) {
+                log.severe("MoMo: collection token response missing access_token field. Body: " + response.getBody());
                 throw new RuntimeException("Failed to get MoMo access token: response missing access_token field");
             }
 
-            return (String) response.getBody().get("access_token");
+            String token = (String) response.getBody().get("access_token");
+            cachedCollectionToken = token;
+            collectionTokenExpiry = System.currentTimeMillis() + TOKEN_TTL_MS;
+            log.info("MoMo: collection access token obtained and cached for 50 minutes");
+            return token;
         } catch (HttpStatusCodeException e) {
+            log.severe("MoMo: collection token request failed. Status: " + e.getStatusCode()
+                    + " Body: " + e.getResponseBodyAsString());
             throw new RuntimeException("Failed to get MoMo access token: " + e.getStatusCode() + " — " + e.getResponseBodyAsString());
         }
     }
@@ -140,8 +161,12 @@ public class MoMoService {
                 return referenceId;
             }
 
+            log.severe("MoMo: requestToPay returned unexpected status " + response.getStatusCode()
+                    + " referenceId=" + referenceId);
             throw new RuntimeException("MoMo requestToPay returned unexpected status: " + response.getStatusCode());
         } catch (HttpStatusCodeException e) {
+            log.severe("MoMo: requestToPay FAILED. referenceId=" + referenceId
+                    + " status=" + e.getStatusCode() + " responseBody=" + e.getResponseBodyAsString());
             throw new RuntimeException("MoMo requestToPay failed: " + e.getStatusCode() + " — " + e.getResponseBodyAsString());
         }
     }
@@ -179,6 +204,8 @@ public class MoMoService {
             }
             return result;
         } catch (HttpStatusCodeException e) {
+            log.severe("MoMo: balance check FAILED. status=" + e.getStatusCode()
+                    + " responseBody=" + e.getResponseBodyAsString());
             throw new RuntimeException("MoMo balance check failed: " + e.getStatusCode() + " — " + e.getResponseBodyAsString());
         }
     }
@@ -189,6 +216,11 @@ public class MoMoService {
      * Obtain a Bearer access token from the MoMo Disbursements API.
      */
     public String getDisbursementAccessToken() {
+        // Serve cached token while still fresh (< 50 min old)
+        if (cachedDisbursementToken != null && System.currentTimeMillis() < disbursementTokenExpiry) {
+            return cachedDisbursementToken;
+        }
+
         String credentials = disbursementApiUser + ":" + disbursementApiKey;
         String basicAuth = "Basic " + Base64.getEncoder().encodeToString(credentials.getBytes());
 
@@ -200,6 +232,7 @@ public class MoMoService {
         HttpEntity<String> entity = new HttpEntity<>("", headers);
 
         try {
+            log.info("MoMo: requesting fresh disbursement access token from " + disbursementBaseUrl + "/disbursement/token/");
             ResponseEntity<Map> response = restTemplate.exchange(
                     disbursementBaseUrl + "/disbursement/token/",
                     HttpMethod.POST,
@@ -208,14 +241,22 @@ public class MoMoService {
             );
 
             if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                log.severe("MoMo: disbursement token request failed. Status: " + response.getStatusCode());
                 throw new RuntimeException("Failed to get disbursement token. Status: " + response.getStatusCode());
             }
             if (!response.getBody().containsKey("access_token")) {
+                log.severe("MoMo: disbursement token response missing access_token field. Body: " + response.getBody());
                 throw new RuntimeException("Disbursement token response missing access_token field");
             }
 
-            return (String) response.getBody().get("access_token");
+            String token = (String) response.getBody().get("access_token");
+            cachedDisbursementToken = token;
+            disbursementTokenExpiry = System.currentTimeMillis() + TOKEN_TTL_MS;
+            log.info("MoMo: disbursement access token obtained and cached for 50 minutes");
+            return token;
         } catch (HttpStatusCodeException e) {
+            log.severe("MoMo: disbursement token request failed. Status: " + e.getStatusCode()
+                    + " Body: " + e.getResponseBodyAsString());
             throw new RuntimeException("Failed to get disbursement token: " + e.getStatusCode() + " — " + e.getResponseBodyAsString());
         }
     }
@@ -249,6 +290,9 @@ public class MoMoService {
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
 
         try {
+            log.info("MoMo: initiating transfer. referenceId=" + referenceId
+                    + " amount=" + body.get("amount") + " payee=" + recipientPhone
+                    + " url=" + disbursementBaseUrl + "/disbursement/v1_0/transfer");
             ResponseEntity<String> response = restTemplate.exchange(
                     disbursementBaseUrl + "/disbursement/v1_0/transfer",
                     HttpMethod.POST,
@@ -261,8 +305,13 @@ public class MoMoService {
                 return referenceId;
             }
 
+            log.severe("MoMo: transfer returned unexpected status " + response.getStatusCode()
+                    + " referenceId=" + referenceId + " body=" + response.getBody());
             throw new RuntimeException("MoMo transfer returned unexpected status: " + response.getStatusCode());
         } catch (HttpStatusCodeException e) {
+            log.severe("MoMo: transfer FAILED. referenceId=" + referenceId
+                    + " status=" + e.getStatusCode()
+                    + " responseBody=" + e.getResponseBodyAsString());
             throw new RuntimeException("MoMo transfer failed: " + e.getStatusCode() + " — " + e.getResponseBodyAsString());
         }
     }
@@ -299,6 +348,8 @@ public class MoMoService {
 
             return "PENDING";
         } catch (HttpStatusCodeException e) {
+            log.severe("MoMo: transfer status check FAILED. referenceId=" + referenceId
+                    + " status=" + e.getStatusCode() + " responseBody=" + e.getResponseBodyAsString());
             throw new RuntimeException("MoMo transfer status check failed: " + e.getStatusCode() + " — " + e.getResponseBodyAsString());
         }
     }
@@ -335,6 +386,8 @@ public class MoMoService {
 
             return "PENDING";
         } catch (HttpStatusCodeException e) {
+            log.severe("MoMo: payment status check FAILED. referenceId=" + referenceId
+                    + " status=" + e.getStatusCode() + " responseBody=" + e.getResponseBodyAsString());
             throw new RuntimeException("MoMo status check failed: " + e.getStatusCode() + " — " + e.getResponseBodyAsString());
         }
     }

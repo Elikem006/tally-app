@@ -290,6 +290,7 @@ public class ExpenseService {
             entry.put("description", e.getDescription());
             entry.put("date", e.getDate().toString());
             entry.put("type", "personal");
+            entry.put("isExpense", true);
             entry.put("groupId", null);
             entry.put("paymentMethod", e.getPaymentMethod() != null ? e.getPaymentMethod() : "CASH");
             entry.put("isRecurring", Boolean.TRUE.equals(e.getIsRecurring()));
@@ -307,17 +308,23 @@ public class ExpenseService {
             for (SharedExpense se : sharedExpenses) {
                 if (seenSharedIds.contains(se.getId())) continue;
                 seenSharedIds.add(se.getId());
+                String groupName = resolveGroupName(se.getGroupId());
                 Map<String, Object> entry = new HashMap<>();
                 entry.put("id", se.getId());
+                // Amount stays positive; the frontend renders shared entries as
+                // expenses (minus sign / red) because isExpense is true.
                 entry.put("amount", se.getAmount());
                 entry.put("category", "Shared");
-                entry.put("description", se.getDescription());
+                entry.put("description", se.getDescription() != null
+                        ? "Paid for " + se.getDescription() + " in " + groupName
+                        : "Paid in " + groupName);
                 entry.put("date", se.getCreatedAt() != null
                         ? se.getCreatedAt().toLocalDate().toString()
                         : LocalDate.now().toString());
                 entry.put("type", "shared");
+                entry.put("isExpense", true);
                 entry.put("groupId", se.getGroupId());
-                entry.put("groupName", resolveGroupName(se.getGroupId()));
+                entry.put("groupName", groupName);
                 entry.put("paidBy", se.getPaidBy());
                 entry.put("paidByName", resolveUserName(se.getPaidBy()));
                 // Shared expenses have no stored payment method — default to CASH
