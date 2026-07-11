@@ -1,8 +1,11 @@
 package user_service.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import user_service.AuthGuard;
+import user_service.RateLimiter;
 import user_service.service.ExpenseService;
 import user_service.service.MoMoService;
 
@@ -25,6 +28,14 @@ public class MoMoController {
 
     @Autowired
     private ExpenseService expenseService;
+
+    @Autowired
+    private RateLimiter rateLimiter;
+
+    // Sandbox phone format: digits only, 9–15 characters
+    private static boolean isValidPhone(String phone) {
+        return phone != null && phone.matches("\\d{9,15}");
+    }
 
     // In-memory balance cache — avoids hitting the MoMo sandbox on every Home screen load
     private String cachedBalance = null;
@@ -56,6 +67,10 @@ public class MoMoController {
                 return ResponseEntity.badRequest()
                         .body(Map.of("error", "phoneNumber is required", "success", false));
             }
+            if (!isValidPhone(phoneNumber.trim())) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Phone number must contain only digits (9–15 characters)", "success", false));
+            }
             if (amountStr == null || amountStr.isBlank()) {
                 return ResponseEntity.badRequest()
                         .body(Map.of("error", "amount is required", "success", false));
@@ -68,7 +83,7 @@ public class MoMoController {
             }
 
             String referenceId = UUID.randomUUID().toString();
-            moMoService.requestToPay(phoneNumber, amount, description, referenceId);
+            moMoService.requestToPay(phoneNumber.trim(), amount, description, referenceId);
 
             return ResponseEntity.ok(Map.of(
                     "message",     "Payment request sent",
@@ -184,13 +199,32 @@ public class MoMoController {
      * Initiates a MoMo disbursement (transfer) to a vendor and records it as an expense.
      */
     @PostMapping("/transfer")
-    public ResponseEntity<?> initiateTransfer(@RequestBody Map<String, String> request) {
+    public ResponseEntity<?> initiateTransfer(@RequestBody Map<String, String> request,
+                                              HttpServletRequest httpRequest) {
         try {
             String recipientPhone = request.get("recipientPhone");
             String amountStr      = request.get("amount");
             String description    = request.getOrDefault("description", "MoMo transfer");
             String category       = request.getOrDefault("category", "Other");
             String userIdStr      = request.get("userId");
+
+            // The transfer must be initiated by the authenticated user
+            if (userIdStr != null && !userIdStr.isBlank()) {
+                AuthGuard.requireSameUser(httpRequest, Long.parseLong(userIdStr));
+            }
+
+            // Rate limit: max 10 transfers per user per hour
+            String limitKey = "transfer:" + (userIdStr != null && !userIdStr.isBlank()
+                    ? userIdStr : String.valueOf(AuthGuard.authUserId(httpRequest)));
+            if (!rateLimiter.allow(limitKey, 10, 60 * 60 * 1000)) {
+                return ResponseEntity.status(429)
+                        .body(Map.of("error", "Transfer limit reached (10 per hour). Please try again later.", "success", false));
+            }
+
+            if (!isValidPhone(recipientPhone.trim())) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Recipient phone must contain only digits (9–15 characters)", "success", false));
+            }
 
             if (recipientPhone == null || recipientPhone.isBlank()) {
                 return ResponseEntity.badRequest()
@@ -210,13 +244,17 @@ public class MoMoController {
             String referenceId = UUID.randomUUID().toString();
             moMoService.transfer(recipientPhone, amount, description, referenceId);
 
-            // Record as personal expense so it shows in History
+            // Record as personal expense so it shows in History. Status starts
+            // PENDING and is resolved to COMPLETED/FAILED when the transfer
+            // status is checked (see checkTransferStatus below). The stored
+            // referenceId links the expense to the disbursement (unique).
             if (userIdStr != null && !userIdStr.isBlank()) {
                 try {
                     Long userId = Long.parseLong(userIdStr);
                     String expenseDesc = "Sent to " + recipientPhone +
                             (description != null && !description.isBlank() ? ": " + description : "");
-                    expenseService.createExpense(userId, amount, category, expenseDesc, LocalDate.now(), "MOMO");
+                    expenseService.createExpense(userId, amount, category, expenseDesc,
+                            LocalDate.now(), "MOMO", "PENDING", referenceId);
                 } catch (Exception ex) {
                     // Non-fatal — log and continue; the transfer itself succeeded
                     log.warning("Failed to record transfer expense: " + ex.getMessage());
@@ -244,6 +282,15 @@ public class MoMoController {
     public ResponseEntity<?> checkTransferStatus(@PathVariable String referenceId) {
         try {
             String status = moMoService.getTransferStatus(referenceId);
+
+            // Resolve the linked expense's status: SUCCESSFUL → COMPLETED,
+            // FAILED → FAILED, anything else stays PENDING.
+            if ("SUCCESSFUL".equalsIgnoreCase(status)) {
+                expenseService.updateMomoExpenseStatus(referenceId, "COMPLETED");
+            } else if ("FAILED".equalsIgnoreCase(status)) {
+                expenseService.updateMomoExpenseStatus(referenceId, "FAILED");
+            }
+
             return ResponseEntity.ok(Map.of(
                     "referenceId", referenceId,
                     "status",      status,

@@ -39,20 +39,46 @@ public class ReminderService {
         return reminderRepository.findByUserIdOrderByDueDateAsc(userId);
     }
 
-    // Reminders due within the next 7 days that are not yet paid
+    // Unpaid reminders due within the next 7 days — INCLUDING overdue ones
+    // (an unpaid bill from last week is more urgent, not less).
     public List<Reminder> getUpcomingReminders(Long userId) {
-        LocalDate today = LocalDate.now();
-        LocalDate inSevenDays = today.plusDays(7);
-        return reminderRepository
-                .findByUserIdAndIsPaidFalseAndDueDateBetweenOrderByDueDateAsc(
-                        userId, today, inSevenDays);
+        LocalDate cutoff = LocalDate.now().plusDays(7);
+        return reminderRepository.findByUserIdAndIsPaidFalse(userId).stream()
+                .filter(r -> r.getDueDate() != null && !r.getDueDate().isAfter(cutoff))
+                .sorted((a, b) -> a.getDueDate().compareTo(b.getDueDate()))
+                .toList();
     }
 
     public Reminder markPaid(Long reminderId) {
         Reminder reminder = reminderRepository.findById(reminderId)
                 .orElseThrow(() -> new RuntimeException("Reminder not found: " + reminderId));
         reminder.setIsPaid(true);
-        return reminderRepository.save(reminder);
+        Reminder saved = reminderRepository.save(reminder);
+
+        // Recurring reminders roll over: paying this occurrence automatically
+        // creates the next one with the due date advanced by the period.
+        if (Boolean.TRUE.equals(reminder.getIsRecurring())
+                && reminder.getRecurrenceType() != null
+                && reminder.getDueDate() != null) {
+            LocalDate nextDue = switch (reminder.getRecurrenceType().toUpperCase()) {
+                case "DAILY"   -> reminder.getDueDate().plusDays(1);
+                case "WEEKLY"  -> reminder.getDueDate().plusWeeks(1);
+                case "MONTHLY" -> reminder.getDueDate().plusMonths(1);
+                default -> null;
+            };
+            if (nextDue != null) {
+                Reminder next = new Reminder();
+                next.setUserId(reminder.getUserId());
+                next.setTitle(reminder.getTitle());
+                next.setAmount(reminder.getAmount());
+                next.setDueDate(nextDue);
+                next.setIsRecurring(true);
+                next.setRecurrenceType(reminder.getRecurrenceType());
+                next.setIsPaid(false);
+                reminderRepository.save(next);
+            }
+        }
+        return saved;
     }
 
     public void deleteReminder(Long reminderId) {

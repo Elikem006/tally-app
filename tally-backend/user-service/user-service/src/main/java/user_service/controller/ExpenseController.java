@@ -1,11 +1,13 @@
 package user_service.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import user_service.AuthGuard;
 import user_service.model.Expense;
 import user_service.service.ExpenseService;
 import java.math.BigDecimal;
@@ -28,7 +30,8 @@ public class ExpenseController {
     }
 
     @PostMapping
-    public ResponseEntity<?> createExpense(@RequestBody Map<String, String> request) {
+    public ResponseEntity<?> createExpense(@RequestBody Map<String, String> request,
+                                           HttpServletRequest httpRequest) {
         try {
             String userIdStr = request.get("userId");
             String amountStr = request.get("amount");
@@ -46,6 +49,7 @@ public class ExpenseController {
             }
 
             Long userId = Long.parseLong(userIdStr);
+            AuthGuard.requireSameUser(httpRequest, userId);
             BigDecimal amount = new BigDecimal(amountStr);
 
             if (amount.compareTo(BigDecimal.ZERO) == 0) {
@@ -57,7 +61,22 @@ public class ExpenseController {
             String paymentMethod = request.getOrDefault("paymentMethod", "CASH");
             LocalDate date = LocalDate.parse(dateStr);
 
+            // Business rule: planned expenses up to 7 days ahead are allowed;
+            // anything further in the future is rejected.
+            if (date.isAfter(LocalDate.now().plusDays(7))) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Expense date cannot be more than 7 days in the future", "success", false));
+            }
+
             Expense expense = expenseService.createExpense(userId, amount, category, description, date, paymentMethod);
+
+            // Optional extras (Splitwise-style notes, receipt photo)
+            String notes = request.get("notes");
+            String receiptPhoto = request.get("receiptPhoto");
+            if (notes != null || receiptPhoto != null) {
+                expense = expenseService.updateExtras(expense.getId(), notes, receiptPhoto);
+            }
+
             return ResponseEntity.status(HttpStatus.CREATED).body(expense);
 
         } catch (Exception e) {
@@ -66,6 +85,7 @@ public class ExpenseController {
         }
     }
 
+    // Authorization: JwtAuthFilter verifies /user/{userId} matches the JWT's userId.
     @GetMapping("/user/{userId}")
     public ResponseEntity<?> getUserExpenses(@PathVariable Long userId,
                                              @RequestParam(required = false) String category) {
@@ -83,10 +103,16 @@ public class ExpenseController {
         }
     }
 
+    // Ownership enforced via the JWT: the expense must belong to the
+    // authenticated user (query param kept for backward compatibility).
     @DeleteMapping("/{expenseId}")
-    public ResponseEntity<?> deleteExpense(@PathVariable Long expenseId) {
+    public ResponseEntity<?> deleteExpense(@PathVariable Long expenseId,
+                                           @RequestParam(required = false) Long userId,
+                                           HttpServletRequest httpRequest) {
         try {
-            expenseService.deleteExpense(expenseId);
+            AuthGuard.requireSameUser(httpRequest, userId);
+            Long effectiveUserId = userId != null ? userId : AuthGuard.authUserId(httpRequest);
+            expenseService.deleteExpense(expenseId, effectiveUserId);
             return ResponseEntity.ok(Map.of("message", "Expense deleted successfully", "success", true));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
@@ -110,10 +136,20 @@ public class ExpenseController {
         }
     }
 
+    // Optional pagination: ?page=0&size=20 slices the sorted combined history.
+    // Without params the full list is returned (backward compatible).
     @GetMapping("/user/{userId}/history")
-    public ResponseEntity<?> getCombinedHistory(@PathVariable Long userId) {
+    public ResponseEntity<?> getCombinedHistory(@PathVariable Long userId,
+                                                @RequestParam(required = false) Integer page,
+                                                @RequestParam(required = false) Integer size) {
         try {
-            return ResponseEntity.ok(expenseService.getCombinedHistory(userId));
+            List<Map<String, Object>> history = expenseService.getCombinedHistory(userId);
+            if (page != null && size != null && page >= 0 && size > 0) {
+                int from = Math.min(page * size, history.size());
+                int to = Math.min(from + size, history.size());
+                return ResponseEntity.ok(history.subList(from, to));
+            }
+            return ResponseEntity.ok(history);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", errorMessage(e), "success", false));

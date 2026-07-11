@@ -1,9 +1,32 @@
 import { Stack, useRouter } from "expo-router";
 import { registerForPushNotifications } from "../services/notifications";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { View, Text, StyleSheet } from "react-native";
 import * as Notifications from "expo-notifications";
+import NetInfo from "@react-native-community/netinfo";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ThemeProvider } from "../hooks/useTheme";
+
+/** Red banner pinned to the top whenever the device loses connectivity. */
+function OfflineBanner() {
+  const insets = useSafeAreaInsets();
+  const [isOffline, setIsOffline] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      setIsOffline(!state.isConnected);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  if (!isOffline) return null;
+  return (
+    <View style={[styles.offlineBanner, { paddingTop: Math.max(insets.top, 8) }]}>
+      <Text style={styles.offlineText}>📡 No internet connection — showing cached data</Text>
+    </View>
+  );
+}
 
 export default function RootLayout() {
   const router = useRouter();
@@ -88,8 +111,32 @@ export default function RootLayout() {
             name="pay-vendor"
             options={{ headerShown: false, title: "Pay Vendor" }}
           />
+          <Stack.Screen
+            name="onboarding"
+            options={{ headerShown: false, title: "Welcome" }}
+          />
         </Stack>
+        <OfflineBanner />
       </SafeAreaProvider>
     </ThemeProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  offlineBanner: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "#E05C5C",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    zIndex: 9999,
+    alignItems: "center",
+  },
+  offlineText: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+});

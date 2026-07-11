@@ -123,14 +123,19 @@ export async function notifyBudgetMilestone(category: string, percentage: number
   }
 }
 
-export async function notifySettleUp(groupName: string, payerName: string) {
-  const body = `${payerName} has settled up in ${groupName}`;
-  await sendLocalNotification("✅ Settled Up", body, { screen: "groups" });
+export async function notifySettleUp(
+  groupName: string,
+  settlerName: string,
+  amount: string,
+) {
+  const formatted = (parseFloat(amount) || 0).toFixed(2);
+  const body = `${settlerName} settled up GHS ${formatted} in ${groupName}`;
+  await sendLocalNotification("You've been paid back! 💚", body, { screen: "history" });
   await addHistoryItem({
     type: "settle_up",
-    title: "✅ Settled Up",
+    title: "You've been paid back! 💚",
     body,
-    data: { screen: "groups" },
+    data: { screen: "history" },
   });
 }
 

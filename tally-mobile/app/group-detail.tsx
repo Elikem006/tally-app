@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   TextInput,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Modal,
@@ -18,10 +17,11 @@ import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { groupAPI, momoAPI } from "../services/api";
 import { getUserId, currentUser } from "../services/storage";
-import { notifyNewSharedExpense } from "../services/notifications";
+import { notifyNewSharedExpense, notifySettleUp } from "../services/notifications";
 import Avatar from "../components/Avatar";
 import Toast from "../components/Toast";
 import { useToast } from "../hooks/useToast";
+import { useConfirmModal } from "../hooks/useConfirmModal";
 import { useTheme } from '../hooks/useTheme';
 
 function timeAgo(createdAt: string) {
@@ -74,6 +74,7 @@ export default function GroupDetailScreen() {
   const [momoLoading, setMomoLoading] = useState(false);
 
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+  const { showConfirm, ConfirmModalComponent } = useConfirmModal();
 
   useEffect(() => {
     fetchDetails(true);
@@ -84,7 +85,7 @@ export default function GroupDetailScreen() {
     setError(null);
     try {
       const [detailsRes, balancesRes] = await Promise.all([
-        groupAPI.getGroupDetails(String(groupId)),
+        groupAPI.getGroupDetails(String(groupId), getUserId()),
         groupAPI.getBalances(String(groupId)),
       ]);
       setDetails(detailsRes.data);
@@ -202,11 +203,21 @@ export default function GroupDetailScreen() {
   }
 
   function handleSettleUp(userId: number, name: string, amount: number) {
-    setSettlingUserId(userId);
-    setSettlingName(name);
-    setSettlingAmount(Math.abs(amount));
-    setMomoPhone(currentUser.phoneNumber || "");
-    setShowMomoModal(true);
+    const absAmount = Math.abs(amount);
+    showConfirm({
+      icon: '✅',
+      title: 'Settle Up',
+      message: `${name} is settling up GHS ${absAmount.toFixed(2)}. This will clear all group expenses.`,
+      confirmText: 'Settle Up',
+      confirmColor: '#00C896',
+      onConfirm: () => {
+        setSettlingUserId(userId);
+        setSettlingName(name);
+        setSettlingAmount(absAmount);
+        setMomoPhone(currentUser.phoneNumber || "");
+        setShowMomoModal(true);
+      },
+    });
   }
 
   async function handleMomoPayment() {
@@ -249,6 +260,12 @@ export default function GroupDetailScreen() {
       await groupAPI.settleUp(String(groupId), String(settlingUserId));
       await fetchDetails(false);
 
+      try {
+        await notifySettleUp(String(groupName), currentUser.userName || "A member", String(settlingAmount));
+      } catch {
+        // Non-critical — settle-up itself succeeded
+      }
+
       if (status === "SUCCESSFUL") {
         showToast("Payment confirmed and group settled! ✅", "success");
       } else {
@@ -266,10 +283,38 @@ export default function GroupDetailScreen() {
     try {
       await groupAPI.settleUp(String(groupId), String(settlingUserId));
       await fetchDetails(false);
+      try {
+        await notifySettleUp(String(groupName), currentUser.userName || "A member", String(settlingAmount));
+      } catch {
+        // Non-critical
+      }
       showToast("Group balance cleared (no payment sent).", "success");
     } catch (e: any) {
       showToast(e?.response?.data?.error || e?.message || "Failed to settle.", "error");
     }
+  }
+
+  // Only the group creator can remove members
+  const isCreator = String(details?.group?.createdBy ?? "") === String(currentUser.userId ?? "");
+
+  function handleRemoveMember(member: any) {
+    const memberName = member.name || `User #${member.userId}`;
+    showConfirm({
+      icon: '👤',
+      title: 'Remove Member',
+      message: `Are you sure you want to remove ${memberName} from this group?`,
+      confirmText: 'Remove',
+      confirmColor: '#E05C5C',
+      onConfirm: async () => {
+        try {
+          await groupAPI.removeMember(String(groupId), String(member.userId), getUserId());
+          await fetchDetails(false);
+          showToast(`${memberName} removed from group`, "success");
+        } catch (err: any) {
+          showToast(err?.response?.data?.error || "Failed to remove member", "error");
+        }
+      },
+    });
   }
 
   async function handleAddMember() {
@@ -291,27 +336,23 @@ export default function GroupDetailScreen() {
     }
   }
 
-  async function handleDeleteGroup() {
-    Alert.alert(
-      "Delete Group",
-      "Are you sure you want to delete this group? All records will be lost.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete Group",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await groupAPI.deleteGroup(String(groupId));
-              showToast("Group deleted successfully", "info");
-              router.replace("/(tabs)/groups");
-            } catch (err: any) {
-              showToast("Failed to delete group", "error");
-            }
-          },
-        },
-      ]
-    );
+  function handleDeleteGroup() {
+    showConfirm({
+      icon: '🗑️',
+      title: 'Delete Group',
+      message: 'This will permanently delete the group and all shared expenses. This cannot be undone.',
+      confirmText: 'Delete Group',
+      confirmColor: '#E05C5C',
+      onConfirm: async () => {
+        try {
+          await groupAPI.deleteGroup(String(groupId));
+          showToast("Group deleted successfully", "info");
+          router.replace("/(tabs)/groups");
+        } catch (err: any) {
+          showToast("Failed to delete group", "error");
+        }
+      },
+    });
   }
 
   if (loading && !refreshing) {
@@ -406,9 +447,20 @@ export default function GroupDetailScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.memberText, { color: colors.text }]} numberOfLines={1}>
                     {member.name || `User #${member.userId}`}
+                    {String(member.userId) === String(details?.group?.createdBy) ? "  👑" : ""}
                   </Text>
                   <Text style={[styles.memberSubText, { color: colors.textSecondary }]}>ID: #{member.userId}</Text>
                 </View>
+                {/* Remove button — creator only, never on the creator's own row */}
+                {isCreator && String(member.userId) !== String(details?.group?.createdBy) && (
+                  <TouchableOpacity
+                    style={[styles.removeMemberBtn, { backgroundColor: colors.negative + "12", borderColor: colors.negative + "30" }]}
+                    onPress={() => handleRemoveMember(member)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.removeMemberBtnText, { color: colors.negative }]}>✕</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             ))}
           </View>
@@ -477,8 +529,18 @@ export default function GroupDetailScreen() {
           {balances.length > 0 && (
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Balances</Text>
-              {balances.map((b: any, index: number) => (
-                <View key={index} style={[styles.balanceRow, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+              {balances.map((b: any, index: number) => {
+                const isCurrentUser = String(b.userId) === String(currentUser.userId);
+                return (
+                <View
+                  key={index}
+                  style={[
+                    styles.balanceRow,
+                    { backgroundColor: colors.inputBg, borderColor: colors.border },
+                    // Highlight the viewing user's own balance row
+                    isCurrentUser && { borderColor: colors.primary, borderWidth: 1.5, backgroundColor: colors.primary + "0D" },
+                  ]}
+                >
                   <View style={{ flexDirection: "row", alignItems: "center", flex: 1, marginRight: 10 }}>
                     <Avatar
                       userId={b.userId}
@@ -489,7 +551,7 @@ export default function GroupDetailScreen() {
                     />
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.balanceText, { color: colors.text }]} numberOfLines={1}>
-                        {b.name || `User #${b.userId}`}
+                        {isCurrentUser ? `${b.name || `User #${b.userId}`} (You)` : (b.name || `User #${b.userId}`)}
                       </Text>
                       <Text style={[styles.balanceSub, { color: colors.textSecondary }]}>
                         {b.owes ? "Owes money" : "Is owed money"}
@@ -532,7 +594,8 @@ export default function GroupDetailScreen() {
                     )}
                   </View>
                 </View>
-              ))}
+                );
+              })}
             </View>
           )}
 
@@ -542,25 +605,116 @@ export default function GroupDetailScreen() {
             </View>
           )}
 
+          {/* Fairness Score — 100 means everyone has paid exactly their fair share */}
+          {(() => {
+            const unsettled = (details?.expenses || []).filter((e: any) => !e.settled);
+            const totalSpending = unsettled.reduce(
+              (s: number, e: any) => s + (parseFloat(e.amount) || 0), 0);
+            if (totalSpending <= 0 || (details?.members?.length ?? 0) < 2) return null;
+
+            // Each balance is (paid − fair share); sum of |deviations| vs total
+            const sumAbsDev = balances.reduce(
+              (s: number, b: any) => s + Math.abs(parseFloat(b.balance) || 0), 0);
+            const score = Math.round(Math.max(0, Math.min(1, 1 - sumAbsDev / totalSpending)) * 100);
+            const barColor = score >= 80 ? colors.positive : score >= 50 ? '#FF9500' : colors.negative;
+
+            return (
+              <View style={[styles.fairnessCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                <View style={styles.fairnessHeader}>
+                  <Text style={[styles.fairnessLabel, { color: colors.textSecondary }]}>⚖️ GROUP FAIRNESS</Text>
+                  <Text style={[styles.fairnessScore, { color: barColor }]}>{score}/100</Text>
+                </View>
+                <View style={[styles.fairnessTrack, { backgroundColor: colors.neutralBg }]}>
+                  <View style={[styles.fairnessFill, { width: `${score}%` as any, backgroundColor: barColor }]} />
+                </View>
+                <Text style={[styles.fairnessHint, { color: colors.textSecondary }]}>
+                  {score === 100
+                    ? 'Everyone has paid exactly their fair share'
+                    : 'How evenly members have paid vs their fair share'}
+                </Text>
+              </View>
+            );
+          })()}
+
           {/* Shared Expenses List */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>Shared Expenses</Text>
             {details?.expenses?.length === 0 ? (
               <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No shared expenses yet</Text>
             ) : (
-              details?.expenses?.map((expense: any) => (
-                <View key={expense.id} style={[styles.sharedExpenseRow, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-                  <View style={{ flex: 1, marginRight: 10 }}>
-                    <Text style={[styles.expenseName, { color: colors.text }]} numberOfLines={1}>{expense.description}</Text>
-                    <Text style={[styles.expenseSub, { color: colors.textSecondary }]}>
-                      Paid by {expense.paidByName || `User #${expense.paidBy}`} • {splitLabel(expense)}
-                    </Text>
+              details?.expenses?.map((expense: any) => {
+                // Personalized view: what THIS user paid or owes for each expense
+                const hasPersonalized = expense.userShare !== undefined && expense.userShare !== null;
+                const userShare = parseFloat(expense.userShare ?? "0") || 0;
+                const fullAmount = parseFloat(expense.amount) || 0;
+                const othersCount = Math.max((expense.memberCount ?? details?.members?.length ?? 1) - 1, 0);
+
+                if (hasPersonalized && expense.isPayer) {
+                  return (
+                    <View key={expense.id} style={[styles.sharedExpenseRow, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                      <View style={{ flex: 1, marginRight: 10 }}>
+                        <Text style={[styles.expenseName, { color: colors.text }]} numberOfLines={2}>
+                          You paid GHS {fullAmount.toFixed(2)} for {expense.description}
+                        </Text>
+                        <Text style={[styles.expenseSub, { color: colors.textSecondary }]}>
+                          Split with {othersCount} other{othersCount === 1 ? "" : "s"} — you covered GHS {userShare.toFixed(2)} • {splitLabel(expense)}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={[styles.expenseAmount, { color: colors.positive }]}>
+                          GHS {fullAmount.toFixed(2)}
+                        </Text>
+                        {expense.settled && (
+                          <Text style={{ color: colors.positive, fontSize: 10, fontWeight: '700', marginTop: 2 }}>Settled ✓</Text>
+                        )}
+                      </View>
+                    </View>
+                  );
+                }
+
+                if (hasPersonalized) {
+                  return (
+                    <View key={expense.id} style={[styles.sharedExpenseRow, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                      <View style={{ flex: 1, marginRight: 10 }}>
+                        <Text style={[styles.expenseName, { color: colors.text }]} numberOfLines={2}>
+                          Your share: GHS {userShare.toFixed(2)}
+                        </Text>
+                        <Text style={[styles.expenseSub, { color: colors.textSecondary }]}>
+                          {expense.paidByName || `User #${expense.paidBy}`} paid GHS {fullAmount.toFixed(2)} total for {expense.description} • {splitLabel(expense)}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={[styles.expenseAmount, { color: colors.negative }]}>
+                          GHS {userShare.toFixed(2)}
+                        </Text>
+                        {expense.settled && (
+                          <Text style={{ color: colors.positive, fontSize: 10, fontWeight: '700', marginTop: 2 }}>Settled ✓</Text>
+                        )}
+                      </View>
+                    </View>
+                  );
+                }
+
+                // Fallback — non-personalized response
+                return (
+                  <View key={expense.id} style={[styles.sharedExpenseRow, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                    <View style={{ flex: 1, marginRight: 10 }}>
+                      <Text style={[styles.expenseName, { color: colors.text }]} numberOfLines={1}>{expense.description}</Text>
+                      <Text style={[styles.expenseSub, { color: colors.textSecondary }]}>
+                        Paid by {expense.paidByName || `User #${expense.paidBy}`} • {splitLabel(expense)}
+                      </Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <Text style={[styles.expenseAmount, { color: colors.text }]}>
+                        GHS {fullAmount.toFixed(2)}
+                      </Text>
+                      {expense.settled && (
+                        <Text style={{ color: colors.positive, fontSize: 10, fontWeight: '700', marginTop: 2 }}>Settled ✓</Text>
+                      )}
+                    </View>
                   </View>
-                  <Text style={[styles.expenseAmount, { color: colors.text }]}>
-                    GHS {parseFloat(expense.amount).toFixed(2)}
-                  </Text>
-                </View>
-              ))
+                );
+              })
             )}
           </View>
 
@@ -828,6 +982,7 @@ export default function GroupDetailScreen() {
         </View>
       </Modal>
 
+      {ConfirmModalComponent}
       <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
     </KeyboardAvoidingView>
   );
@@ -906,6 +1061,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#8E9AA6',
     marginTop: 2,
+  },
+  removeMemberBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+  },
+  removeMemberBtnText: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    lineHeight: 16,
   },
   
   // Activity Styles
@@ -1184,6 +1353,42 @@ const styles = StyleSheet.create({
     color: '#34C759',
     fontWeight: '700',
     fontSize: 14,
+  },
+
+  // Fairness score card
+  fairnessCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 20,
+  },
+  fairnessHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  fairnessLabel: {
+    fontSize: 11,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  fairnessScore: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  fairnessTrack: {
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  fairnessFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  fairnessHint: {
+    fontSize: 11,
   },
 
   // Shared Expenses list

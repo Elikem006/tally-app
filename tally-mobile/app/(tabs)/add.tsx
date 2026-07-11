@@ -14,8 +14,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { expenseAPI, budgetAPI, categoriesAPI, momoAPI } from '../../services/api';
-import { getUserId, currentUser } from '../../services/storage';
+import { getUserId, currentUser, safeStorage } from '../../services/storage';
 import { addHistoryItem } from '../../services/notificationHistory';
 import { signalMomoRefresh } from '../../services/momoRefresh';
 import Toast from '../../components/Toast';
@@ -31,6 +32,25 @@ const CATEGORY_ICONS: { [key: string]: string } = {
   Utilities: '💡',
   Other: '📦',
 };
+
+// Smart categorization — keyword → category suggestions (frontend only)
+const CATEGORY_KEYWORDS: { [category: string]: string[] } = {
+  Food: ['lunch', 'dinner', 'breakfast', 'food', 'restaurant', 'cafe', 'eat', 'waakye', 'jollof', 'chop'],
+  Transport: ['uber', 'taxi', 'bus', 'fuel', 'petrol', 'trotro', 'bolt', 'yango'],
+  Entertainment: ['netflix', 'cinema', 'movie', 'game', 'spotify', 'concert'],
+  Utilities: ['electricity', 'water', 'internet', 'rent', 'light bill', 'wifi', 'data bundle'],
+};
+
+function suggestCategory(description: string): string | null {
+  const desc = description.toLowerCase();
+  if (!desc.trim()) return null;
+  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+    for (const keyword of keywords) {
+      if (desc.includes(keyword)) return category;
+    }
+  }
+  return null;
+}
 
 type MomoStatus = "idle" | "sending" | "confirming" | "done";
 
@@ -66,6 +86,90 @@ export default function AddScreen() {
 
   // Custom categories
   const [customCategories, setCustomCategories] = useState<{ id: string; name: string; emoji: string }[]>([]);
+
+  // Quick expense templates (stored in AsyncStorage)
+  type ExpenseTemplate = {
+    name: string;
+    emoji: string;
+    amount: string;
+    category: string;
+    description: string;
+    paymentMethod?: 'CASH' | 'MOMO';
+  };
+  const TEMPLATES_KEY = 'tallyExpenseTemplates';
+  const [templates, setTemplates] = useState<ExpenseTemplate[]>([]);
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+
+  useEffect(() => {
+    safeStorage.getItem(TEMPLATES_KEY)
+      .then((saved) => saved && setTemplates(JSON.parse(saved)))
+      .catch(() => {});
+  }, []);
+
+  function applyTemplate(t: ExpenseTemplate) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setTransactionType('expense');
+    setAmount(t.amount);
+    handleCategorySelect(t.category);
+    setDescription(t.description);
+    setPaymentMethod(t.paymentMethod === 'MOMO' ? 'MOMO' : 'CASH');
+  }
+
+  async function saveTemplate() {
+    if (!templateName.trim()) {
+      showToast('Give the template a name (e.g. "Morning Coffee")', 'error');
+      return;
+    }
+    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+      showToast('Enter a valid amount before saving a template', 'error');
+      return;
+    }
+    const emoji = CATEGORY_ICONS[selectedCategory]
+      || customCategories.find((c) => c.name === selectedCategory)?.emoji
+      || '📦';
+    const next = [
+      ...templates.filter((t) => t.name !== templateName.trim()),
+      {
+        name: templateName.trim(),
+        emoji,
+        amount: parseFloat(amount).toFixed(2),
+        category: selectedCategory,
+        description: description.trim(),
+        paymentMethod,
+      },
+    ].slice(-8); // keep at most 8 templates
+    setTemplates(next);
+    try {
+      await safeStorage.setItem(TEMPLATES_KEY, JSON.stringify(next));
+    } catch {
+      // Non-critical
+    }
+    setShowSaveTemplate(false);
+    setTemplateName('');
+    showToast('Template saved — one-tap adds from now on!', 'success');
+  }
+
+  async function removeTemplate(name: string) {
+    const next = templates.filter((t) => t.name !== name);
+    setTemplates(next);
+    try {
+      await safeStorage.setItem(TEMPLATES_KEY, JSON.stringify(next));
+    } catch {
+      // Non-critical
+    }
+  }
+
+  // Smart category suggestion (500ms debounce on description typing)
+  const [suggestedCategory, setSuggestedCategory] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const suggestion = suggestCategory(description);
+      setSuggestedCategory(suggestion && suggestion !== selectedCategory ? suggestion : null);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [description, selectedCategory]);
 
   // MoMo payment modal (kept for potential income receive flow)
   const [showMomoModal, setShowMomoModal] = useState(false);
@@ -129,6 +233,7 @@ export default function AddScreen() {
   }
 
   function handleCategorySelect(cat: string) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setSelectedCategory(cat);
     setShowHint(false);
     currentUser.lastCategory = cat;
@@ -162,8 +267,8 @@ export default function AddScreen() {
       showToast("Please enter an amount", "error");
       return;
     }
-    if (isNaN(parseFloat(amount))) {
-      showToast("Please enter a valid amount", "error");
+    if (isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+      showToast("Please enter a valid amount greater than zero", "error");
       return;
     }
 
@@ -188,7 +293,10 @@ export default function AddScreen() {
       const today = new Date().toISOString().split('T')[0];
       const userId = getUserId();
       const fullDescription = [description.trim(), ...tags].filter(Boolean).join(" ");
-      const finalAmtStr = String(transactionType === 'income' ? Math.abs(parseFloat(amount)) : -Math.abs(parseFloat(amount)));
+      // Normalize to exactly 2 decimal places before sending
+      const finalAmtStr = (transactionType === 'income'
+        ? Math.abs(parseFloat(amount))
+        : -Math.abs(parseFloat(amount))).toFixed(2);
       await expenseAPI.createExpense(userId, finalAmtStr, selectedCategory, fullDescription, today, "CASH");
       
       const parsed = parseFloat(amount);
@@ -199,6 +307,7 @@ export default function AddScreen() {
         data: { screen: "history" },
       });
 
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       showToast(transactionType === 'income' ? "Income added successfully!" : "Expense added successfully!", "success");
 
       // Update spent values locally for responsive UI feedback
@@ -223,7 +332,8 @@ export default function AddScreen() {
   }
 
   async function handleMomoPayment() {
-    const phone = momoPhone.trim().replace(/\s/g, "");
+    // Strip ALL non-numeric characters (spaces, dashes, etc.)
+    const phone = momoPhone.replace(/\D/g, "");
     if (phone.length < 10) {
       showToast("Enter a valid 10-digit MoMo number", "error");
       return;
@@ -273,7 +383,7 @@ export default function AddScreen() {
       // SUCCESSFUL or PENDING — record the transaction
       const today = new Date().toISOString().split("T")[0];
       const parsed = parseFloat(amount);
-      const finalAmtStr = String(transactionType === 'income' ? Math.abs(parsed) : -Math.abs(parsed));
+      const finalAmtStr = (transactionType === 'income' ? Math.abs(parsed) : -Math.abs(parsed)).toFixed(2);
       await expenseAPI.createExpense(
         userId,
         finalAmtStr,
@@ -388,6 +498,44 @@ export default function AddScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* Quick Add — one-tap expense templates */}
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Quick Add</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.templateScroll}
+            contentContainerStyle={styles.templateRow}
+          >
+            {templates.map((template) => (
+              <TouchableOpacity
+                key={template.name}
+                style={[styles.templateChip, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
+                onPress={() => applyTemplate(template)}
+                onLongPress={() => removeTemplate(template.name)}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.templateEmoji}>{template.emoji}</Text>
+                <View>
+                  <Text style={[styles.templateName, { color: colors.text }]} numberOfLines={1}>{template.name}</Text>
+                  <Text style={[styles.templateAmount, { color: colors.textSecondary }]}>GHS {template.amount}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={[styles.addTemplateChip, { borderColor: colors.primary + '50' }]}
+              onPress={() => {
+                if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+                  showToast('Fill in amount, category and description first', 'info');
+                  return;
+                }
+                setShowSaveTemplate(true);
+              }}
+              activeOpacity={0.75}
+            >
+              <Text style={[styles.addTemplateText, { color: colors.primary }]}>+ Save Template</Text>
+            </TouchableOpacity>
+          </ScrollView>
+
           {/* Enter Amount box styled for the theme */}
           <Text style={[styles.label, { color: colors.textSecondary }]}>Amount (GHS)</Text>
           <View style={[
@@ -475,6 +623,33 @@ export default function AddScreen() {
             </Text>
           )}
 
+          {/* Inline budget warning (YNAB-style: warn BEFORE overspending) */}
+          {transactionType === 'expense' && (limits[selectedCategory] || 0) > 0 && (() => {
+            const limit = limits[selectedCategory] || 0;
+            const used = spent[selectedCategory] || 0;
+            const left = limit - used;
+            const pending = parseFloat(amount) || 0;
+            if (left <= 0) {
+              return (
+                <View style={[styles.budgetWarn, { backgroundColor: colors.negative + '12', borderColor: colors.negative + '35' }]}>
+                  <Text style={[styles.budgetWarnText, { color: colors.negative }]}>
+                    🚨 You've already used your entire {selectedCategory} budget (GHS {limit.toFixed(0)}) this month.
+                  </Text>
+                </View>
+              );
+            }
+            if (pending > left || left <= limit * 0.2) {
+              return (
+                <View style={[styles.budgetWarn, { backgroundColor: '#F59E0B18', borderColor: '#F59E0B40' }]}>
+                  <Text style={[styles.budgetWarnText, { color: '#D97706' }]}>
+                    ⚠️ You have only GHS {left.toFixed(2)} left in your {selectedCategory} budget this month{pending > left ? ' — this expense will exceed it' : ''}.
+                  </Text>
+                </View>
+              );
+            }
+            return null;
+          })()}
+
           {/* Payment Method Selector */}
           <Text style={[styles.label, { color: colors.textSecondary }]}>Payment Method</Text>
           <View style={styles.paymentMethodRow}>
@@ -535,6 +710,22 @@ export default function AddScreen() {
             numberOfLines={3}
           />
 
+          {/* Smart category suggestion chip */}
+          {suggestedCategory && (
+            <TouchableOpacity
+              style={[styles.suggestionChip, { backgroundColor: colors.primary + '15', borderColor: colors.primary + '40' }]}
+              onPress={() => {
+                setSelectedCategory(suggestedCategory);
+                setSuggestedCategory(null);
+              }}
+              activeOpacity={0.75}
+            >
+              <Text style={[styles.suggestionChipText, { color: colors.primary }]}>
+                💡 Suggested: {suggestedCategory} — tap to apply
+              </Text>
+            </TouchableOpacity>
+          )}
+
           {/* Tags Section */}
           <Text style={[styles.label, { color: colors.textSecondary }]}>Tags (optional)</Text>
           <View style={styles.tagInputRow}>
@@ -594,6 +785,48 @@ export default function AddScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* ── Save as Template Modal ── */}
+      <Modal
+        visible={showSaveTemplate}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSaveTemplate(false)}
+      >
+        <View style={styles.templateModalOverlay}>
+          <View style={[styles.templateModalCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+            <Text style={[styles.templateModalTitle, { color: colors.text }]}>Save as Template</Text>
+            <Text style={[styles.templateModalSub, { color: colors.textSecondary }]}>
+              {CATEGORY_ICONS[selectedCategory] || customCategories.find((c) => c.name === selectedCategory)?.emoji || '📦'}
+              {'  '}{selectedCategory} • GHS {parseFloat(amount || '0').toFixed(2)}
+              {description.trim() ? ` • ${description.trim()}` : ''}
+            </Text>
+            <TextInput
+              style={[styles.templateModalInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
+              placeholder='Template name (e.g. "Morning Coffee")'
+              placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
+              value={templateName}
+              onChangeText={setTemplateName}
+              maxLength={24}
+              autoFocus
+            />
+            <TouchableOpacity
+              style={[styles.templateModalSave, { backgroundColor: colors.primary }]}
+              onPress={saveTemplate}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.templateModalSaveText}>Save Template</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.templateModalCancel}
+              onPress={() => setShowSaveTemplate(false)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.templateModalCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── MoMo Payment Modal (Redesigned for Premium Light Capsule Theme) ── */}
       <Modal
@@ -982,6 +1215,124 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: 'bold',
     fontSize: 14,
+  },
+  // Quick-add templates
+  templateScroll: {
+    marginBottom: 16,
+  },
+  templateRow: {
+    gap: 10,
+    paddingRight: 8,
+  },
+  templateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    maxWidth: 190,
+  },
+  templateEmoji: {
+    fontSize: 20,
+  },
+  templateName: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  templateAmount: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  addTemplateChip: {
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+  },
+  addTemplateText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  templateModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  templateModalCard: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 24,
+  },
+  templateModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  templateModalSub: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 16,
+    lineHeight: 19,
+  },
+  templateModalInput: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  templateModalSave: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  templateModalSaveText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  templateModalCancel: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  templateModalCancelText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  budgetWarn: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 14,
+  },
+  budgetWarnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 17,
+  },
+  suggestionChip: {
+    alignSelf: 'flex-start',
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    marginTop: -6,
+    marginBottom: 14,
+  },
+  suggestionChipText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   tagsContainer: {
     flexDirection: 'row',

@@ -1,0 +1,54 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Tally app icon — "The Tally Mark"
+       Four counting strokes + the strike-through: tracking every cedi,
+       with the diagonal doubling as the "split" gesture. -->
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#131B2C"/>
+      <stop offset="55%" stop-color="#0C1322"/>
+      <stop offset="100%" stop-color="#0A1628"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="88%" r="75%">
+      <stop offset="0%" stop-color="#00C896" stop-opacity="0.16"/>
+      <stop offset="55%" stop-color="#00C896" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#00C896" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="stroke" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#00E5AD"/>
+      <stop offset="100%" stop-color="#00A87A"/>
+    </linearGradient>
+    <linearGradient id="strike" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00C896"/>
+      <stop offset="100%" stop-color="#00FFD0"/>
+    </linearGradient>
+    <filter id="markGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="26"/>
+    </filter>
+    <clipPath id="squircle">
+      <rect x="0" y="0" width="1024" height="1024" rx="225" ry="225"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#squircle)">
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+    <rect width="1024" height="1024" fill="url(#glow)"/>
+
+    <!-- Glow copy of the marks -->
+    <g filter="url(#markGlow)" opacity="0.55">
+      <line x1="330" y1="330" x2="330" y2="694" stroke="#00C896" stroke-width="72" stroke-linecap="round"/>
+      <line x1="452" y1="330" x2="452" y2="694" stroke="#00C896" stroke-width="72" stroke-linecap="round"/>
+      <line x1="574" y1="330" x2="574" y2="694" stroke="#00C896" stroke-width="72" stroke-linecap="round"/>
+      <line x1="696" y1="330" x2="696" y2="694" stroke="#00C896" stroke-width="72" stroke-linecap="round"/>
+      <line x1="266" y1="648" x2="760" y2="376" stroke="#00FFD0" stroke-width="72" stroke-linecap="round"/>
+    </g>
+
+    <!-- Four vertical tally strokes -->
+    <line x1="330" y1="330" x2="330" y2="694" stroke="url(#stroke)" stroke-width="72" stroke-linecap="round"/>
+    <line x1="452" y1="330" x2="452" y2="694" stroke="url(#stroke)" stroke-width="72" stroke-linecap="round"/>
+    <line x1="574" y1="330" x2="574" y2="694" stroke="url(#stroke)" stroke-width="72" stroke-linecap="round"/>
+    <line x1="696" y1="330" x2="696" y2="694" stroke="url(#stroke)" stroke-width="72" stroke-linecap="round"/>
+
+    <!-- The strike-through: the fifth count, and the "split" -->
+    <line x1="266" y1="648" x2="760" y2="376" stroke="url(#strike)" stroke-width="72" stroke-linecap="round"/>
+  </g>
+</svg>

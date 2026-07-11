@@ -1,6 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Global store for user session (lives here, not in login.tsx, to avoid circular dependencies)
+//
+// KNOWN LIMITATIONS (accepted for this project):
+// - currentUser is a module-level mutable object; components that read it get
+//   the value at render time. Call notifyUserChanged() after mutating fields
+//   so subscribed components can re-render (see subscribeToUserChanges below).
+// - lastCategory / lastPaymentMethod are in-memory only and intentionally
+//   reset when the app restarts.
 export let currentUser = {
   token: '',
   userId: '1',
@@ -12,6 +19,29 @@ export let currentUser = {
   lastCategory: 'Food',
   lastPaymentMethod: 'CASH',
 };
+
+// ─── Session change notifications ────────────────────────────────────────────
+// Lightweight event emitter so components can react to currentUser mutations
+// (avoids stale reads after login / avatar / phone updates).
+type UserListener = () => void;
+const userListeners = new Set<UserListener>();
+
+/** Subscribe to currentUser changes. Returns an unsubscribe function. */
+export function subscribeToUserChanges(listener: UserListener): () => void {
+  userListeners.add(listener);
+  return () => userListeners.delete(listener);
+}
+
+/** Call after mutating currentUser fields so subscribers re-render. */
+export function notifyUserChanged(): void {
+  userListeners.forEach((l) => {
+    try {
+      l();
+    } catch {
+      // A broken subscriber must not break the others
+    }
+  });
+}
 
 export function getUserId(): string {
   return currentUser.userId || "";
@@ -36,6 +66,7 @@ export function resetCurrentUser(): void {
   currentUser.phoneNumber = '';
   currentUser.lastCategory = 'Food';
   currentUser.lastPaymentMethod = 'CASH';
+  notifyUserChanged();
 }
 
 export const safeStorage = {

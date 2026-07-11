@@ -290,8 +290,12 @@ public class MoMoService {
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
 
         try {
+            // Phone masked in logs — only last 3 digits (sensitive data hygiene)
+            String maskedPhone = recipientPhone != null && recipientPhone.length() > 3
+                    ? "***" + recipientPhone.substring(recipientPhone.length() - 3)
+                    : "***";
             log.info("MoMo: initiating transfer. referenceId=" + referenceId
-                    + " amount=" + body.get("amount") + " payee=" + recipientPhone
+                    + " amount=" + body.get("amount") + " payee=" + maskedPhone
                     + " url=" + disbursementBaseUrl + "/disbursement/v1_0/transfer");
             ResponseEntity<String> response = restTemplate.exchange(
                     disbursementBaseUrl + "/disbursement/v1_0/transfer",

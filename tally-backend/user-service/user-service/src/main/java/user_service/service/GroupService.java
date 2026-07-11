@@ -14,6 +14,7 @@ import user_service.repository.UserRepository;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.*;
 
 @Service
@@ -33,6 +34,9 @@ public class GroupService {
 
     @Autowired
     private MoMoService moMoService;
+
+    @Autowired
+    private ExpenseService expenseService;
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
     private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
@@ -57,11 +61,38 @@ public class GroupService {
     }
 
     /**
-     * A member's share of an expense: percentage-based when the expense uses a
-     * CUSTOM split, otherwise an equal share. Falls back to equal split if a
-     * stored ratio string can no longer be parsed.
+     * The userIds included in an expense's split. Uses the participant snapshot
+     * taken at creation time when available, so members who joined the group
+     * AFTER an expense was added are excluded from that expense. Legacy rows
+     * (null snapshot) fall back to all current members.
      */
-    private BigDecimal shareFor(SharedExpense expense, Long memberId, int memberCount) {
+    private Set<Long> participantsOf(SharedExpense expense, List<GroupMember> members) {
+        if (expense.getParticipantIds() != null && !expense.getParticipantIds().isBlank()) {
+            Set<Long> ids = new HashSet<>();
+            for (String s : expense.getParticipantIds().split(",")) {
+                try {
+                    ids.add(Long.parseLong(s.trim()));
+                } catch (NumberFormatException ignored) {
+                    // skip malformed token
+                }
+            }
+            if (!ids.isEmpty()) return ids;
+        }
+        Set<Long> ids = new HashSet<>();
+        for (GroupMember m : members) ids.add(m.getUserId());
+        return ids;
+    }
+
+    /**
+     * A member's share of an expense: zero if they were not a participant when
+     * it was created; percentage-based for CUSTOM splits; otherwise an equal
+     * share among the PARTICIPANTS (not the current member count). Falls back
+     * to equal split if a stored ratio string can no longer be parsed.
+     */
+    private BigDecimal shareFor(SharedExpense expense, Long memberId, List<GroupMember> members) {
+        Set<Long> participants = participantsOf(expense, members);
+        if (!participants.contains(memberId)) return BigDecimal.ZERO;
+
         if ("CUSTOM".equals(expense.getSplitType()) && expense.getSplitRatios() != null) {
             try {
                 Map<Long, BigDecimal> ratios = parseSplitRatios(expense.getSplitRatios());
@@ -73,7 +104,7 @@ public class GroupService {
             }
         }
         return expense.getAmount()
-                .divide(BigDecimal.valueOf(Math.max(memberCount, 1)), 2, RoundingMode.HALF_UP);
+                .divide(BigDecimal.valueOf(Math.max(participants.size(), 1)), 2, RoundingMode.HALF_UP);
     }
 
     // Fetch a user once and return it (null-safe)
@@ -123,13 +154,82 @@ public class GroupService {
         return groupMemberRepository.save(member);
     }
 
+    /**
+     * Remove a member from a group. Only the group creator may remove members,
+     * and the creator themselves can never be removed.
+     */
+    public void removeMember(Long groupId, Long userId, Long requestingUserId) {
+        Group group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new RuntimeException("Group not found"));
+
+        Long createdBy = group.getCreatedBy();
+
+        // Only the creator can remove members (when the requester is known)
+        if (requestingUserId != null && !requestingUserId.equals(createdBy)) {
+            throw new RuntimeException("Only the group creator can remove members");
+        }
+        // The creator can never be removed from their own group
+        if (userId.equals(createdBy)) {
+            throw new RuntimeException("Cannot remove the group creator");
+        }
+
+        GroupMember target = groupMemberRepository.findByGroupId(groupId).stream()
+                .filter(m -> m.getUserId().equals(userId))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("Member not found"));
+
+        // Block removal while the member has an outstanding balance — otherwise
+        // their debts (or credits) would silently vanish from the group.
+        for (Map<String, Object> balance : calculateBalances(groupId)) {
+            if (userId.equals(balance.get("userId"))) {
+                BigDecimal b = (BigDecimal) balance.get("balance");
+                if (b.abs().compareTo(new BigDecimal("0.01")) >= 0) {
+                    throw new RuntimeException("Cannot remove member with outstanding balance of GHS "
+                            + b.abs().setScale(2, RoundingMode.HALF_UP).toPlainString()
+                            + ". They must settle up first.");
+                }
+            }
+        }
+
+        groupMemberRepository.delete(target);
+    }
+
     // Get all groups for a user
     public List<Group> getUserGroups(Long userId) {
         return groupRepository.findGroupsByUserId(userId);
     }
 
-    // Get group details — members and expenses enriched with names
+    /**
+     * Splitwise-style net position across ALL the user's groups:
+     * how much they owe in total vs how much they are owed.
+     */
+    public Map<String, Object> getUserNetBalance(Long userId) {
+        BigDecimal youOwe = BigDecimal.ZERO;
+        BigDecimal youAreOwed = BigDecimal.ZERO;
+        for (Group g : groupRepository.findGroupsByUserId(userId)) {
+            for (Map<String, Object> balance : calculateBalances(g.getId())) {
+                if (userId.equals(balance.get("userId"))) {
+                    BigDecimal b = (BigDecimal) balance.get("balance");
+                    if (b.signum() < 0) youOwe = youOwe.add(b.abs());
+                    else youAreOwed = youAreOwed.add(b);
+                }
+            }
+        }
+        Map<String, Object> net = new HashMap<>();
+        net.put("youOwe", youOwe.setScale(2, RoundingMode.HALF_UP));
+        net.put("youAreOwed", youAreOwed.setScale(2, RoundingMode.HALF_UP));
+        return net;
+    }
+
+    // Backward-compatible overload — no personalization
     public Map<String, Object> getGroupDetails(Long groupId) {
+        return getGroupDetails(groupId, null);
+    }
+
+    // Get group details — members and expenses enriched with names.
+    // When viewingUserId is provided, each expense also carries the viewer's
+    // share (userShare), whether they paid (isPayer) and a displayAmount.
+    public Map<String, Object> getGroupDetails(Long groupId, Long viewingUserId) {
         Group group = groupRepository.findById(groupId)
                 .orElseThrow(() -> new RuntimeException("Group not found"));
         List<GroupMember> members = groupMemberRepository.findByGroupId(groupId);
@@ -150,7 +250,8 @@ public class GroupService {
             enrichedMembers.add(entry);
         }
 
-        // Enrich expenses with paidByName + paidByAvatarData
+        // Enrich expenses with paidByName + paidByAvatarData (+ per-viewer share)
+        int memberCount = Math.max(members.size(), 1);
         List<Map<String, Object>> enrichedExpenses = new ArrayList<>();
         for (SharedExpense se : expenses) {
             User payer = findUser(se.getPaidBy());
@@ -166,6 +267,19 @@ public class GroupService {
             entry.put("splitType",       se.getSplitType() != null ? se.getSplitType() : "EQUAL");
             entry.put("splitRatios",     se.getSplitRatios());
             entry.put("createdAt",       se.getCreatedAt() != null ? se.getCreatedAt().toString() : null);
+            entry.put("memberCount",     memberCount);
+
+            entry.put("settled",         Boolean.TRUE.equals(se.getSettled()));
+            entry.put("participantCount", participantsOf(se, members).size());
+
+            // Personalized fields for the viewing user
+            if (viewingUserId != null && se.getAmount() != null) {
+                BigDecimal userShare = shareFor(se, viewingUserId, members);
+                boolean isPayer = viewingUserId.equals(se.getPaidBy());
+                entry.put("userShare",     userShare);
+                entry.put("isPayer",       isPayer);
+                entry.put("displayAmount", isPayer ? se.getAmount() : userShare);
+            }
             enrichedExpenses.add(entry);
         }
 
@@ -188,17 +302,37 @@ public class GroupService {
      */
     public SharedExpense addSharedExpense(Long groupId, Long paidBy, BigDecimal amount,
                                           String description, String splitType, String splitRatios) {
-        // Sanitize description: trim whitespace; treat blank as null
+        // Sanitize description: strip HTML tags (XSS), trim, treat blank as null
         if (description != null) {
-            description = description.trim();
+            description = description.replaceAll("<[^>]*>", "").trim();
             if (description.isEmpty()) description = null;
+        }
+
+        // Amount must be positive, reasonable, and normalized to 2 decimal places
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new RuntimeException("Amount must be greater than zero");
+        }
+        if (amount.compareTo(new BigDecimal("1000000")) > 0) {
+            throw new RuntimeException("Amount looks too large — maximum is GHS 1,000,000");
+        }
+        amount = amount.setScale(2, RoundingMode.HALF_UP);
+
+        // Snapshot of members present RIGHT NOW — later joiners are excluded
+        List<GroupMember> currentMembers = groupMemberRepository.findByGroupId(groupId);
+        if (currentMembers.isEmpty()) {
+            throw new RuntimeException("Group has no members");
+        }
+        StringBuilder participantCsv = new StringBuilder();
+        for (GroupMember m : currentMembers) {
+            if (participantCsv.length() > 0) participantCsv.append(",");
+            participantCsv.append(m.getUserId());
         }
 
         boolean custom = "CUSTOM".equalsIgnoreCase(splitType) && splitRatios != null && !splitRatios.isBlank();
 
         if (custom) {
             Map<Long, BigDecimal> ratios = parseSplitRatios(splitRatios);
-            List<GroupMember> members = groupMemberRepository.findByGroupId(groupId);
+            List<GroupMember> members = currentMembers;
 
             // Every group member must have a ratio
             for (GroupMember m : members) {
@@ -222,7 +356,8 @@ public class GroupService {
                 }
                 sum = sum.add(pct);
             }
-            if (sum.compareTo(ONE_HUNDRED) != 0) {
+            // Tolerance of 0.01 absorbs floating-point splits like 33.33+33.33+33.34
+            if (sum.subtract(ONE_HUNDRED).abs().compareTo(new BigDecimal("0.01")) > 0) {
                 throw new RuntimeException("Split percentages must add up to exactly 100 (got " + sum.stripTrailingZeros().toPlainString() + ")");
             }
         }
@@ -234,6 +369,8 @@ public class GroupService {
         expense.setDescription(description);
         expense.setSplitType(custom ? "CUSTOM" : "EQUAL");
         expense.setSplitRatios(custom ? splitRatios : null);
+        expense.setParticipantIds(participantCsv.toString());
+        expense.setSettled(false);
         return sharedExpenseRepository.save(expense);
     }
 
@@ -251,17 +388,22 @@ public class GroupService {
         }
 
         for (SharedExpense expense : expenses) {
-            if ("SETTLED".equals(expense.getDescription())) continue;
+            // Settled expenses stay in history but no longer affect balances
+            if (Boolean.TRUE.equals(expense.getSettled())) continue;
+            if ("SETTLED".equals(expense.getDescription())) continue; // legacy marker
             if (expense.getAmount() == null) continue;
 
             // Payer is credited the full amount…
             balances.merge(expense.getPaidBy(), expense.getAmount(), BigDecimal::add);
 
-            // …and every member (payer included) is debited their share:
-            // percentage-based for CUSTOM splits, equal otherwise.
+            // …and every PARTICIPANT (payer included) is debited their share:
+            // percentage-based for CUSTOM splits, equal among participants otherwise.
+            // Members who joined after this expense was created owe nothing for it.
             for (GroupMember m : members) {
-                BigDecimal share = shareFor(expense, m.getUserId(), memberCount);
-                balances.merge(m.getUserId(), share.negate(), BigDecimal::add);
+                BigDecimal share = shareFor(expense, m.getUserId(), members);
+                if (share.compareTo(BigDecimal.ZERO) != 0) {
+                    balances.merge(m.getUserId(), share.negate(), BigDecimal::add);
+                }
             }
         }
 
@@ -282,9 +424,11 @@ public class GroupService {
         return debts;
     }
 
-    // Settle up — optionally trigger MoMo payment, then clear expenses
+    // Settle up — optionally trigger MoMo payment, then clear expenses.
+    // Also records the settlement as an income-style expense for the group
+    // creator (paymentMethod SETTLEMENT) so it appears in their history.
     public Map<String, Object> settleUp(Long groupId, Long userId, String phoneNumber) {
-        groupRepository.findById(groupId)
+        Group group = groupRepository.findById(groupId)
                 .orElseThrow(() -> new RuntimeException("Group not found"));
 
         if (!groupMemberRepository.existsByGroupIdAndUserId(groupId, userId)) {
@@ -294,45 +438,99 @@ public class GroupService {
         String momoReferenceId = null;
         String momoStatus = null;
 
+        // Calculate total owed by the settling user across UNSETTLED expenses
+        List<GroupMember> members = groupMemberRepository.findByGroupId(groupId);
+        List<SharedExpense> expenses = sharedExpenseRepository.findByGroupId(groupId);
+
+        BigDecimal owedAmount = BigDecimal.ZERO;
+        for (SharedExpense se : expenses) {
+            if (Boolean.TRUE.equals(se.getSettled())) continue;
+            if ("SETTLED".equals(se.getDescription())) continue; // legacy marker
+            if (se.getAmount() == null || se.getPaidBy() == null) continue;
+            if (!se.getPaidBy().equals(userId)) {
+                // Respect participant snapshot + custom split ratios
+                owedAmount = owedAmount.add(shareFor(se, userId, members));
+            }
+        }
+
+        // Nothing to settle — return early without touching any records
+        if (owedAmount.compareTo(new BigDecimal("0.01")) < 0) {
+            Map<String, Object> nothing = new HashMap<>();
+            nothing.put("message", "No outstanding balance to settle.");
+            nothing.put("userId",  userId);
+            nothing.put("groupId", groupId);
+            nothing.put("settledAmount", BigDecimal.ZERO);
+            return nothing;
+        }
+
+        // Who is OWED money right now — needed to credit the settlement to the
+        // correct member(s), proportionally to what each is owed.
+        Map<Long, BigDecimal> owedTo = new HashMap<>();
+        BigDecimal totalOwed = BigDecimal.ZERO;
+        for (Map<String, Object> balance : calculateBalances(groupId)) {
+            BigDecimal b = (BigDecimal) balance.get("balance");
+            Long owedUserId = (Long) balance.get("userId");
+            if (b.compareTo(BigDecimal.ZERO) > 0 && !owedUserId.equals(userId)) {
+                owedTo.put(owedUserId, b);
+                totalOwed = totalOwed.add(b);
+            }
+        }
+
         // If a phone number is provided, fire the MoMo request first
         if (phoneNumber != null && !phoneNumber.isBlank()) {
-            // Calculate total owed by this user
-            List<GroupMember> members = groupMemberRepository.findByGroupId(groupId);
-            List<SharedExpense> expenses = sharedExpenseRepository.findByGroupId(groupId);
-            int memberCount = Math.max(members.size(), 1);
-
-            java.math.BigDecimal owedAmount = java.math.BigDecimal.ZERO;
-            for (SharedExpense se : expenses) {
-                if ("SETTLED".equals(se.getDescription())) continue;
-                if (se.getAmount() == null || se.getPaidBy() == null) continue;
-                if (!se.getPaidBy().equals(userId)) {
-                    // Respect custom split ratios when computing what this user owes
-                    owedAmount = owedAmount.add(shareFor(se, userId, memberCount));
-                }
+            try {
+                String refId = java.util.UUID.randomUUID().toString();
+                momoReferenceId = moMoService.requestToPay(
+                        phoneNumber, owedAmount, "Tally group settle-up", refId);
+                momoStatus = "PENDING";
+            } catch (Exception e) {
+                // Log but don't block settle-up in sandbox
+                System.err.println("MoMo request failed (sandbox): " + e.getMessage());
+                momoStatus = "FAILED";
             }
+        }
 
-            if (owedAmount.compareTo(java.math.BigDecimal.ZERO) > 0) {
+        // Mark expenses as settled — history is preserved, balances reset.
+        // @Version on SharedExpense guards against concurrent settle-ups: a
+        // simultaneous update throws OptimisticLockException and rolls back.
+        for (SharedExpense se : expenses) {
+            if (!Boolean.TRUE.equals(se.getSettled())) {
+                se.setSettled(true);
+            }
+        }
+        sharedExpenseRepository.saveAll(expenses);
+
+        // Record settlement income for the member(s) who were owed money,
+        // split proportionally to how much each was owed.
+        String settlerName = resolveUserName(userId);
+        if (totalOwed.compareTo(BigDecimal.ZERO) > 0) {
+            for (Map.Entry<Long, BigDecimal> owed : owedTo.entrySet()) {
+                BigDecimal portion = owedAmount
+                        .multiply(owed.getValue())
+                        .divide(totalOwed, 2, RoundingMode.HALF_UP);
+                if (portion.compareTo(BigDecimal.ZERO) <= 0) continue;
                 try {
-                    String refId = java.util.UUID.randomUUID().toString();
-                    momoReferenceId = moMoService.requestToPay(
-                            phoneNumber, owedAmount, "Tally group settle-up", refId);
-                    momoStatus = "PENDING";
+                    expenseService.createExpense(
+                            owed.getKey(),
+                            portion,
+                            "Settlement",
+                            "Settlement received from " + settlerName + " in " + group.getName(),
+                            LocalDate.now(),
+                            "SETTLEMENT");
                 } catch (Exception e) {
-                    // Log but don't block settle-up in sandbox
-                    System.err.println("MoMo request failed (sandbox): " + e.getMessage());
-                    momoStatus = "FAILED";
+                    // Non-fatal — the settle-up itself succeeded
+                    System.err.println("Failed to record settlement expense: " + e.getMessage());
                 }
             }
         }
 
-        // Always clear expenses (sandbox behaviour)
-        List<SharedExpense> allExpenses = sharedExpenseRepository.findByGroupId(groupId);
-        sharedExpenseRepository.deleteAll(allExpenses);
-
         Map<String, Object> result = new HashMap<>();
-        result.put("message", "Successfully settled up — all expenses cleared");
+        result.put("message", "Successfully settled up — expenses marked as settled");
         result.put("userId",  userId);
         result.put("groupId", groupId);
+        result.put("settledAmount", owedAmount);
+        result.put("settlerName",   settlerName);
+        result.put("groupName",     group.getName());
         if (momoReferenceId != null) {
             result.put("momoReferenceId", momoReferenceId);
             result.put("momoStatus",      momoStatus);

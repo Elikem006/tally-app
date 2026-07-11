@@ -14,9 +14,11 @@ import user_service.repository.GroupMemberRepository;
 import user_service.repository.GroupRepository;
 import user_service.repository.SharedExpenseRepository;
 import user_service.repository.UserRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -55,12 +57,60 @@ public class ExpenseService {
                 .orElse("Group #" + groupId);
     }
 
+    private static final Set<String> ALLOWED_PAYMENT_METHODS =
+            Set.of("CASH", "MOMO", "SETTLEMENT", "PAYSTACK");
+
+    private static final ObjectMapper shareMapper = new ObjectMapper();
+
     public Expense createExpense(Long userId, BigDecimal amount, String category,
                                  String description, LocalDate date, String paymentMethod) {
-        // Sanitize description: trim whitespace; treat blank as null
+        return createExpense(userId, amount, category, description, date, paymentMethod,
+                "COMPLETED", null);
+    }
+
+    /**
+     * Full expense creation with validation:
+     * - amount must be non-zero, normalized to 2 decimal places
+     * - paymentMethod restricted to CASH / MOMO / SETTLEMENT / PAYSTACK
+     * - blank descriptions stored as null
+     * - idempotency: an identical expense (userId+amount+category+date) created
+     *   within the last 10 seconds is returned instead of duplicated (double-tap guard)
+     * - status: COMPLETED (default), PENDING or FAILED (MoMo in-flight transfers)
+     */
+    public Expense createExpense(Long userId, BigDecimal amount, String category,
+                                 String description, LocalDate date, String paymentMethod,
+                                 String status, String momoReferenceId) {
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) == 0) {
+            throw new RuntimeException("Amount must not be zero");
+        }
+        // Sanity cap — no GHS 1,000,000 expenses
+        if (amount.abs().compareTo(new BigDecimal("1000000")) > 0) {
+            throw new RuntimeException("Amount looks too large — maximum is GHS 1,000,000");
+        }
+        amount = amount.setScale(2, RoundingMode.HALF_UP);
+
+        // Sanitize description: strip HTML tags (XSS), trim, treat blank as null
         if (description != null) {
-            description = description.trim();
+            description = description.replaceAll("<[^>]*>", "").trim();
             if (description.isEmpty()) description = null;
+        }
+
+        String method = (paymentMethod != null && !paymentMethod.isBlank())
+                ? paymentMethod.trim().toUpperCase() : "CASH";
+        if (!ALLOWED_PAYMENT_METHODS.contains(method)) {
+            throw new RuntimeException("paymentMethod must be one of: CASH, MOMO, SETTLEMENT, PAYSTACK");
+        }
+
+        // Idempotency guard: same userId+amount+category+date within 10 seconds
+        // is treated as a double-tap — return the existing record.
+        LocalDateTime cutoff = LocalDateTime.now().minusSeconds(10);
+        for (Expense recent : expenseRepository.findByUserIdOrderByDateDesc(userId)) {
+            if (recent.getCreatedAt() != null && recent.getCreatedAt().isAfter(cutoff)
+                    && recent.getAmount() != null && recent.getAmount().compareTo(amount) == 0
+                    && Objects.equals(recent.getCategory(), category)
+                    && Objects.equals(recent.getDate(), date)) {
+                return recent;
+            }
         }
 
         Expense expense = new Expense();
@@ -69,7 +119,9 @@ public class ExpenseService {
         expense.setCategory(category);
         expense.setDescription(description);
         expense.setDate(date);
-        expense.setPaymentMethod(paymentMethod != null && !paymentMethod.isBlank() ? paymentMethod : "CASH");
+        expense.setPaymentMethod(method);
+        expense.setStatus(status != null && !status.isBlank() ? status : "COMPLETED");
+        expense.setMomoReferenceId(momoReferenceId);
         return expenseRepository.save(expense);
     }
 
@@ -77,6 +129,29 @@ public class ExpenseService {
     public Expense createExpense(Long userId, BigDecimal amount, String category,
                                  String description, LocalDate date) {
         return createExpense(userId, amount, category, description, date, "CASH");
+    }
+
+    /** Attach optional notes and/or a receipt photo to an expense. */
+    public Expense updateExtras(Long expenseId, String notes, String receiptPhoto) {
+        Expense e = expenseRepository.findById(expenseId)
+                .orElseThrow(() -> new RuntimeException("Expense not found: " + expenseId));
+        if (notes != null) {
+            String clean = notes.replaceAll("<[^>]*>", "").trim();
+            e.setNotes(clean.isEmpty() ? null : clean);
+        }
+        if (receiptPhoto != null) {
+            e.setReceiptPhoto(receiptPhoto.isBlank() ? null : receiptPhoto);
+        }
+        return expenseRepository.save(e);
+    }
+
+    /** Update the status of a MoMo-linked expense once the transfer resolves. */
+    public void updateMomoExpenseStatus(String momoReferenceId, String status) {
+        if (momoReferenceId == null || momoReferenceId.isBlank()) return;
+        expenseRepository.findByMomoReferenceId(momoReferenceId).ifPresent(expense -> {
+            expense.setStatus(status);
+            expenseRepository.save(expense);
+        });
     }
 
     public List<Expense> getUserExpenses(Long userId) {
@@ -87,8 +162,19 @@ public class ExpenseService {
         return expenseRepository.findByUserIdAndCategoryOrderByDateDesc(userId, category);
     }
 
+    // Backward-compatible overload — no ownership check (legacy callers)
     public void deleteExpense(Long expenseId) {
-        expenseRepository.deleteById(expenseId);
+        deleteExpense(expenseId, null);
+    }
+
+    /** Delete an expense, verifying it belongs to the requesting user when known. */
+    public void deleteExpense(Long expenseId, Long userId) {
+        Expense expense = expenseRepository.findById(expenseId)
+                .orElseThrow(() -> new RuntimeException("Expense not found: " + expenseId));
+        if (userId != null && !expense.getUserId().equals(userId)) {
+            throw new RuntimeException("Unauthorized: This expense does not belong to you");
+        }
+        expenseRepository.delete(expense);
     }
 
     // ─── Recurring expenses ──────────────────────────────────────────────────
@@ -211,14 +297,40 @@ public class ExpenseService {
                 .filter(e -> e.getDate().getYear() == prevYear && e.getDate().getMonthValue() == prevMonth)
                 .collect(Collectors.toList());
 
-        // Totals — use absolute values so negative expense amounts sum correctly
+        // Totals — use absolute values so negative expense amounts sum correctly.
+        // Settlements are income (money back), not spending — exclude them.
         BigDecimal currentTotal = currentMonthExpenses.stream()
+                .filter(e -> !"SETTLEMENT".equals(e.getPaymentMethod()))
                 .map(e -> e.getAmount().abs())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal previousTotal = previousMonthExpenses.stream()
+                .filter(e -> !"SETTLEMENT".equals(e.getPaymentMethod()))
                 .map(e -> e.getAmount().abs())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // Include the user's share of shared (group) expenses as their spending —
+        // business decision: your portion of a group bill IS money you spent.
+        BigDecimal currentShared = BigDecimal.ZERO;
+        BigDecimal previousShared = BigDecimal.ZERO;
+        Set<Long> countedSharedIds = new HashSet<>();
+        for (GroupMember membership : groupMemberRepository.findByUserId(userId)) {
+            List<GroupMember> groupMembers = groupMemberRepository.findByGroupId(membership.getGroupId());
+            for (SharedExpense se : sharedExpenseRepository.findByGroupId(membership.getGroupId())) {
+                if (se.getAmount() == null || se.getCreatedAt() == null) continue;
+                if (!countedSharedIds.add(se.getId())) continue;
+                LocalDate d = se.getCreatedAt().toLocalDate();
+                boolean inCurrent  = d.getYear() == currentYear && d.getMonthValue() == currentMonth;
+                boolean inPrevious = d.getYear() == prevYear && d.getMonthValue() == prevMonth;
+                if (!inCurrent && !inPrevious) continue;
+                BigDecimal share = userShareOf(se, userId, groupMembers);
+                if (share.compareTo(BigDecimal.ZERO) <= 0) continue;
+                if (inCurrent) currentShared = currentShared.add(share);
+                else previousShared = previousShared.add(share);
+            }
+        }
+        currentTotal = currentTotal.add(currentShared);
+        previousTotal = previousTotal.add(previousShared);
 
         // Percentage change
         double percentageChange = 0.0;
@@ -232,7 +344,11 @@ public class ExpenseService {
         // Category breakdown for current month — use abs() for negative expense amounts
         Map<String, BigDecimal> categoryBreakdown = new HashMap<>();
         for (Expense e : currentMonthExpenses) {
+            if ("SETTLEMENT".equals(e.getPaymentMethod())) continue;
             categoryBreakdown.merge(e.getCategory(), e.getAmount().abs(), BigDecimal::add);
+        }
+        if (currentShared.compareTo(BigDecimal.ZERO) > 0) {
+            categoryBreakdown.merge("Shared", currentShared, BigDecimal::add);
         }
 
         // Highest category
@@ -277,6 +393,43 @@ public class ExpenseService {
         return report;
     }
 
+    /**
+     * The user's share of a shared expense, honoring the participant snapshot
+     * (members who joined after creation owe nothing) and CUSTOM split ratios.
+     */
+    private BigDecimal userShareOf(SharedExpense se, Long userId, List<GroupMember> members) {
+        Set<Long> participants = new HashSet<>();
+        if (se.getParticipantIds() != null && !se.getParticipantIds().isBlank()) {
+            for (String s : se.getParticipantIds().split(",")) {
+                try {
+                    participants.add(Long.parseLong(s.trim()));
+                } catch (NumberFormatException ignored) {
+                    // skip malformed token
+                }
+            }
+        }
+        if (participants.isEmpty()) {
+            for (GroupMember m : members) participants.add(m.getUserId());
+        }
+        if (!participants.contains(userId)) return BigDecimal.ZERO;
+
+        if ("CUSTOM".equals(se.getSplitType()) && se.getSplitRatios() != null) {
+            try {
+                Map<String, Object> raw = shareMapper.readValue(
+                        se.getSplitRatios(), shareMapper.getTypeFactory()
+                                .constructMapType(HashMap.class, String.class, Object.class));
+                Object pct = raw.get(String.valueOf(userId));
+                if (pct == null) return BigDecimal.ZERO;
+                return se.getAmount().multiply(new BigDecimal(String.valueOf(pct)))
+                        .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+            } catch (Exception ignored) {
+                // fall through to equal split
+            }
+        }
+        return se.getAmount().divide(
+                BigDecimal.valueOf(Math.max(participants.size(), 1)), 2, RoundingMode.HALF_UP);
+    }
+
     public List<Map<String, Object>> getCombinedHistory(Long userId) {
         List<Map<String, Object>> combined = new ArrayList<>();
 
@@ -291,6 +444,10 @@ public class ExpenseService {
             entry.put("date", e.getDate().toString());
             entry.put("type", "personal");
             entry.put("isExpense", true);
+            entry.put("status", e.getStatus() != null ? e.getStatus() : "COMPLETED");
+            entry.put("notes", e.getNotes());
+            entry.put("hasReceipt", e.getReceiptPhoto() != null);
+            entry.put("momoReferenceId", e.getMomoReferenceId());
             entry.put("groupId", null);
             entry.put("paymentMethod", e.getPaymentMethod() != null ? e.getPaymentMethod() : "CASH");
             entry.put("isRecurring", Boolean.TRUE.equals(e.getIsRecurring()));
@@ -323,6 +480,7 @@ public class ExpenseService {
                         : LocalDate.now().toString());
                 entry.put("type", "shared");
                 entry.put("isExpense", true);
+                entry.put("settled", Boolean.TRUE.equals(se.getSettled()));
                 entry.put("groupId", se.getGroupId());
                 entry.put("groupName", groupName);
                 entry.put("paidBy", se.getPaidBy());

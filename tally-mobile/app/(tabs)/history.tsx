@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
+import ExpenseDetailModal from '../../components/ExpenseDetailModal';
 import {
   View,
   Text,
@@ -17,8 +18,11 @@ import { Svg, Path } from 'react-native-svg';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Haptics from 'expo-haptics';
 import { expenseAPI, budgetAPI, categoriesAPI } from '../../services/api';
+import SkeletonItem, { SkeletonExpenseItem } from '../../components/SkeletonItem';
 import { getUserId, currentUser } from '../../services/storage';
+import { useConfirmModal } from '../../hooks/useConfirmModal';
 import { useTheme } from '../../hooks/useTheme';
 
 const CATEGORY_ICONS: { [key: string]: string } = {
@@ -28,6 +32,7 @@ const CATEGORY_ICONS: { [key: string]: string } = {
   Utilities: '💡',
   Other: '📦',
   Shared: '👥',
+  Settlement: '💚',
 };
 
 // Helper for timezone-independent date parsing
@@ -111,9 +116,14 @@ export default function HistoryScreen() {
       ]);
       setCustomCategories(categoriesRes.data || []);
       
-      const sorted = [...(expensesRes.data || [])].sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
+      const sorted = [...(expensesRes.data || [])].sort((a, b) => {
+        const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
+        if (dateDiff !== 0) return dateDiff;
+        // Settlements first within the same date
+        const aSettle = a.paymentMethod === 'SETTLEMENT' ? 1 : 0;
+        const bSettle = b.paymentMethod === 'SETTLEMENT' ? 1 : 0;
+        return bSettle - aSettle;
+      });
       setExpenses(sorted);
       setBudgets(budgetsRes.data || []);
     } catch (err: any) {
@@ -129,8 +139,23 @@ export default function HistoryScreen() {
     setRefreshing(false);
   }
 
+  // ── Expense detail modal ────────────────────────────────────────────────────
+  const [selectedExpense, setSelectedExpense] = useState<any | null>(null);
+  const [showExpenseDetail, setShowExpenseDetail] = useState(false);
+
+  function openDetail(item: any) {
+    setSelectedExpense(item);
+    setShowExpenseDetail(true);
+  }
+
+  function closeDetail() {
+    setShowExpenseDetail(false);
+    setSelectedExpense(null);
+  }
+
   // ── Export (CSV via backend + expo-sharing, PDF via expo-print) ────────────
 
+  const { showConfirm, ConfirmModalComponent } = useConfirmModal();
   const [exporting, setExporting] = useState(false);
 
   function handleExportPress() {
@@ -258,34 +283,31 @@ export default function HistoryScreen() {
     }
   }
 
-  async function handleDelete(item: any) {
+  function handleDelete(item: any) {
     if (item.isShared || item.type === 'shared') {
       Alert.alert('Shared Expense', 'Shared expenses can only be deleted from the group screen.');
       return;
     }
-    Alert.alert(
-      'Delete Expense',
-      'Are you sure you want to delete this expense?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await expenseAPI.deleteExpense(String(item.id));
-              // Only personal expenses reach here — match on id AND type so a
-              // shared entry with the same numeric id isn't removed too
-              setExpenses((prev) =>
-                prev.filter((e) => !(e.id === item.id && !(e.isShared || e.type === 'shared'))),
-              );
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete expense');
-            }
-          },
-        },
-      ]
-    );
+    showConfirm({
+      icon: '🗑️',
+      title: 'Delete Expense',
+      message: 'Are you sure you want to delete this expense? This cannot be undone.',
+      confirmText: 'Delete',
+      confirmColor: '#E05C5C',
+      onConfirm: async () => {
+        try {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+          await expenseAPI.deleteExpense(String(item.id), getUserId());
+          // Only personal expenses reach here — match on id AND type so a
+          // shared entry with the same numeric id isn't removed too
+          setExpenses((prev) =>
+            prev.filter((e) => !(e.id === item.id && !(e.isShared || e.type === 'shared'))),
+          );
+        } catch {
+          Alert.alert('Error', 'Failed to delete expense');
+        }
+      },
+    });
   }
 
   // Filter based on Time, Search Query and MoMo status (Timezone independent local dates)
@@ -329,13 +351,23 @@ export default function HistoryScreen() {
         matchesTime = e.date.startsWith(currentYear);
       }
 
-      // 2. Search query filtering
+      // 2. Search query filtering — matches description, category, tags,
+      // amount ("50" finds GHS 50.00) and month name ("june" finds June)
       const { cleanDescription, tags } = parseTagsFromDescription(e.description);
       const desc = (cleanDescription || '').toLowerCase();
       const cat = (e.category || '').toLowerCase();
       const tagsStr = tags.join(' ').toLowerCase();
-      const query = searchQuery.toLowerCase();
-      const matchesSearch = desc.includes(query) || cat.includes(query) || tagsStr.includes(query);
+      const query = searchQuery.toLowerCase().trim();
+      const amountStr = Math.abs(parseFloat(e.amount || '0')).toFixed(2);
+      const MONTH_FULL = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+      const monthIdx = e.date ? parseInt(e.date.split('-')[1], 10) - 1 : -1;
+      const monthName = monthIdx >= 0 && monthIdx < 12 ? MONTH_FULL[monthIdx] : '';
+      const matchesSearch = !query
+        || desc.includes(query)
+        || cat.includes(query)
+        || tagsStr.includes(query)
+        || amountStr.includes(query)
+        || monthName.startsWith(query);
 
       // 3. MoMo filter
       const matchesMomo = !momoOnly || e.paymentMethod === "MOMO";
@@ -365,11 +397,14 @@ export default function HistoryScreen() {
   }, [totalBudget, activeTimeFilter]);
 
   // Total spent = every non-income transaction (personal AND shared), regardless
-  // of stored sign — expenses are always money going out.
+  // of stored sign — expenses are always money going out. Settlements are
+  // income (money coming back), so they reduce the net total.
   const totalSpent = useMemo(() => {
-    return filteredExpenses
-      .filter(e => e.type !== 'income')
-      .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || '0')), 0);
+    return filteredExpenses.reduce((sum, e) => {
+      const amt = Math.abs(parseFloat(e.amount || '0'));
+      if (e.type === 'income' || e.paymentMethod === 'SETTLEMENT') return sum - amt;
+      return sum + amt;
+    }, 0);
   }, [filteredExpenses]);
 
   // Progress values for gauges (safe division)
@@ -416,9 +451,14 @@ export default function HistoryScreen() {
   const groupedExpenses = groupExpensesByDate(filteredExpenses);
 
   if (loading && !refreshing) {
+    // Skeleton loading — placeholder cards instead of a bare spinner
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <View style={[styles.container, { backgroundColor: colors.background, paddingHorizontal: 20, paddingTop: 60 }]}>
+        <SkeletonItem width="55%" height={28} borderRadius={12} style={{ marginBottom: 20 }} />
+        <SkeletonItem height={48} borderRadius={24} style={{ marginBottom: 16 }} />
+        {[...Array(6)].map((_, i) => (
+          <SkeletonExpenseItem key={i} />
+        ))}
       </View>
     );
   }
@@ -440,6 +480,7 @@ export default function HistoryScreen() {
   }
 
   return (
+    <>
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}
@@ -579,6 +620,7 @@ export default function HistoryScreen() {
           {group.items.map((item) => {
             const isShared = item.isShared || item.type === "shared";
             const isMomo = item.paymentMethod === "MOMO";
+            const isSettlement = item.paymentMethod === "SETTLEMENT";
             const { cleanDescription, tags } = parseTagsFromDescription(item.description);
             return (
               <TouchableOpacity
@@ -589,6 +631,7 @@ export default function HistoryScreen() {
                   { backgroundColor: colors.cardBg, borderColor: colors.border },
                   isShared && { borderColor: colors.primary, borderWidth: 1.5 }
                 ]}
+                onPress={() => openDetail(item)}
                 onLongPress={() => handleLongPress(item)}
                 activeOpacity={0.9}
               >
@@ -605,16 +648,38 @@ export default function HistoryScreen() {
                     <Text style={[styles.expenseCategory, { color: colors.textSecondary }]}>{item.category}</Text>
                     
                     <View style={styles.badgeRow}>
+                      {isSettlement && (
+                        <View style={[styles.sharedBadge, { backgroundColor: colors.positive + '15', borderColor: colors.positive + '30' }]}>
+                          <Text style={[styles.sharedBadgeText, { color: colors.positive }]}>💚 Settlement</Text>
+                        </View>
+                      )}
                       {isShared && (
                         <View style={[styles.sharedBadge, { backgroundColor: colors.primary + '15' }]}>
                           <Text style={[styles.sharedBadgeText, { color: colors.primary }]}>👥 Shared</Text>
                         </View>
                       )}
-                      <View style={[styles.paymentBadge, { backgroundColor: colors.neutralBg }]}>
-                        <Text style={[styles.paymentBadgeText, { color: colors.textSecondary }]}>
-                          {isMomo ? "📱 MoMo" : "💵 Cash"}
-                        </Text>
-                      </View>
+                      {isShared && item.settled && (
+                        <View style={[styles.sharedBadge, { backgroundColor: colors.positive + '15', borderColor: colors.positive + '30' }]}>
+                          <Text style={[styles.sharedBadgeText, { color: colors.positive }]}>Settled ✓</Text>
+                        </View>
+                      )}
+                      {item.status === 'PENDING' && (
+                        <View style={[styles.sharedBadge, { backgroundColor: '#F59E0B20', borderColor: '#F59E0B40' }]}>
+                          <Text style={[styles.sharedBadgeText, { color: '#D97706' }]}>⏳ Pending</Text>
+                        </View>
+                      )}
+                      {item.status === 'FAILED' && (
+                        <View style={[styles.sharedBadge, { backgroundColor: colors.negative + '15', borderColor: colors.negative + '30' }]}>
+                          <Text style={[styles.sharedBadgeText, { color: colors.negative }]}>✕ Failed</Text>
+                        </View>
+                      )}
+                      {!isSettlement && (
+                        <View style={[styles.paymentBadge, { backgroundColor: colors.neutralBg }]}>
+                          <Text style={[styles.paymentBadgeText, { color: colors.textSecondary }]}>
+                            {isMomo ? "📱 MoMo" : "💵 Cash"}
+                          </Text>
+                        </View>
+                      )}
                       {item.isRecurring && (
                         <View style={[styles.paymentBadge, { backgroundColor: colors.primary + '15' }]}>
                           <Text style={[styles.paymentBadgeText, { color: colors.primary }]}>
@@ -638,22 +703,16 @@ export default function HistoryScreen() {
                   </View>
                 </View>
                 <View style={styles.expenseRight}>
-                  {/* Everything is money going OUT unless explicitly an income transaction */}
+                  {/* Money going OUT unless explicitly income or a settlement received */}
                   <Text style={[
                     styles.expenseAmount,
-                    { color: item.type === 'income' ? colors.positive : colors.negative }
+                    { color: (item.type === 'income' || isSettlement) ? colors.positive : colors.negative }
                   ]}>
-                    {item.type === 'income'
+                    {(item.type === 'income' || isSettlement)
                       ? `+GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`
                       : `-GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`}
                   </Text>
-                  <TouchableOpacity
-                    style={styles.deleteBtn}
-                    onPress={() => handleDelete(item)}
-                    activeOpacity={0.7}
-                  >
-                    <Feather name="trash-2" size={16} color="#FF3B30" />
-                  </TouchableOpacity>
+                  <Text style={[styles.chevron, { color: colors.textSecondary }]}>›</Text>
                 </View>
               </TouchableOpacity>
             );
@@ -671,6 +730,19 @@ export default function HistoryScreen() {
 
       <Text style={[styles.hint, { color: colors.textSecondary }]}>Tip: You can also long press a transaction to delete it</Text>
     </ScrollView>
+    {ConfirmModalComponent}
+    <ExpenseDetailModal
+      visible={showExpenseDetail}
+      expense={selectedExpense}
+      onClose={closeDetail}
+      onDelete={(expenseId) => {
+        closeDetail();
+        const item = expenses.find((e) => String(e.id) === String(expenseId));
+        if (item) handleDelete(item);
+      }}
+      customCategories={customCategories}
+    />
+    </>
   );
 }
 
@@ -982,6 +1054,12 @@ const styles = StyleSheet.create({
   },
   deleteBtn: {
     padding: 4,
+  },
+  chevron: {
+    fontSize: 22,
+    fontWeight: '300',
+    marginTop: 4,
+    opacity: 0.5,
   },
   // Tags styles
   tagsContainer: {

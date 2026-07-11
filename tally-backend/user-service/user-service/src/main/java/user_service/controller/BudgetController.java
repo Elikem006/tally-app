@@ -1,9 +1,11 @@
 package user_service.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import user_service.AuthGuard;
 import user_service.model.Budget;
 import user_service.service.BudgetService;
 import java.math.BigDecimal;
@@ -24,7 +26,8 @@ public class BudgetController {
     }
 
     @PostMapping
-    public ResponseEntity<?> setBudget(@RequestBody Map<String, String> request) {
+    public ResponseEntity<?> setBudget(@RequestBody Map<String, String> request,
+                                       HttpServletRequest httpRequest) {
         try {
             String userIdStr = request.get("userId");
             String category = request.get("category");
@@ -41,6 +44,7 @@ public class BudgetController {
             }
 
             Long userId = Long.parseLong(userIdStr);
+            AuthGuard.requireSameUser(httpRequest, userId);
             BigDecimal monthlyLimit = new BigDecimal(monthlyLimitStr);
 
             if (monthlyLimit.compareTo(BigDecimal.ZERO) <= 0) {

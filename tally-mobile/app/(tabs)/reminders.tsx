@@ -6,7 +6,6 @@ import {
   FlatList,
   TouchableOpacity,
   TextInput,
-  Alert,
   ActivityIndicator,
   ScrollView,
   RefreshControl,
@@ -20,6 +19,7 @@ import { getUserId } from "../../services/storage";
 import { addHistoryItem } from "../../services/notificationHistory";
 import Toast from "../../components/Toast";
 import { useToast } from "../../hooks/useToast";
+import { useConfirmModal } from "../../hooks/useConfirmModal";
 import { useTheme } from '../../hooks/useTheme';
 
 // Helper to check urgency (overdue or due within 2 days)
@@ -97,6 +97,7 @@ export default function RemindersScreen() {
   
   const [saving, setSaving] = useState(false);
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+  const { showConfirm, ConfirmModalComponent } = useConfirmModal();
 
   useEffect(() => {
     fetchReminders();
@@ -182,23 +183,23 @@ export default function RemindersScreen() {
     }
   }
 
-  async function handleDelete(reminderId: string) {
-    Alert.alert("Delete Reminder", "Are you sure you want to delete this reminder?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await remindersAPI.deleteReminder(reminderId);
-            await fetchReminders(false);
-            showToast("Reminder deleted", "info");
-          } catch (error) {
-showToast("Failed to delete reminder", "error");
-          }
-        },
+  function handleDelete(reminderId: string) {
+    showConfirm({
+      icon: '🔔',
+      title: 'Delete Reminder',
+      message: 'Are you sure you want to delete this reminder?',
+      confirmText: 'Delete',
+      confirmColor: '#E05C5C',
+      onConfirm: async () => {
+        try {
+          await remindersAPI.deleteReminder(reminderId);
+          await fetchReminders(false);
+          showToast("Reminder deleted", "info");
+        } catch {
+          showToast("Failed to delete reminder", "error");
+        }
       },
-    ]);
+    });
   }
 
   if (loading && !refreshing) {
@@ -485,6 +486,7 @@ showToast("Failed to delete reminder", "error");
           />
         )}
       </View>
+      {ConfirmModalComponent}
       <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
     </KeyboardAvoidingView>
   );

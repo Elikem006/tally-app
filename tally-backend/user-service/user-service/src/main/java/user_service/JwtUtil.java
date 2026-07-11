@@ -44,6 +44,18 @@ public class JwtUtil {
                 .getSubject();
     }
 
+    /** The userId claim embedded at login — used for per-request authorization. */
+    public Long getUserIdFromToken(String token) {
+        Object claim = Jwts.parserBuilder()
+                .setSigningKey(getKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody()
+                .get("userId");
+        if (claim == null) return null;
+        return Long.parseLong(String.valueOf(claim));
+    }
+
     public boolean validateToken(String token) {
         try {
             Jwts.parserBuilder()

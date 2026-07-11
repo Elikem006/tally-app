@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import ExpenseDetailModal from '../../components/ExpenseDetailModal';
 import {
   View,
   Text,
@@ -17,7 +18,7 @@ import {
 } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { expenseAPI, remindersAPI, budgetAPI, momoAPI, categoriesAPI } from '../../services/api';
+import { expenseAPI, remindersAPI, budgetAPI, momoAPI, categoriesAPI, groupAPI } from '../../services/api';
 import { getUserId, getUserName, safeStorage } from '../../services/storage';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
@@ -124,6 +125,9 @@ export default function HomeScreen() {
   const [userName, setUserName] = useState("User");
   const [customCategories, setCustomCategories] = useState<any[]>([]);
 
+  // Splitwise-style net position across all groups
+  const [groupNet, setGroupNet] = useState<{ youOwe: number; youAreOwed: number } | null>(null);
+
   // Emoji for default categories first, then user-created custom categories
   function getCategoryIcon(categoryName: string): string {
     if (CATEGORY_ICONS[categoryName]) return CATEGORY_ICONS[categoryName];
@@ -144,6 +148,10 @@ export default function HomeScreen() {
   const [momoBalanceLoading, setMomoBalanceLoading] = useState(false);
   const [momoMonthlySpent, setMomoMonthlySpent] = useState("0.00");
   const [hideMomoBalance, setHideMomoBalance] = useState(false);
+
+  // Expense detail modal state
+  const [selectedExpense, setSelectedExpense] = useState<any | null>(null);
+  const [showExpenseDetail, setShowExpenseDetail] = useState(false);
 
   // Quick add state
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -213,6 +221,14 @@ export default function HomeScreen() {
       setUpcomingReminders(remindersRes.data || []);
       setRecurringExpenses(recurringRes.data || []);
       setCustomCategories(categoriesRes.data || []);
+
+      // Non-blocking: net owe/owed across all groups
+      groupAPI.getNetBalance(userId)
+        .then((r: any) => setGroupNet({
+          youOwe: parseFloat(r.data?.youOwe ?? '0') || 0,
+          youAreOwed: parseFloat(r.data?.youAreOwed ?? '0') || 0,
+        }))
+        .catch(() => setGroupNet(null));
 
       // Calculate MoMo spending for this month
       const now = new Date();
@@ -384,13 +400,27 @@ export default function HomeScreen() {
   // Every transaction is money going OUT (personal AND shared) unless it is
   // explicitly an income transaction — never infer income from a positive sign.
   const totalSpent = expenses
-    .filter(e => e.type !== 'income')
+    .filter(e => e.type !== 'income' && e.paymentMethod !== 'SETTLEMENT')
     .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || '0')), 0);
   const totalIncome = expenses
-    .filter(e => e.type === 'income')
+    .filter(e => e.type === 'income' || e.paymentMethod === 'SETTLEMENT')
     .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || '0')), 0);
   const totalBudget = budgets.reduce((sum, b) => sum + parseFloat(b.monthlyLimit || '0'), 0);
   const remaining = totalBudget - totalSpent;
+
+  // ── Spending pace (Upgrade: expense velocity tracking) ────────────────────
+  // Daily average this month → projected end-of-month total, colored vs budget.
+  const paceNow = new Date();
+  const dayOfMonth = paceNow.getDate();
+  const daysInMonth = new Date(paceNow.getFullYear(), paceNow.getMonth() + 1, 0).getDate();
+  const monthPrefix = `${paceNow.getFullYear()}-${String(paceNow.getMonth() + 1).padStart(2, '0')}`;
+  const monthSpent = expenses
+    .filter(e => e.date && e.date.startsWith(monthPrefix)
+      && e.type !== 'income' && e.paymentMethod !== 'SETTLEMENT')
+    .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || '0')), 0);
+  const dailyAvg = dayOfMonth > 0 ? monthSpent / dayOfMonth : 0;
+  const projected = dailyAvg * daysInMonth;
+  const paceOverBudget = totalBudget > 0 && projected > totalBudget;
 
   // Split formatted total spent for premium large-integer / small-decimal layout
   const formattedTotal = totalSpent.toFixed(2);
@@ -731,6 +761,51 @@ export default function HomeScreen() {
           )}
         </View>
 
+        {/* Spending pace indicator — needs at least 3 days of data to project */}
+        {monthSpent > 0 && dayOfMonth > 3 && (
+          <View style={[
+            styles.paceCard,
+            {
+              backgroundColor: (paceOverBudget ? colors.negative : colors.positive) + '12',
+              borderColor: (paceOverBudget ? colors.negative : colors.positive) + '35',
+            },
+          ]}>
+            <Text style={[styles.paceText, { color: paceOverBudget ? colors.negative : colors.positive }]}>
+              📈 Spending pace: GHS {dailyAvg.toFixed(2)}/day — projected GHS {projected.toFixed(0)} this month
+            </Text>
+            {totalBudget > 0 && (
+              <Text style={[styles.paceSubText, { color: colors.textSecondary }]}>
+                {paceOverBudget
+                  ? `Heads up — that's GHS ${(projected - totalBudget).toFixed(0)} over your GHS ${totalBudget.toFixed(0)} budget`
+                  : `On track to stay within your GHS ${totalBudget.toFixed(0)} budget`}
+              </Text>
+            )}
+          </View>
+        )}
+
+        {/* Net group position — you owe / you are owed across ALL groups */}
+        {groupNet && (groupNet.youOwe > 0 || groupNet.youAreOwed > 0) && (
+          <TouchableOpacity
+            style={[styles.netCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
+            onPress={() => router.push('/(tabs)/groups')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.netCol}>
+              <Text style={[styles.netLabel, { color: colors.textSecondary }]}>YOU OWE</Text>
+              <Text style={[styles.netValue, { color: groupNet.youOwe > 0 ? colors.negative : colors.textSecondary }]}>
+                GHS {groupNet.youOwe.toFixed(2)}
+              </Text>
+            </View>
+            <View style={[styles.netDivider, { backgroundColor: colors.border }]} />
+            <View style={styles.netCol}>
+              <Text style={[styles.netLabel, { color: colors.textSecondary }]}>YOU ARE OWED</Text>
+              <Text style={[styles.netValue, { color: groupNet.youAreOwed > 0 ? colors.positive : colors.textSecondary }]}>
+                GHS {groupNet.youAreOwed.toFixed(2)}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        )}
+
         {/* MTN MoMo Wallet Balance Card */}
         <View style={[
           styles.momoCard,
@@ -1039,7 +1114,12 @@ export default function HomeScreen() {
               
               return (
                 // type+id — personal and shared entries can share numeric ids
-                <View key={`${item.type ?? (isShared ? "shared" : "personal")}-${item.id}`} style={[styles.expenseCard, { backgroundColor: colors.cardBg, borderColor: colors.border }, isShared && styles.sharedCard]}>
+                <TouchableOpacity
+                  key={`${item.type ?? (isShared ? "shared" : "personal")}-${item.id}`}
+                  style={[styles.expenseCard, { backgroundColor: colors.cardBg, borderColor: colors.border }, isShared && styles.sharedCard]}
+                  onPress={() => { setSelectedExpense(item); setShowExpenseDetail(true); }}
+                  activeOpacity={0.85}
+                >
                   <View style={styles.expenseLeft}>
                     <View style={[styles.iconBox, { backgroundColor: colors.neutralBg, borderColor: colors.border }]}>
                       <Text style={styles.icon}>{isShared ? '👥' : getCategoryIcon(item.category)}</Text>
@@ -1077,15 +1157,18 @@ export default function HomeScreen() {
                     </View>
                   </View>
                   {/* Expenses (personal + shared) always show as money going out */}
-                  <Text style={[
-                    styles.expenseAmount,
-                    { color: item.type === 'income' ? colors.positive : colors.negative }
-                  ]}>
-                    {item.type === 'income'
-                      ? `+GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`
-                      : `-GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`}
-                  </Text>
-                </View>
+                  <View style={styles.expenseRight}>
+                    <Text style={[
+                      styles.expenseAmount,
+                      { color: item.type === 'income' ? colors.positive : colors.negative }
+                    ]}>
+                      {item.type === 'income'
+                        ? `+GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`
+                        : `-GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`}
+                    </Text>
+                    <Text style={[styles.chevron, { color: colors.textSecondary }]}>›</Text>
+                  </View>
+                </TouchableOpacity>
               );
             })
           )}
@@ -1202,6 +1285,14 @@ export default function HomeScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <ExpenseDetailModal
+        visible={showExpenseDetail}
+        expense={selectedExpense}
+        onClose={() => { setShowExpenseDetail(false); setSelectedExpense(null); }}
+        onDelete={() => { setShowExpenseDetail(false); setSelectedExpense(null); }}
+        customCategories={customCategories}
+      />
     </View>
   );
 }
@@ -1477,6 +1568,53 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#ffffff',
     fontWeight: '700',
+  },
+
+  // Net group position card
+  netCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 20,
+  },
+  netCol: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 3,
+  },
+  netLabel: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    letterSpacing: 0.5,
+  },
+  netValue: {
+    fontSize: 17,
+    fontWeight: 'bold',
+  },
+  netDivider: {
+    width: 1,
+    height: 32,
+  },
+
+  // Spending pace indicator
+  paceCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 20,
+    gap: 3,
+  },
+  paceText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  paceSubText: {
+    fontSize: 11,
+    fontWeight: '500',
   },
 
   // MoMo Card (Light Premium Redesign)
@@ -1878,10 +2016,20 @@ const styles = StyleSheet.create({
   momoBadgeText: {
     color: '#D97706',
   },
+  expenseRight: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 4,
+  },
   expenseAmount: {
     fontSize: 15,
     fontWeight: 'bold',
     color: '#111111',
+  },
+  chevron: {
+    fontSize: 22,
+    fontWeight: '300',
+    opacity: 0.5,
   },
   recurrenceBadge: {
     borderRadius: 10,

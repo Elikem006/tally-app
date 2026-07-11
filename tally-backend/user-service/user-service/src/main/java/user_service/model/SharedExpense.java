@@ -37,6 +37,27 @@ public class SharedExpense {
     @Column(name = "split_ratios", columnDefinition = "TEXT")
     private String splitRatios;
 
+    /**
+     * Snapshot of the member userIds present when this expense was created,
+     * stored as CSV (e.g. "1,2,3"). Members who join the group later are NOT
+     * part of this expense's split. Null for legacy rows — treated as
+     * "all current members" for backward compatibility.
+     */
+    @Column(name = "participant_ids", columnDefinition = "TEXT")
+    private String participantIds;
+
+    /**
+     * True once this expense has been settled. Settled expenses stay in the
+     * group history but no longer count toward balances.
+     */
+    @Column(name = "settled")
+    private Boolean settled = false;
+
+    /** Optimistic locking — prevents concurrent settle-up race conditions. */
+    @Version
+    @Column(name = "version")
+    private Long version;
+
     @Column(updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 }

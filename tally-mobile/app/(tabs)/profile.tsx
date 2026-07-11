@@ -23,6 +23,7 @@ import { getUserId, safeStorage, currentUser, resetCurrentUser, clearRememberedU
 import Avatar from '../../components/Avatar';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
+import { useConfirmModal } from '../../hooks/useConfirmModal';
 import { useTheme } from '../../hooks/useTheme';
 
 const CATEGORY_ICONS: { [key: string]: string } = {
@@ -52,6 +53,7 @@ export default function ProfileScreen() {
   const [editingPhone, setEditingPhone] = useState(false);
   const [savingPhone, setSavingPhone] = useState(false);
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+  const { showConfirm, ConfirmModalComponent } = useConfirmModal();
 
   useEffect(() => {
     loadProfileImage();
@@ -101,8 +103,49 @@ export default function ProfileScreen() {
       const expenses: any[] = expensesRes.data || [];
       const report = reportRes.data || {};
 
-      const totalExpenses = expenses.length;
-      const totalSpent = expenses.reduce((sum, e) => sum + parseFloat(e.amount || "0"), 0);
+      const isSettlement = (e: any) => e.paymentMethod === "SETTLEMENT";
+      const totalExpenses = expenses.filter((e) => !isSettlement(e)).length;
+      // Spending only — settlements are income and amounts can be stored signed
+      const totalSpent = expenses
+        .filter((e) => !isSettlement(e))
+        .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || "0")), 0);
+
+      const now = new Date();
+      const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+      // Net summary (Mint-style): income (settlements received) vs spending this month
+      const monthIncome = expenses
+        .filter((e) => isSettlement(e) && e.date?.startsWith(monthPrefix))
+        .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || "0")), 0);
+
+      // Spending streaks from unique expense dates
+      const dateSet = new Set(expenses.filter((e) => !isSettlement(e)).map((e) => e.date));
+      const key = (dt: Date) =>
+        `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+      let streak = 0;
+      const cursor = new Date();
+      if (!dateSet.has(key(cursor))) cursor.setDate(cursor.getDate() - 1); // streak may end yesterday
+      while (dateSet.has(key(cursor))) {
+        streak++;
+        cursor.setDate(cursor.getDate() - 1);
+      }
+      const daysThisMonth = [...dateSet].filter(
+        (d) => typeof d === "string" && (d as string).startsWith(monthPrefix),
+      ).length;
+
+      // Spending personality (Cowrywise-style) from budget adherence
+      const perf: any[] = report.budgetPerformance || [];
+      let personality = { label: "🌱 Getting Started", desc: "Set budgets to unlock your spending personality" };
+      if (perf.length > 0) {
+        const onTrack = perf.filter((b) => (parseFloat(b.percentage) || 0) < 80).length;
+        const ratio = onTrack / perf.length;
+        personality =
+          ratio >= 0.8
+            ? { label: "🦉 The Saver", desc: "You stay well within your budgets" }
+            : ratio >= 0.5
+            ? { label: "⚖️ The Balancer", desc: "Mostly on budget, with the occasional splurge" }
+            : { label: "🎢 The Spender", desc: "Your budgets are working overtime" };
+      }
 
       // Most used category
       const categoryCounts: { [key: string]: number } = {};
@@ -117,6 +160,10 @@ export default function ProfileScreen() {
         mostUsedCategory,
         thisMonthSpent: parseFloat(report.currentMonth) || 0,
         topCategory: report.highestCategory,
+        monthIncome,
+        streak,
+        daysThisMonth,
+        personality,
       });
     } catch (err) {
       setError("Failed to load statistics. Pull down to refresh.");
@@ -197,19 +244,38 @@ export default function ProfileScreen() {
   }
 
   function handleLogout() {
-    Alert.alert('Log Out', 'Are you sure you want to log out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Log Out',
-        style: 'destructive',
-        onPress: async () => {
-          resetCurrentUser();
-          // Forget the persisted session so the app doesn't auto-login again
-          await clearRememberedUser();
-          router.replace("/(auth)/login");
-        },
+    showConfirm({
+      icon: '👋',
+      title: 'Log Out',
+      message: 'Are you sure you want to log out of Tally?',
+      confirmText: 'Log Out',
+      confirmColor: '#E05C5C',
+      onConfirm: async () => {
+        resetCurrentUser();
+        await clearRememberedUser();
+        router.replace("/(auth)/login");
       },
-    ]);
+    });
+  }
+
+  function handleRemovePhone() {
+    showConfirm({
+      icon: '📱',
+      title: 'Remove MoMo Number',
+      message: 'Are you sure you want to remove your MoMo number? You will need to re-enter it to make MoMo payments.',
+      confirmText: 'Remove',
+      confirmColor: '#E05C5C',
+      onConfirm: async () => {
+        try {
+          await authAPI.updatePhone(getUserId(), '');
+          currentUser.phoneNumber = '';
+          setPhoneNumber('');
+          showToast("MoMo number removed", "info");
+        } catch {
+          showToast("Failed to remove phone number", "error");
+        }
+      },
+    });
   }
 
   function triggerImageOptions() {
@@ -219,7 +285,7 @@ export default function ProfileScreen() {
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Design Custom Avatar (Presets) 🎨',
+          text: 'Set Group Profile Photo 📷',
           onPress: () => router.push("/avatar-builder"),
         },
         {
@@ -349,6 +415,46 @@ export default function ProfileScreen() {
                   </View>
                 </View>
               )}
+
+              {/* Net summary (Mint-style): money in vs money out this month */}
+              <View style={[styles.topCategoryCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                <Text style={{ fontSize: 28 }}>⚖️</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.topCatName, { color: colors.text }]}>Net This Month</Text>
+                  <Text style={[styles.topCatSub, { color: colors.textSecondary }]}>
+                    <Text style={{ color: colors.positive, fontWeight: '700' }}>+GHS {(stats.monthIncome ?? 0).toFixed(2)}</Text>
+                    {'  in  •  '}
+                    <Text style={{ color: colors.negative, fontWeight: '700' }}>-GHS {(stats.thisMonthSpent ?? 0).toFixed(2)}</Text>
+                    {'  out'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Spending personality (Cowrywise-style) */}
+              {stats.personality && (
+                <View style={[styles.topCategoryCard, { backgroundColor: colors.primary + '10', borderColor: colors.primary + '30' }]}>
+                  <Text style={{ fontSize: 28 }}>{stats.personality.label.split(' ')[0]}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.topCatName, { color: colors.primary }]}>
+                      {stats.personality.label.split(' ').slice(1).join(' ')}
+                    </Text>
+                    <Text style={[styles.topCatSub, { color: colors.textSecondary }]}>{stats.personality.desc}</Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Spending streaks */}
+              <View style={[styles.topCategoryCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                <Text style={{ fontSize: 28 }}>🔥</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.topCatName, { color: colors.text }]}>
+                    {stats.streak ?? 0} day streak of logging expenses
+                  </Text>
+                  <Text style={[styles.topCatSub, { color: colors.textSecondary }]}>
+                    ✅ {stats.daysThisMonth ?? 0} day{(stats.daysThisMonth ?? 0) === 1 ? '' : 's'} this month with logged expenses
+                  </Text>
+                </View>
+              </View>
             </View>
           ) : null}
 
@@ -453,6 +559,11 @@ export default function ProfileScreen() {
                       {currentUser.phoneNumber ? 'Edit' : '+ Add'}
                     </Text>
                   </TouchableOpacity>
+                  {!!currentUser.phoneNumber && (
+                    <TouchableOpacity onPress={handleRemovePhone} style={{ marginLeft: 10 }}>
+                      <Text style={[styles.editLinkText, { color: '#E05C5C' }]}>Remove</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               )}
             </View>
@@ -539,6 +650,7 @@ export default function ProfileScreen() {
         </Modal>
       </ScrollView>
 
+      {ConfirmModalComponent}
       <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
     </KeyboardAvoidingView>
   );

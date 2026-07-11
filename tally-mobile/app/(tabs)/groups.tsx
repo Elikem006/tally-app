@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { groupAPI } from '../../services/api';
 import { getUserId } from '../../services/storage';
 import { useTheme } from '../../hooks/useTheme';
+import SkeletonItem from '../../components/SkeletonItem';
 
 export default function GroupsScreen() {
   const insets = useSafeAreaInsets();
@@ -71,9 +72,13 @@ export default function GroupsScreen() {
   }
 
   if (loading && !refreshing) {
+    // Skeleton loading — placeholder group cards instead of a bare spinner
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <View style={[styles.container, { backgroundColor: colors.background, paddingHorizontal: 20, paddingTop: Math.max(insets.top, 30) }]}>
+        <SkeletonItem width="45%" height={26} borderRadius={12} style={{ marginBottom: 20 }} />
+        {[...Array(4)].map((_, i) => (
+          <SkeletonItem key={i} height={92} borderRadius={24} style={{ marginBottom: 10 }} />
+        ))}
       </View>
     );
   }

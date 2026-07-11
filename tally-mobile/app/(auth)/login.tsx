@@ -22,6 +22,8 @@ import {
   loadRememberedUser,
   saveRememberedUser,
   clearRememberedUser,
+  notifyUserChanged,
+  safeStorage,
 } from '../../services/storage';
 
 export default function LoginScreen() {
@@ -76,6 +78,8 @@ export default function LoginScreen() {
       currentUser.lastCategory = 'Food';
       currentUser.lastPaymentMethod = 'CASH';
 
+      notifyUserChanged();
+
       // Persist (or clear) the session according to the Remember Me checkbox
       if (rememberMe) {
         await saveRememberedUser();
@@ -84,7 +88,14 @@ export default function LoginScreen() {
       }
 
       setLoading(false);
-      router.replace('/(tabs)');
+
+      // First-time users see the 3-step onboarding once
+      const onboardingComplete = await safeStorage.getItem('tallyOnboardingComplete');
+      if (!onboardingComplete) {
+        router.replace('/onboarding');
+      } else {
+        router.replace('/(tabs)');
+      }
     } catch (error: any) {
       setLoading(false);
       const message =
@@ -187,7 +198,7 @@ export default function LoginScreen() {
                 <Text style={[styles.checkboxLabel, { color: colors.textSecondary }]}>Remember me</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity onPress={() => Alert.alert('Forgot Password', 'Feature coming soon!')}>
+              <TouchableOpacity onPress={() => router.push('/(auth)/forgot-password')} activeOpacity={0.7}>
                 <Text style={[styles.forgotText, { color: colors.primary }]}>Forgot password?</Text>
               </TouchableOpacity>
             </View>

@@ -1,9 +1,11 @@
 package user_service.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import user_service.AuthGuard;
 import user_service.model.CustomCategory;
 import user_service.service.CustomCategoryService;
 
@@ -42,7 +44,8 @@ public class CustomCategoryController {
      * Body: { "userId", "name", "emoji" }
      */
     @PostMapping
-    public ResponseEntity<?> createCategory(@RequestBody Map<String, String> request) {
+    public ResponseEntity<?> createCategory(@RequestBody Map<String, String> request,
+                                            HttpServletRequest httpRequest) {
         try {
             String userIdStr = request.get("userId");
             String name      = request.get("name");
@@ -62,6 +65,7 @@ public class CustomCategoryController {
             }
 
             Long userId = Long.parseLong(userIdStr);
+            AuthGuard.requireSameUser(httpRequest, userId);
             CustomCategory saved = customCategoryService.createCategory(userId, name, emoji);
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
 

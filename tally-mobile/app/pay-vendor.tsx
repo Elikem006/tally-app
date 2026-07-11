@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,9 +11,10 @@ import {
   Platform,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { momoAPI, expenseAPI } from "../services/api";
-import { getUserId, currentUser } from "../services/storage";
+import { momoAPI } from "../services/api";
+import { getUserId, currentUser, safeStorage } from "../services/storage";
 import { addHistoryItem } from "../services/notificationHistory";
+import * as Haptics from "expo-haptics";
 
 const CATEGORIES = [
   { name: "Food", emoji: "🍔" },
@@ -48,7 +49,26 @@ export default function PayVendorScreen() {
   const [transferStatus, setTransferStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [expenseRecorded, setExpenseRecorded] = useState(false);
+
+  // Recent recipients (last 3 numbers) for quick re-pay, like the MoMo app
+  const RECENTS_KEY = "tally_recent_recipients";
+  const [recentRecipients, setRecentRecipients] = useState<string[]>([]);
+
+  useEffect(() => {
+    safeStorage.getItem(RECENTS_KEY)
+      .then((raw) => raw && setRecentRecipients(JSON.parse(raw)))
+      .catch(() => {});
+  }, []);
+
+  async function rememberRecipient(phone: string) {
+    try {
+      const next = [phone, ...recentRecipients.filter((p) => p !== phone)].slice(0, 3);
+      setRecentRecipients(next);
+      await safeStorage.setItem(RECENTS_KEY, JSON.stringify(next));
+    } catch {
+      // Non-critical
+    }
+  }
 
   // ── Step 1 validation ──────────────────────────────────────────────────────
   const handleProceedToConfirm = () => {
@@ -73,9 +93,14 @@ export default function PayVendorScreen() {
     try {
       const userId = getUserId();
 
+      // Sanitize inputs: strip spaces/dashes from the phone number and
+      // normalize the amount to exactly 2 decimal places.
+      const cleanPhone = vendorPhone.replace(/\D/g, "");
+      const cleanAmount = Number(amount).toFixed(2);
+
       const res = await momoAPI.transfer(
-        vendorPhone.trim(),
-        amount.trim(),
+        cleanPhone,
+        cleanAmount,
         description.trim() || "MoMo transfer",
         userId,                 // ← was currentUser.id (undefined); now correctly uses getUserId()
         category,
@@ -83,6 +108,7 @@ export default function PayVendorScreen() {
 
       const ref: string = res.data?.referenceId ?? "";
       setReferenceId(ref);
+      await rememberRecipient(cleanPhone);
 
       // Wait 5 s then poll for final status
       await new Promise((resolve) => setTimeout(resolve, 5000));
@@ -99,30 +125,22 @@ export default function PayVendorScreen() {
 
       setTransferStatus(status);
 
-      // On SUCCESSFUL, also create expense from frontend as a safety net
-      // (backend already records it; this ensures it appears even if backend userId lookup failed)
-      if (status === "SUCCESSFUL" && !expenseRecorded) {
-        try {
-          const today = new Date().toISOString().split("T")[0];
-          const expenseDesc = `Sent to ${vendorPhone.trim()}${description.trim() ? ": " + description.trim() : ""}`;
-          await expenseAPI.createExpense(
-            userId,
-            amount.trim(),
-            category,
-            expenseDesc,
-            today,
-            "MOMO",
-          );
-          setExpenseRecorded(true);
-          await addHistoryItem({
-            type: "expense_added",
-            title: "MoMo Transfer",
-            body: `GHS ${parseFloat(amount).toFixed(2)} sent to ${vendorPhone.trim()} via MoMo.`,
-            data: { screen: "history" },
-          });
-        } catch {
-          // Non-fatal — backend may have already recorded it
-        }
+      // Haptic feedback on payment outcome
+      if (status === "SUCCESSFUL") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      } else if (status === "FAILED") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      }
+
+      // Expense is recorded by the backend (MoMoController) when the transfer is initiated.
+      // Only add a local notification history entry here.
+      if (status === "SUCCESSFUL") {
+        await addHistoryItem({
+          type: "expense_added",
+          title: "MoMo Transfer",
+          body: `GHS ${parseFloat(amount).toFixed(2)} sent to ${vendorPhone.trim()} via MoMo.`,
+          data: { screen: "history" },
+        }).catch(() => {});
       }
 
       // If navigated from Add Expense, go back to Add tab after a short delay
@@ -188,6 +206,25 @@ export default function PayVendorScreen() {
             <Text style={styles.subtitle}>
               Send money directly to a vendor's MoMo wallet.
             </Text>
+
+            {/* Recent recipients for quick re-pay */}
+            {recentRecipients.length > 0 && (
+              <View style={styles.recentsSection}>
+                <Text style={styles.label}>Recent Recipients</Text>
+                <View style={styles.recentsRow}>
+                  {recentRecipients.map((phone) => (
+                    <TouchableOpacity
+                      key={phone}
+                      style={styles.recentChip}
+                      onPress={() => setVendorPhone(phone)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.recentChipText}>📱 {phone}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
 
             <Text style={styles.label}>Vendor Phone Number</Text>
             <TextInput
@@ -353,16 +390,9 @@ export default function PayVendorScreen() {
                         const r = await momoAPI.checkTransferStatus(referenceId);
                         const newStatus = r.data?.status ?? "PENDING";
                         setTransferStatus(newStatus);
-                        // Record expense if it just became SUCCESSFUL
-                        if (newStatus === "SUCCESSFUL" && !expenseRecorded) {
-                          const userId = getUserId();
-                          const today = new Date().toISOString().split("T")[0];
-                          const expenseDesc = `Sent to ${vendorPhone.trim()}${description.trim() ? ": " + description.trim() : ""}`;
-                          await expenseAPI.createExpense(userId, amount.trim(), category, expenseDesc, today, "MOMO").catch(() => {});
-                          setExpenseRecorded(true);
-                          if (fromAddExpense === "true") {
-                            setTimeout(() => router.replace("/(tabs)/add"), 2000);
-                          }
+                        // Expense already recorded by backend when transfer was initiated.
+                        if (newStatus === "SUCCESSFUL" && fromAddExpense === "true") {
+                          setTimeout(() => router.replace("/(tabs)/add"), 2000);
                         }
                       } catch {
                         // keep PENDING
@@ -402,7 +432,6 @@ export default function PayVendorScreen() {
                   setError("");
                   setReferenceId("");
                   setTransferStatus("");
-                  setExpenseRecorded(false);
                 }}
                 activeOpacity={0.7}
               >
@@ -506,6 +535,25 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
 
+  recentsSection: { marginBottom: 4 },
+  recentsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  recentChip: {
+    backgroundColor: "#1A1F2E",
+    borderWidth: 1,
+    borderColor: "#00C89640",
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  recentChipText: {
+    color: "#00C896",
+    fontSize: 13,
+    fontWeight: "600",
+  },
   categoryGrid: {
     flexDirection: "row",
     flexWrap: "wrap",

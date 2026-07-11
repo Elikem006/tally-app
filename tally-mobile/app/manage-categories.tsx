@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   FlatList,
   ActivityIndicator,
-  Alert,
   Modal,
   TextInput,
   KeyboardAvoidingView,
@@ -17,6 +16,7 @@ import { categoriesAPI } from "../services/api";
 import { getUserId } from "../services/storage";
 import Toast from "../components/Toast";
 import { useToast } from "../hooks/useToast";
+import { useConfirmModal } from "../hooks/useConfirmModal";
 
 type CustomCategory = { id: number; name: string; emoji: string };
 
@@ -28,6 +28,7 @@ export default function ManageCategoriesScreen() {
   const [newEmoji, setNewEmoji] = useState("");
   const [creating, setCreating] = useState(false);
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+  const { showConfirm, ConfirmModalComponent } = useConfirmModal();
 
   useFocusEffect(
     useCallback(() => {
@@ -68,26 +69,22 @@ export default function ManageCategoriesScreen() {
   }
 
   function confirmDelete(cat: CustomCategory) {
-    Alert.alert(
-      "Delete Category",
-      `Delete "${cat.name}"? Existing expenses in this category will not be affected.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await categoriesAPI.deleteCategory(String(cat.id), getUserId());
-              setCategories((prev) => prev.filter((c) => c.id !== cat.id));
-              showToast("Category deleted", "success");
-            } catch {
-              showToast("Failed to delete category", "error");
-            }
-          },
-        },
-      ],
-    );
+    showConfirm({
+      icon: '📦',
+      title: 'Delete Category',
+      message: `Are you sure you want to delete the "${cat.name}" category? Existing expenses with this category will keep their category name.`,
+      confirmText: 'Delete',
+      confirmColor: '#E05C5C',
+      onConfirm: async () => {
+        try {
+          await categoriesAPI.deleteCategory(String(cat.id), getUserId());
+          setCategories((prev) => prev.filter((c) => c.id !== cat.id));
+          showToast("Category deleted", "success");
+        } catch {
+          showToast("Failed to delete category", "error");
+        }
+      },
+    });
   }
 
   return (
@@ -206,6 +203,7 @@ export default function ManageCategoriesScreen() {
           </View>
         </Modal>
 
+        {ConfirmModalComponent}
         <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
       </View>
     </KeyboardAvoidingView>

@@ -1,9 +1,11 @@
 package user_service.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import user_service.AuthGuard;
 import user_service.model.Reminder;
 import user_service.service.ReminderService;
 import java.math.BigDecimal;
@@ -27,7 +29,8 @@ public class ReminderController {
     // POST /api/reminders
     // Body: { userId, title, amount?, dueDate?, isRecurring?, recurrenceType? }
     @PostMapping
-    public ResponseEntity<?> createReminder(@RequestBody Map<String, String> request) {
+    public ResponseEntity<?> createReminder(@RequestBody Map<String, String> request,
+                                            HttpServletRequest httpRequest) {
         try {
             String userIdStr = request.get("userId");
             String title = request.get("title");
@@ -38,6 +41,7 @@ public class ReminderController {
             }
 
             Long userId = Long.parseLong(userIdStr);
+            AuthGuard.requireSameUser(httpRequest, userId);
 
             String amountStr = request.get("amount");
             BigDecimal amount = (amountStr != null && !amountStr.isBlank())

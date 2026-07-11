@@ -6,8 +6,10 @@ import org.springframework.stereotype.Service;
 import user_service.JwtUtil;
 import user_service.model.User;
 import user_service.repository.UserRepository;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Random;
 
 @Service
 public class UserService {
@@ -21,9 +23,17 @@ public class UserService {
     private BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     public User registerUser(String name, String email, String password) {
-        // Password length validation
+        // Emails are stored lowercase so "User@tally.com" and "user@tally.com"
+        // can never become two different accounts.
+        email = email.toLowerCase().trim();
+        name = name.trim();
+
+        // Password strength validation
         if (password.length() < 6) {
             throw new RuntimeException("Password must be at least 6 characters");
+        }
+        if (!password.matches(".*\\d.*")) {
+            throw new RuntimeException("Password must contain at least one number");
         }
 
         // Basic email format validation — must contain @ with a dot somewhere after it
@@ -32,7 +42,8 @@ public class UserService {
             throw new RuntimeException("Please enter a valid email address");
         }
 
-        // Duplicate email check
+        // Duplicate email check (DB unique constraint is the final backstop
+        // for simultaneous registrations with the same email)
         if (userRepository.existsByEmail(email)) {
             throw new RuntimeException("An account with this email already exists");
         }
@@ -41,10 +52,17 @@ public class UserService {
         user.setName(name);
         user.setEmail(email);
         user.setPasswordHash(passwordEncoder.encode(password));
-        return userRepository.save(user);
+        try {
+            return userRepository.save(user);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // Race: another registration with the same email won the DB write
+            throw new RuntimeException("An account with this email already exists");
+        }
     }
 
     public Map<String, Object> loginUser(String email, String password) {
+        // Normalize the same way registration does
+        email = email.toLowerCase().trim();
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Invalid email or password"));
 
@@ -84,5 +102,55 @@ public class UserService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
         user.setPhoneNumber(phoneNumber);
         return userRepository.save(user);
+    }
+
+    /**
+     * Generates a 6-digit OTP for password reset and stores it on the user record.
+     * In production this OTP would be emailed; in sandbox it is returned directly.
+     *
+     * @return the generated OTP (so the controller can include it in the sandbox response)
+     */
+    public String generatePasswordResetOtp(String email) {
+        email = email.toLowerCase().trim();
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("No account found with this email"));
+
+        String otp = String.format("%06d", new Random().nextInt(999999));
+        user.setResetOtp(otp);
+        user.setResetOtpExpiry(LocalDateTime.now().plusMinutes(15));
+        userRepository.save(user);
+        return otp;
+    }
+
+    /**
+     * Verifies the OTP and updates the user's password if valid.
+     */
+    public void verifyOtpAndResetPassword(String email, String otp, String newPassword) {
+        email = email.toLowerCase().trim();
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("No account found with this email"));
+
+        if (user.getResetOtp() == null) {
+            throw new RuntimeException("No password reset was requested");
+        }
+        if (!user.getResetOtp().equals(otp)) {
+            throw new RuntimeException("Invalid OTP code");
+        }
+        if (LocalDateTime.now().isAfter(user.getResetOtpExpiry())) {
+            throw new RuntimeException("OTP has expired. Please request a new one.");
+        }
+
+        // Validate new password strength
+        if (newPassword == null || newPassword.length() < 6) {
+            throw new RuntimeException("Password must be at least 6 characters");
+        }
+        if (!newPassword.matches(".*\\d.*")) {
+            throw new RuntimeException("Password must contain at least one number");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setResetOtp(null);
+        user.setResetOtpExpiry(null);
+        userRepository.save(user);
     }
 }
