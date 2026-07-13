@@ -25,7 +25,22 @@
       "softwareKeyboardLayoutMode": "resize"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#4F46E5",
+          "defaultChannel": "default"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Tally needs access to your photos to set a profile picture.",
+          "cameraPermission": "Tally needs access to your camera to take a profile photo."
+        }
+      ]
     ],
     "extra": {
       "eas": {
