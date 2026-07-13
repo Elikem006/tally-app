@@ -18,7 +18,6 @@ import java.util.logging.Logger;
 
 @RestController
 @RequestMapping("/api/momo")
-@CrossOrigin(origins = "*")
 public class MoMoController {
 
     private static final Logger log = Logger.getLogger(MoMoController.class.getName());
@@ -254,7 +253,7 @@ public class MoMoController {
                     String expenseDesc = "Sent to " + recipientPhone +
                             (description != null && !description.isBlank() ? ": " + description : "");
                     expenseService.createExpense(userId, amount, category, expenseDesc,
-                            LocalDate.now(), "MOMO", "PENDING", referenceId);
+                            LocalDate.now(), "MOMO_TRANSFER", "PENDING", referenceId);
                 } catch (Exception ex) {
                     // Non-fatal — log and continue; the transfer itself succeeded
                     log.warning("Failed to record transfer expense: " + ex.getMessage());

@@ -370,7 +370,7 @@ export default function HistoryScreen() {
         || monthName.startsWith(query);
 
       // 3. MoMo filter
-      const matchesMomo = !momoOnly || e.paymentMethod === "MOMO";
+      const matchesMomo = !momoOnly || e.paymentMethod === "MOMO" || e.paymentMethod === "MOMO_TRANSFER";
 
       return matchesTime && matchesSearch && matchesMomo;
     });
@@ -620,6 +620,7 @@ export default function HistoryScreen() {
           {group.items.map((item) => {
             const isShared = item.isShared || item.type === "shared";
             const isMomo = item.paymentMethod === "MOMO";
+            const isMomoTransfer = item.paymentMethod === "MOMO_TRANSFER";
             const isSettlement = item.paymentMethod === "SETTLEMENT";
             const { cleanDescription, tags } = parseTagsFromDescription(item.description);
             return (
@@ -674,9 +675,9 @@ export default function HistoryScreen() {
                         </View>
                       )}
                       {!isSettlement && (
-                        <View style={[styles.paymentBadge, { backgroundColor: colors.neutralBg }]}>
-                          <Text style={[styles.paymentBadgeText, { color: colors.textSecondary }]}>
-                            {isMomo ? "📱 MoMo" : "💵 Cash"}
+                        <View style={[styles.paymentBadge, { backgroundColor: isMomoTransfer ? colors.accent + '15' : colors.neutralBg }]}>
+                          <Text style={[styles.paymentBadgeText, { color: isMomoTransfer ? colors.accent : colors.textSecondary }]}>
+                            {isMomoTransfer ? "📤 Transfer" : isMomo ? "📱 MoMo" : "💵 Cash"}
                           </Text>
                         </View>
                       )}
