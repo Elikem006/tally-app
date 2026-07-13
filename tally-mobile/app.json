@@ -26,6 +26,12 @@
     },
     "plugins": [
       "expo-router"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "d674978a-cac5-4baa-ac3a-b916701cf051"
+      }
+    },
+    "owner": "tally-mobile-app"
   }
 }
