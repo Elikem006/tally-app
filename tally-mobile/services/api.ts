@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const BASE_URL = 'http://172.20.10.2:8082'; // Using the latest BASE_URL from origin/main
+const BASE_URL = 'https://tally-app-production-939a.up.railway.app';
 
 const api = axios.create({
   baseURL: BASE_URL,
