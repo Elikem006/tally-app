@@ -25,9 +25,8 @@ import java.util.List;
  *   - Railway production: set ALLOWED_ORIGINS=https://tally-app.up.railway.app
  *     (replace with your actual Railway public URL)
  *
- * Per-controller @CrossOrigin(origins = "*") annotations are still present on
- * all controllers but are superseded by this central config when Spring Security
- * is in the chain. Remove them when you're ready to clean up.
+ * No per-controller @CrossOrigin annotations are present — this bean is the
+ * single source of truth for CORS across all endpoints.
  */
 @Configuration
 @EnableWebSecurity
