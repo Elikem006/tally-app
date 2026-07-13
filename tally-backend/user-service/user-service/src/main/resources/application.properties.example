@@ -1,0 +1,61 @@
+# Copy this file to application.properties and fill in real values for local dev.
+# application.properties is gitignored — never commit real secrets.
+# In Railway, set these as environment variables in the dashboard instead.
+
+# Application name
+spring.application.name=user-service
+
+# Server port — Railway injects PORT; 8082 is the local fallback
+server.port=${PORT:8082}
+
+# ---------------------------------------------------------------------------
+# Database — Neon PostgreSQL
+# Get DB_HOST and DB_NAME from your Neon project dashboard → Connection Details.
+# The host looks like: ep-<name>-<id>.eu-west-2.aws.neon.tech
+# sslmode=require is mandatory for Neon.
+# ---------------------------------------------------------------------------
+spring.datasource.url=jdbc:postgresql://${DB_HOST}/${DB_NAME}?sslmode=require
+spring.datasource.username=${DB_USERNAME}
+spring.datasource.password=${DB_PASSWORD}
+spring.datasource.driver-class-name=org.postgresql.Driver
+
+spring.jpa.properties.hibernate.jdbc.use_get_generated_keys=true
+
+# DDL_AUTO: 'update' for dev, 'validate' for production
+spring.jpa.hibernate.ddl-auto=${DDL_AUTO:update}
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+spring.jpa.properties.hibernate.jdbc.batch_size=20
+spring.jpa.open-in-view=false
+
+# INCLUDE_ERROR_MESSAGES: 'always' for dev, 'never' for production
+server.error.include-message=${INCLUDE_ERROR_MESSAGES:always}
+
+# ---------------------------------------------------------------------------
+# JWT
+# ---------------------------------------------------------------------------
+jwt.secret=<generate-a-long-random-secret-here>
+
+# ---------------------------------------------------------------------------
+# MTN MoMo Collections
+# ---------------------------------------------------------------------------
+momo.subscription.key=<your-momo-collections-subscription-key>
+momo.api.user=<your-momo-collections-api-user-uuid>
+momo.api.key=<your-momo-collections-api-key>
+momo.base.url=https://sandbox.momodeveloper.mtn.com
+momo.environment=sandbox
+momo.currency=EUR
+momo.callback.url=http://localhost:8082/api/momo/callback
+
+# ---------------------------------------------------------------------------
+# MTN MoMo Disbursements
+# ---------------------------------------------------------------------------
+momo.disbursement.subscription.key=<your-momo-disbursement-subscription-key>
+momo.disbursement.api.user=<your-momo-disbursement-api-user-uuid>
+momo.disbursement.api.key=<your-momo-disbursement-api-key>
+momo.disbursement.base.url=https://sandbox.momodeveloper.mtn.com
+
+# ---------------------------------------------------------------------------
+# CORS — comma-separated. Use * for local dev, your Railway URL for production.
+# ---------------------------------------------------------------------------
+app.cors.allowed-origins=*

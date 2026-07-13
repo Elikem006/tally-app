@@ -1,0 +1,12 @@
+# Nixpacks build config for Railway.
+# Pins Java 21 to match pom.xml and ensures -DskipTests so the build
+# doesn't try to spin up a database during CI.
+
+[variables]
+NIXPACKS_JDK_VERSION = "21"
+
+[phases.build]
+cmds = ["mvn clean package -DskipTests"]
+
+[start]
+cmd = "java -jar target/user-service-0.0.1-SNAPSHOT.jar"
