@@ -1,19 +1,33 @@
 package user_service;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.Arrays;
+import java.util.List;
 
 /**
- * SECURITY WARNING: controllers use @CrossOrigin(origins = "*") — acceptable
- * for the sandbox/dev phase only.
- * TODO before production: restrict CORS to the deployed app origin(s) via a
- * central CorsConfigurationSource bean and remove the per-controller wildcards.
+ * Central CORS is handled here via CorsConfigurationSource.
+ * The ALLOWED_ORIGINS env var controls which origins are permitted:
+ *   - Local dev / default: * (all origins)
+ *   - Railway production: set ALLOWED_ORIGINS=https://tally-app.up.railway.app
+ *     (replace with your actual Railway public URL)
+ *
+ * Per-controller @CrossOrigin(origins = "*") annotations are still present on
+ * all controllers but are superseded by this central config when Spring Security
+ * is in the chain. Remove them when you're ready to clean up.
  */
 @Configuration
 @EnableWebSecurity
@@ -21,13 +35,60 @@ public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
 
+    /**
+     * Comma-separated list of allowed origins.
+     * Defaults to * so local dev works with no extra config.
+     * Set ALLOWED_ORIGINS in Railway to lock this down in production.
+     */
+    @Value("${app.cors.allowed-origins:*}")
+    private String allowedOriginsRaw;
+
     public SecurityConfig(JwtAuthFilter jwtAuthFilter) {
         this.jwtAuthFilter = jwtAuthFilter;
+    }
+
+    /**
+     * Explicit UserDetailsService bean that always throws — suppresses Spring Boot's
+     * auto-configured in-memory UserDetailsService and its "Using generated security
+     * password" warning. Authentication in this app is handled entirely by JwtAuthFilter;
+     * Spring's form-login / HTTP Basic mechanisms are not used and have no active endpoint.
+     */
+    @Bean
+    public UserDetailsService userDetailsService() {
+        return username -> {
+            throw new UsernameNotFoundException(
+                "Direct UserDetailsService lookup is not supported — use JWT authentication.");
+        };
+    }
+
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+
+        List<String> origins = Arrays.asList(allowedOriginsRaw.split(","));
+        if (origins.size() == 1 && "*".equals(origins.get(0).trim())) {
+            // Wildcard — allow all origins (local dev / sandbox)
+            config.addAllowedOriginPattern("*");
+        } else {
+            // Explicit list — only the named Railway (or other) URLs
+            for (String origin : origins) {
+                config.addAllowedOrigin(origin.trim());
+            }
+        }
+
+        config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("*"));
+        config.setAllowCredentials(!origins.contains("*")); // credentials only when not wildcard
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
     }
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))

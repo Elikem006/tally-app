@@ -1,0 +1,42 @@
+# ============================================================
+# Tally App — root .gitignore
+# ============================================================
+
+# ---------- Secrets / local config (NEVER commit these) ----------
+# application.properties is TRACKED (placeholder values only, safe to commit).
+# Real credentials go in application-local.properties (gitignored).
+# Activate locally with: SPRING_PROFILES_ACTIVE=local
+tally-backend/**/src/main/resources/application-local.properties
+tally-backend/**/src/main/resources/application-*.properties
+# Keep the main config and example/template
+!tally-backend/**/src/main/resources/application.properties
+!tally-backend/**/src/main/resources/application.properties.example
+
+# .env files anywhere in the project
+.env
+.env.*
+!.env.example
+
+# ---------- Java / Maven ----------
+target/
+*.class
+*.jar
+*.war
+*.ear
+.mvn/wrapper/maven-wrapper.jar
+
+# ---------- IDEs ----------
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
+.classpath
+.project
+.settings/
+.factorypath
+.springBeans
+.sts4-cache
+.apt_generated
+
+# ---------- Node / Expo / React Na
