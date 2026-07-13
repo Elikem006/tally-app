@@ -11,7 +11,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = "*") // TODO: restrict origins before production (sandbox only)
 public class AuthController {
 
     // Failed-login lockout: 5 failures per email within 15 minutes → 429

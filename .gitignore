@@ -39,4 +39,16 @@ target/
 .sts4-cache
 .apt_generated
 
-# ---------- Node / Expo / React Na
+# ---------- Node / Expo / React Native ----------
+node_modules/
+.expo/
+dist/
+*.lock
+!yarn.lock
+!package-lock.json
+.DS_Store
+*.orig.*
+
+# ---------- OS ----------
+.DS_Store
+Thumbs.db

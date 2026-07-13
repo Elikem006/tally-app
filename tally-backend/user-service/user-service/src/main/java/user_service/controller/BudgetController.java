@@ -14,7 +14,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/budgets")
-@CrossOrigin(origins = "*")
 public class BudgetController {
 
     @Autowired
