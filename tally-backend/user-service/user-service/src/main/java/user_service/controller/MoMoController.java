@@ -48,6 +48,19 @@ public class MoMoController {
     }
 
     /**
+     * Returns true when the exception looks like a sandbox 503 or a socket timeout.
+     * Used to swap a raw HTTP 400 for a clean "unavailable" response so the mobile
+     * app can show a friendly message instead of a crash or raw error text.
+     */
+    private static boolean isServiceUnavailable(Exception e) {
+        String msg = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
+        return msg.contains("503") || msg.contains("500")
+                || msg.contains("service_unavailable") || msg.contains("internal_server_error")
+                || msg.contains("timeout") || msg.contains("timed out")
+                || msg.contains("connection refused") || msg.contains("read timed out");
+    }
+
+    /**
      * POST /api/momo/pay
      * Body: { "userId", "phoneNumber", "amount", "description", "groupId" }
      *
@@ -93,6 +106,13 @@ public class MoMoController {
 
         } catch (Exception e) {
             log.severe("MoMo pay error: " + e.getMessage());
+            if (isServiceUnavailable(e)) {
+                return ResponseEntity.ok(Map.of(
+                        "status",  "unavailable",
+                        "message", "Payment service temporarily unavailable. Please try again shortly.",
+                        "success", false
+                ));
+            }
             return ResponseEntity.badRequest()
                     .body(Map.of("error", errorMessage(e), "success", false));
         }
@@ -112,6 +132,15 @@ public class MoMoController {
             ));
         } catch (Exception e) {
             log.severe("MoMo status error: " + e.getMessage());
+            if (isServiceUnavailable(e)) {
+                // Return PENDING so the mobile app keeps polling rather than marking it FAILED
+                return ResponseEntity.ok(Map.of(
+                        "referenceId", referenceId,
+                        "status",      "PENDING",
+                        "message",     "Status check temporarily unavailable. Please try again.",
+                        "success",     true
+                ));
+            }
             return ResponseEntity.badRequest()
                     .body(Map.of("error", errorMessage(e), "success", false));
         }
@@ -269,6 +298,13 @@ public class MoMoController {
 
         } catch (Exception e) {
             log.severe("MoMo transfer error: " + e.getMessage());
+            if (isServiceUnavailable(e)) {
+                return ResponseEntity.ok(Map.of(
+                        "status",  "unavailable",
+                        "message", "Payment service temporarily unavailable. Please try again shortly.",
+                        "success", false
+                ));
+            }
             return ResponseEntity.badRequest()
                     .body(Map.of("error", errorMessage(e), "success", false));
         }
@@ -297,6 +333,15 @@ public class MoMoController {
             ));
         } catch (Exception e) {
             log.severe("MoMo transfer status error: " + e.getMessage());
+            if (isServiceUnavailable(e)) {
+                // Keep the expense as PENDING so the user can retry rather than seeing FAILED
+                return ResponseEntity.ok(Map.of(
+                        "referenceId", referenceId,
+                        "status",      "PENDING",
+                        "message",     "Status check temporarily unavailable. Please try again.",
+                        "success",     true
+                ));
+            }
             return ResponseEntity.badRequest()
                     .body(Map.of("error", errorMessage(e), "success", false));
         }

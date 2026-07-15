@@ -5,12 +5,14 @@ import org.springframework.http.*;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Supplier;
 import java.util.logging.Logger;
 
 @Service
@@ -58,8 +60,8 @@ public class MoMoService {
     private String cachedDisbursementToken;
     private long disbursementTokenExpiry = 0;
 
-    // Standard RestTemplate for payments and status checks (longer timeout)
-    private final RestTemplate restTemplate = buildRestTemplate(10_000, 30_000);
+    // Standard RestTemplate for payments and status checks
+    private final RestTemplate restTemplate = buildRestTemplate(10_000, 7_000);
 
     // Short-timeout RestTemplate used only for the balance endpoint
     private final RestTemplate balanceRestTemplate = buildRestTemplate(5_000, 5_000);
@@ -69,6 +71,37 @@ public class MoMoService {
         factory.setConnectTimeout(connectTimeoutMs);
         factory.setReadTimeout(readTimeoutMs);
         return new RestTemplate(factory);
+    }
+
+    /**
+     * Retry wrapper — retries {@code maxAttempts} times on 503 or read timeout.
+     * All other exceptions are rethrown immediately without retry.
+     */
+    private <T> T withRetry(int maxAttempts, Supplier<T> action) {
+        int attempt = 0;
+        while (true) {
+            try {
+                return action.get();
+            } catch (HttpStatusCodeException e) {
+                attempt++;
+                int code = e.getStatusCode().value();
+                // Retry on 503 (sandbox overloaded) and 500 (sandbox internal error) — both transient
+                if (attempt >= maxAttempts || (code != 503 && code != 500)) throw e;
+                log.warning("MoMo: " + code + " on attempt " + attempt + " — retrying in 1.2 s...");
+                sleep(1200);
+            } catch (ResourceAccessException e) {
+                // Covers connect/read timeouts from SimpleClientHttpRequestFactory
+                attempt++;
+                if (attempt >= maxAttempts) throw e;
+                log.warning("MoMo: timeout on attempt " + attempt + " — retrying in 1.2 s...");
+                sleep(1200);
+            }
+        }
+    }
+
+    private static void sleep(long ms) {
+        try { Thread.sleep(ms); }
+        catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
     }
 
     /**
@@ -92,12 +125,12 @@ public class MoMoService {
 
         try {
             log.info("MoMo: requesting fresh collection access token from " + baseUrl + "/collection/token/");
-            ResponseEntity<Map> response = restTemplate.exchange(
+            ResponseEntity<Map> response = withRetry(2, () -> restTemplate.exchange(
                     baseUrl + "/collection/token/",
                     HttpMethod.POST,
                     entity,
                     Map.class
-            );
+            ));
 
             if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
                 log.severe("MoMo: collection token request failed. Status: " + response.getStatusCode());
@@ -149,12 +182,12 @@ public class MoMoService {
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
 
         try {
-            ResponseEntity<String> response = restTemplate.exchange(
+            ResponseEntity<String> response = withRetry(2, () -> restTemplate.exchange(
                     baseUrl + "/collection/v1_0/requesttopay",
                     HttpMethod.POST,
                     entity,
                     String.class
-            );
+            ));
 
             if (response.getStatusCode() == HttpStatus.ACCEPTED) {
                 log.info("MoMo requestToPay accepted. referenceId=" + referenceId);
@@ -233,12 +266,12 @@ public class MoMoService {
 
         try {
             log.info("MoMo: requesting fresh disbursement access token from " + disbursementBaseUrl + "/disbursement/token/");
-            ResponseEntity<Map> response = restTemplate.exchange(
+            ResponseEntity<Map> response = withRetry(2, () -> restTemplate.exchange(
                     disbursementBaseUrl + "/disbursement/token/",
                     HttpMethod.POST,
                     entity,
                     Map.class
-            );
+            ));
 
             if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
                 log.severe("MoMo: disbursement token request failed. Status: " + response.getStatusCode());
@@ -297,12 +330,12 @@ public class MoMoService {
             log.info("MoMo: initiating transfer. referenceId=" + referenceId
                     + " amount=" + body.get("amount") + " payee=" + maskedPhone
                     + " url=" + disbursementBaseUrl + "/disbursement/v1_0/transfer");
-            ResponseEntity<String> response = restTemplate.exchange(
+            ResponseEntity<String> response = withRetry(2, () -> restTemplate.exchange(
                     disbursementBaseUrl + "/disbursement/v1_0/transfer",
                     HttpMethod.POST,
                     entity,
                     String.class
-            );
+            ));
 
             if (response.getStatusCode() == HttpStatus.ACCEPTED) {
                 log.info("MoMo transfer accepted. referenceId=" + referenceId);
@@ -335,12 +368,12 @@ public class MoMoService {
         HttpEntity<Void> entity = new HttpEntity<>(headers);
 
         try {
-            ResponseEntity<Map> response = restTemplate.exchange(
+            ResponseEntity<Map> response = withRetry(2, () -> restTemplate.exchange(
                     disbursementBaseUrl + "/disbursement/v1_0/transfer/" + referenceId,
                     HttpMethod.GET,
                     entity,
                     Map.class
-            );
+            ));
 
             if (!response.getStatusCode().is2xxSuccessful()) {
                 throw new RuntimeException("Failed to get transfer status. Status: " + response.getStatusCode());
@@ -373,12 +406,12 @@ public class MoMoService {
         HttpEntity<Void> entity = new HttpEntity<>(headers);
 
         try {
-            ResponseEntity<Map> response = restTemplate.exchange(
+            ResponseEntity<Map> response = withRetry(2, () -> restTemplate.exchange(
                     baseUrl + "/collection/v1_0/requesttopay/" + referenceId,
                     HttpMethod.GET,
                     entity,
                     Map.class
-            );
+            ));
 
             if (!response.getStatusCode().is2xxSuccessful()) {
                 throw new RuntimeException("Failed to get payment status. Status: " + response.getStatusCode());

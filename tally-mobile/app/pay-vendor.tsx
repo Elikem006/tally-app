@@ -106,6 +106,16 @@ export default function PayVendorScreen() {
         category,
       );
 
+      // Backend signals sandbox is down — short-circuit to a clean failure message
+      if (res.data?.status === "unavailable") {
+        setError(
+          res.data?.message ??
+            "Payment service temporarily unavailable. Please try again shortly."
+        );
+        setTransferStatus("FAILED");
+        return; // finally block still runs → setLoading(false) + setStep(4)
+      }
+
       const ref: string = res.data?.referenceId ?? "";
       setReferenceId(ref);
       await rememberRecipient(cleanPhone);
