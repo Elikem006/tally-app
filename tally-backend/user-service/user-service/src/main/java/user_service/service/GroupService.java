@@ -118,16 +118,6 @@ public class GroupService {
         return u != null ? u.getName() : "User #" + userId;
     }
 
-    private String resolveAvatarData(Long userId) {
-        User u = findUser(userId);
-        return u != null ? u.getAvatarData() : null;
-    }
-
-    private String resolveAvatarType(Long userId) {
-        User u = findUser(userId);
-        return u != null ? u.getAvatarType() : null;
-    }
-
     // Create a new group
     public Group createGroup(String name, Long createdBy) {
         Group group = new Group();
