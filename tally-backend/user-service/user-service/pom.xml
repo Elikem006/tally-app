@@ -83,6 +83,15 @@
 		</dependency>
 	</dependencies>
 
+	<!-- Empty production profile — silences the Railway/Nixpacks "-Pproduction" warning.
+	     Nixpacks runs a dependency:list pre-phase with -Pproduction; this profile has no
+	     effect on the actual build but stops Maven from warning about a missing profile. -->
+	<profiles>
+		<profile>
+			<id>production</id>
+		</profile>
+	</profiles>
+
 	<build>
 		<plugins>
 			<plugin>
