@@ -28,6 +28,19 @@ cd tally-backend\api-gateway
 .\mvnw.cmd spring-boot:run
 ```
 
+## Automated verification (preferred)
+
+With all 5 services running, one command runs the whole sequence below and prints PASS/FAIL per step (22 checks, exit 0 = all green):
+
+```bash
+./verify-local.sh          # from tally-backend/, in Git Bash or WSL
+```
+
+Each run registers two throwaway users (`verify.<timestamp>.*@tally.test`). To prune them later:
+`DELETE FROM users WHERE email LIKE 'verify.%@tally.test';` (after deleting their expenses/budgets/reminders/groups rows, or just leave them — they're inert).
+
+Settle-up contract (the one that tripped up the manual Postman pass): **POST** `/api/groups/{groupId}/settle` with body `{"userId":"<id>", "phoneNumber":"<optional>"}` and the settling user's own JWT. Any other verb returns "That HTTP method is not supported".
+
 ## Postman pass (all through http://localhost:8082)
 
 Every path is identical to the monolith's. Suggested order: `POST /api/auth/register` → `POST /api/auth/login` (grab JWT) → `POST /api/expenses` → `GET /api/expenses/user/{id}` → `POST /api/budgets` → `GET /api/budgets/user/{id}/summary` → `GET /api/categories/user/{id}` → `GET /api/reminders/user/{id}` → `POST /api/groups` → `POST /api/groups/{id}/members` → `POST /api/groups/{id}/expenses` → `GET /api/groups/{id}/balances` → `POST /api/groups/{id}/settle` → `GET /api/momo/balance`.
