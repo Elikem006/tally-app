@@ -101,7 +101,7 @@ export default function RootLayout() {
           />
           <Stack.Screen
             name="help"
-            options={{ headerShown: true, title: "Help & Support" }}
+            options={{ headerShown: false, title: "Help & Support" }}
           />
           <Stack.Screen
             name="manage-categories"
