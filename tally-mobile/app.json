@@ -2,10 +2,10 @@
   "expo": {
     "name": "Tally",
     "slug": "tally-app",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "scheme": "tally",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icon-tally.png",
     "userInterfaceStyle": "dark",
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -14,14 +14,16 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.tally.app"
+      "bundleIdentifier": "com.tally.app",
+      "buildNumber": "2"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/icon-tally-adaptive.png",
         "backgroundColor": "#0F1117"
       },
       "package": "com.tally.app",
+      "versionCode": 2,
       "softwareKeyboardLayoutMode": "resize"
     },
     "plugins": [

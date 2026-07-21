@@ -26,10 +26,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private static final Pattern USER_PATH = Pattern.compile("/user/(\\d+)(/|$)");
 
+    // MUST stay in sync with the permitAll() matchers in SecurityConfig.
+    // This filter runs before Spring's authorization rules, so a path missing
+    // here is rejected with 401 even when SecurityConfig permits it.
     private static final List<String> PUBLIC_PATHS = List.of(
             "/api/auth/register",
             "/api/auth/login",
             "/api/auth/health",
+            "/api/auth/forgot-password",  // password reset happens while logged out
+            "/api/auth/reset-password",   // password reset happens while logged out
             "/api/momo/callback"   // MoMo's servers call this — they have no JWT
     );
 
