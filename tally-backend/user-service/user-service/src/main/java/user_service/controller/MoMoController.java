@@ -276,6 +276,8 @@ public class MoMoController {
             // PENDING and is resolved to COMPLETED/FAILED when the transfer
             // status is checked (see checkTransferStatus below). The stored
             // referenceId links the expense to the disbursement (unique).
+            boolean expenseRecorded = false;
+            String expenseError = "";
             if (userIdStr != null && !userIdStr.isBlank()) {
                 try {
                     Long userId = Long.parseLong(userIdStr);
@@ -283,17 +285,24 @@ public class MoMoController {
                             (description != null && !description.isBlank() ? ": " + description : "");
                     expenseService.createExpense(userId, amount, category, expenseDesc,
                             LocalDate.now(), "MOMO_TRANSFER", "PENDING", referenceId);
+                    expenseRecorded = true;
                 } catch (Exception ex) {
-                    // Non-fatal — log and continue; the transfer itself succeeded
-                    log.warning("Failed to record transfer expense: " + ex.getMessage());
+                    // Non-fatal for the transfer itself (money has already moved), but it
+                    // must never be invisible: log loudly AND report it to the client so
+                    // the user is told the payment worked while the record did not save.
+                    expenseError = errorMessage(ex);
+                    log.severe("Failed to record transfer expense for user " + userIdStr
+                            + " (ref " + referenceId + "): " + expenseError);
                 }
             }
 
             return ResponseEntity.ok(Map.of(
-                    "referenceId", referenceId,
-                    "message",     "Transfer initiated. Recipient will receive funds shortly.",
-                    "status",      "PENDING",
-                    "success",     true
+                    "referenceId",     referenceId,
+                    "message",         "Transfer initiated. Recipient will receive funds shortly.",
+                    "status",          "PENDING",
+                    "expenseRecorded", expenseRecorded,
+                    "expenseError",    expenseError,
+                    "success",         true
             ));
 
         } catch (Exception e) {

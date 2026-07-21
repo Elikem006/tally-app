@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { momoAPI } from "../services/api";
@@ -106,14 +107,27 @@ export default function PayVendorScreen() {
         category,
       );
 
-      // Backend signals sandbox is down — short-circuit to a clean failure message
+      // Backend signals the MoMo sandbox is down. This is an upstream outage, not a
+      // rejected payment, so present it as PENDING rather than FAILED — the user is
+      // told it is still being processed instead of being wrongly told it failed.
       if (res.data?.status === "unavailable") {
         setError(
           res.data?.message ??
-            "Payment service temporarily unavailable. Please try again shortly."
+            "The payment service is not responding right now. Your transfer is pending — check the status again shortly."
         );
-        setTransferStatus("FAILED");
+        setTransferStatus("PENDING");
         return; // finally block still runs → setLoading(false) + setStep(4)
+      }
+
+      // The backend records the expense when the transfer is initiated. If that
+      // write failed, the money still moved — surface it instead of failing silently.
+      if (res.data?.expenseRecorded === false) {
+        Alert.alert(
+          "Expense not saved",
+          "The transfer went through, but we could not save it to your expense history" +
+            (res.data?.expenseError ? `: ${res.data.expenseError}` : ".") +
+            "\n\nYou may need to add this expense manually.",
+        );
       }
 
       const ref: string = res.data?.referenceId ?? "";
@@ -389,7 +403,7 @@ export default function PayVendorScreen() {
                   Payment Pending
                 </Text>
                 <Text style={styles.resultBody}>
-                  The transfer is still being processed. Check back shortly.
+                  {error || "The transfer is still being processed. Check back shortly."}
                 </Text>
                 {!!referenceId && (
                   <TouchableOpacity
