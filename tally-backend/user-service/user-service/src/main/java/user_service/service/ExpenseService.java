@@ -57,8 +57,11 @@ public class ExpenseService {
                 .orElse("Group #" + groupId);
     }
 
+    // MOMO_TRANSFER is a distinct method from MOMO: it marks vendor disbursements
+    // sent via /api/momo/transfer. The mobile History screen renders a separate
+    // badge for it, so it must remain its own value rather than collapsing to MOMO.
     private static final Set<String> ALLOWED_PAYMENT_METHODS =
-            Set.of("CASH", "MOMO", "SETTLEMENT", "PAYSTACK");
+            Set.of("CASH", "MOMO", "MOMO_TRANSFER", "SETTLEMENT", "PAYSTACK");
 
     private static final ObjectMapper shareMapper = new ObjectMapper();
 
