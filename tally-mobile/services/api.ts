@@ -1,6 +1,18 @@
 import axios from "axios";
 
-const BASE_URL = 'https://tally-app-production-939a.up.railway.app';
+// ─── Backend URL ─────────────────────────────────────────────────────────────
+// Comes from EXPO_PUBLIC_API_URL in .env.local (local dev — the hotspot/LAN IP
+// of the machine running docker-compose) or .env.production (Railway gateway).
+// To switch: edit the value in the env file, then restart Expo with
+// `npx expo start --clear` — env vars are inlined at build time, so a plain
+// reload/hot-refresh will NOT pick up the change.
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL;
+if (!BASE_URL) {
+  throw new Error(
+    "EXPO_PUBLIC_API_URL is not set. Create tally-mobile/.env.local from " +
+      ".env.example, then restart Expo with `npx expo start --clear`."
+  );
+}
 
 const api = axios.create({
   baseURL: BASE_URL,
