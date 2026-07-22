@@ -24,27 +24,27 @@ const TYPE_CONFIG: Record<
   HistoryNotif["type"],
   { icon: string; color: string; bg: string }
 > = {
-  budget_over:    { icon: "🚨", color: "#E05C5C", bg: "#E05C5C18" },
-  budget_near:    { icon: "⚠️", color: "#F7A84F", bg: "#F7A84F18" },
-  expense_added:  { icon: "💰", color: "#00C896", bg: "#00C89618" },
-  income_added:   { icon: "📈", color: "#10B981", bg: "#10B98118" },
-  reminder_due:   { icon: "⏰", color: "#60A5FA", bg: "#60A5FA18" },
+  budget_over: { icon: "🚨", color: "#E05C5C", bg: "#E05C5C18" },
+  budget_near: { icon: "⚠️", color: "#F7A84F", bg: "#F7A84F18" },
+  expense_added: { icon: "💰", color: "#00C896", bg: "#00C89618" },
+  income_added: { icon: "📈", color: "#10B981", bg: "#10B98118" },
+  reminder_due: { icon: "⏰", color: "#60A5FA", bg: "#60A5FA18" },
   shared_expense: { icon: "💸", color: "#A78BFA", bg: "#A78BFA18" },
-  settle_up:      { icon: "✅", color: "#00C896", bg: "#00C89618" },
+  settle_up: { icon: "✅", color: "#00C896", bg: "#00C89618" },
   monthly_report: { icon: "📊", color: "#FFC107", bg: "#FFC10718" },
 };
 
 // ── Relative time label ───────────────────────────────────────────────────────
 function relativeTime(ts: number): string {
-  const diffMs  = Date.now() - ts;
+  const diffMs = Date.now() - ts;
   const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1)   return "just now";
-  if (diffMin < 60)  return `${diffMin}m ago`;
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
   const diffHr = Math.floor(diffMin / 60);
-  if (diffHr  < 24)  return `${diffHr}h ago`;
+  if (diffHr < 24) return `${diffHr}h ago`;
   const diffDay = Math.floor(diffHr / 24);
   if (diffDay === 1) return "yesterday";
-  if (diffDay <  7)  return `${diffDay}d ago`;
+  if (diffDay < 7) return `${diffDay}d ago`;
   return new Date(ts).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
@@ -79,19 +79,19 @@ function buildSections(items: HistoryNotif[]): ListItem[] {
 
 // ── Navigation helper ─────────────────────────────────────────────────────────
 const SCREEN_BY_TYPE: Record<HistoryNotif["type"], string> = {
-  budget_over:    "budget",
-  budget_near:    "budget",
-  expense_added:  "history",
-  income_added:   "history",
-  reminder_due:   "reminders",
+  budget_over: "budget",
+  budget_near: "budget",
+  expense_added: "history",
+  income_added: "history",
+  reminder_due: "reminders",
   shared_expense: "groups",
-  settle_up:      "groups",
+  settle_up: "groups",
   monthly_report: "report",
 };
 
 export default function NotificationHistoryScreen() {
-  const [items,      setItems]      = useState<HistoryNotif[]>([]);
-  const [loading,    setLoading]    = useState(true);
+  const [items, setItems] = useState<HistoryNotif[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   async function onRefresh() {
@@ -257,7 +257,7 @@ export default function NotificationHistoryScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0F1117" },
-  centered:  { flex: 1, backgroundColor: "#0F1117", alignItems: "center", justifyContent: "center" },
+  centered: { flex: 1, backgroundColor: "#0F1117", alignItems: "center", justifyContent: "center" },
 
   // Header
   header: {
@@ -270,10 +270,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#ffffff10",
   },
-  backBtn:   { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+  backBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   backArrow: { fontSize: 32, color: "#ffffff", lineHeight: 36, marginTop: -4 },
-  title:     { fontSize: 18, fontWeight: "700", color: "#ffffff" },
-  clearBtn:  { paddingHorizontal: 4 },
+  title: { fontSize: 18, fontWeight: "700", color: "#ffffff" },
+  clearBtn: { paddingHorizontal: 4 },
   clearText: { fontSize: 13, color: "#E05C5C", fontWeight: "600" },
 
   // Section label
@@ -312,16 +312,16 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   iconText: { fontSize: 20 },
-  cardBody:  { flex: 1 },
-  cardTop:   { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 },
+  cardBody: { flex: 1 },
+  cardTop: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 },
   cardTitle: { fontSize: 14, fontWeight: "600", color: "#8890A0", flex: 1 },
   cardTitleUnread: { color: "#ffffff" },
   unreadDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#00C896" },
-  cardDesc:  { fontSize: 13, color: "#8890A0", lineHeight: 18, marginBottom: 4 },
-  cardTime:  { fontSize: 11, color: "#6B7280" },
-  chevron:   { fontSize: 20, color: "#8890A0", paddingHorizontal: 4, alignSelf: "center" },
+  cardDesc: { fontSize: 13, color: "#8890A0", lineHeight: 18, marginBottom: 4 },
+  cardTime: { fontSize: 11, color: "#6B7280" },
+  chevron: { fontSize: 20, color: "#8890A0", paddingHorizontal: 4, alignSelf: "center" },
   deleteBtn: { paddingLeft: 4, paddingTop: 2 },
-  deleteX:   { fontSize: 14, color: "#6B7280" },
+  deleteX: { fontSize: 14, color: "#6B7280" },
 
   // Empty state
   empty: {
@@ -331,7 +331,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     gap: 12,
   },
-  emptyIcon:  { fontSize: 52 },
+  emptyIcon: { fontSize: 52 },
   emptyTitle: { fontSize: 18, fontWeight: "700", color: "#ffffff" },
-  emptyBody:  { fontSize: 14, color: "#8890A0", textAlign: "center", lineHeight: 20 },
+  emptyBody: { fontSize: 14, color: "#8890A0", textAlign: "center", lineHeight: 20 },
 });
