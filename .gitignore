@@ -27,6 +27,7 @@ target/
 
 # ---------- IDEs ----------
 .idea/
+.run/
 *.iws
 *.iml
 *.ipr
@@ -52,3 +53,6 @@ dist/
 # ---------- OS ----------
 .DS_Store
 Thumbs.db
+
+# ---------- Scratch / local dumps ----------
+*.diff.txt
