@@ -105,6 +105,7 @@ function CountUpText({ value, style }: { value: number; style?: any }) {
 /** Progress bar that animates its fill, with an optional stagger delay */
 function AnimatedBar({ pct, color, delay, trackColor }: { pct: number; color: string; delay: number; trackColor: string }) {
   const anim = useRef(new Animated.Value(0)).current;
+  const safePct = isNaN(pct) || !isFinite(pct) ? 0 : Math.min(Math.max(pct, 0), 100);
 
   useEffect(() => {
     anim.setValue(0);
@@ -115,9 +116,9 @@ function AnimatedBar({ pct, color, delay, trackColor }: { pct: number; color: st
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
-  }, [pct, delay]);
+  }, [safePct, delay]);
 
-  const width = anim.interpolate({ inputRange: [0, 1], outputRange: ["0%", `${Math.min(Math.max(pct, 0), 100)}%`] });
+  const width = anim.interpolate({ inputRange: [0, 1], outputRange: ["0%", `${safePct}%`] });
 
   return (
     <View style={[styles.barTrack, { backgroundColor: trackColor }]}>
@@ -904,7 +905,7 @@ export default function ReportScreen() {
                     ? { label: "Over Budget 🚨", color: "#EF4444" }
                     : pct >= 80
                     ? { label: "Near Limit ⚠️", color: "#F59E0B" }
-                    : { label: "On Track ✓", color: t.accent };
+                    : { label: "On Track ✓", color: "#34D399" };
                   return (
                     <View key={item.category} style={[styles.budgetCard, { backgroundColor: t.segmentBg, borderColor: t.cardBorder }]}>
                       <Text style={[styles.budgetCardTitle, { color: t.text }]} numberOfLines={1}>
