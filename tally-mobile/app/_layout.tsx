@@ -6,7 +6,13 @@ import * as Notifications from "expo-notifications";
 import NetInfo from "@react-native-community/netinfo";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ThemeProvider } from "../hooks/useTheme";
+import { ThemeProvider, useTheme } from "../hooks/useTheme";
+import { StatusBar } from "expo-status-bar";
+
+function ThemedStatusBar() {
+  const { theme } = useTheme();
+  return <StatusBar style={theme === "dark" ? "light" : "dark"} />;
+}
 
 /** Red banner pinned to the top whenever the device loses connectivity. */
 function OfflineBanner() {
@@ -28,10 +34,11 @@ function OfflineBanner() {
   );
 }
 
-export default function RootLayout() {
+function RootLayoutContent() {
   const router = useRouter();
   const responseListener = useRef<any>(null);
   const navigationReady = useRef(false);
+  const { colors } = useTheme();
 
   // Mark navigation as ready after first render
   useEffect(() => {
@@ -75,51 +82,56 @@ export default function RootLayout() {
   }, [router]);
 
   return (
+    <SafeAreaProvider>
+      <ThemedStatusBar />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          headerStyle: { backgroundColor: colors.background },
+          headerTintColor: colors.text,
+          headerTitleStyle: { fontWeight: "bold" },
+        }}
+      >
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen
+          name="group-detail"
+          options={{ headerShown: false, title: "Group Detail" }}
+        />
+        <Stack.Screen
+          name="create-group"
+          options={{ headerShown: false, title: "Create Group" }}
+        />
+        <Stack.Screen
+          name="avatar-builder"
+          options={{ headerShown: true, title: "Edit Avatar" }}
+        />
+        <Stack.Screen
+          name="help"
+          options={{ headerShown: false, title: "Help & Support" }}
+        />
+        <Stack.Screen
+          name="manage-categories"
+          options={{ headerShown: true, title: "Manage Categories" }}
+        />
+        <Stack.Screen
+          name="pay-vendor"
+          options={{ headerShown: false, title: "Pay Vendor" }}
+        />
+        <Stack.Screen
+          name="onboarding"
+          options={{ headerShown: false, title: "Welcome" }}
+        />
+      </Stack>
+      <OfflineBanner />
+    </SafeAreaProvider>
+  );
+}
+
+export default function RootLayout() {
+  return (
     <ThemeProvider>
-      <SafeAreaProvider>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            // Dark header to match the app's dark theme (used by the few
-            // screens with headerShown: true, e.g. Manage Categories).
-            headerStyle: { backgroundColor: "#0F1117" },
-            headerTintColor: "#FFFFFF",
-            headerTitleStyle: { fontWeight: "bold" },
-          }}
-        >
-          <Stack.Screen name="(auth)" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen
-            name="group-detail"
-            options={{ headerShown: false, title: "Group Detail" }}
-          />
-          <Stack.Screen
-            name="create-group"
-            options={{ headerShown: false, title: "Create Group" }}
-          />
-          <Stack.Screen
-            name="avatar-builder"
-            options={{ headerShown: true, title: "Edit Avatar" }}
-          />
-          <Stack.Screen
-            name="help"
-            options={{ headerShown: false, title: "Help & Support" }}
-          />
-          <Stack.Screen
-            name="manage-categories"
-            options={{ headerShown: true, title: "Manage Categories" }}
-          />
-          <Stack.Screen
-            name="pay-vendor"
-            options={{ headerShown: false, title: "Pay Vendor" }}
-          />
-          <Stack.Screen
-            name="onboarding"
-            options={{ headerShown: false, title: "Welcome" }}
-          />
-        </Stack>
-        <OfflineBanner />
-      </SafeAreaProvider>
+      <RootLayoutContent />
     </ThemeProvider>
   );
 }

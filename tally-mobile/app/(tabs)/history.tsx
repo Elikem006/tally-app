@@ -115,7 +115,7 @@ export default function HistoryScreen() {
         categoriesAPI.getUserCategories(userId).catch(() => ({ data: [] })),
       ]);
       setCustomCategories(categoriesRes.data || []);
-      
+
       const sorted = [...(expensesRes.data || [])].sort((a, b) => {
         const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
         if (dateDiff !== 0) return dateDiff;
@@ -296,7 +296,7 @@ export default function HistoryScreen() {
       confirmColor: '#E05C5C',
       onConfirm: async () => {
         try {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => { });
           await expenseAPI.deleteExpense(String(item.id), getUserId());
           // Only personal expenses reach here — match on id AND type so a
           // shared entry with the same numeric id isn't removed too
@@ -359,7 +359,7 @@ export default function HistoryScreen() {
       const tagsStr = tags.join(' ').toLowerCase();
       const query = searchQuery.toLowerCase().trim();
       const amountStr = Math.abs(parseFloat(e.amount || '0')).toFixed(2);
-      const MONTH_FULL = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+      const MONTH_FULL = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
       const monthIdx = e.date ? parseInt(e.date.split('-')[1], 10) - 1 : -1;
       const monthName = monthIdx >= 0 && monthIdx < 12 ? MONTH_FULL[monthIdx] : '';
       const matchesSearch = !query
@@ -434,7 +434,7 @@ export default function HistoryScreen() {
         try {
           const d = new Date(dateStr);
           header = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-        } catch (_) {}
+        } catch (_) { }
       }
 
       if (!groups[header]) {
@@ -482,268 +482,268 @@ export default function HistoryScreen() {
 
   return (
     <>
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
-      keyboardShouldPersistTaps="handled"
-    >
-      <View style={styles.headerRow}>
-        <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>Analytics & History</Text>
-        <TouchableOpacity
-          style={[styles.exportBtn, { backgroundColor: colors.cardBg, borderColor: colors.border }, exporting && { opacity: 0.5 }]}
-          onPress={handleExportPress}
-          disabled={exporting}
-          activeOpacity={0.8}
-        >
-          {exporting ? (
-            <ActivityIndicator size="small" color={colors.text} />
-          ) : (
-            <Text style={[styles.exportBtnText, { color: colors.text }]}>📤 Export</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-      <View style={[styles.timeFilterContainer, { backgroundColor: colors.neutralBg }]}>
-        {(['today', 'week', 'month', 'year'] as const).map((filter) => {
-          const labelMap = { today: 'Today', week: 'This Week', month: 'This Month', year: 'This Year' };
-          const isActive = activeTimeFilter === filter;
-          return (
-            <TouchableOpacity
-              key={filter}
-              style={[styles.timeFilterBtn, isActive && { backgroundColor: colors.cardBg }]}
-              onPress={() => setActiveTimeFilter(filter)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.timeFilterText, { color: colors.textSecondary }, isActive && { color: colors.text, fontWeight: 'bold' }]}>
-                {labelMap[filter]}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* 2. Side-by-side Gauges: Total Spend and Balance */}
-      <View style={styles.gaugesRow}>
-        {/* Total Spending Gauge */}
-        <View style={[styles.gaugeCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-          <View style={styles.gaugeWrapper}>
-            <Svg width={72} height={72} viewBox="0 0 72 72">
-              <Path d={getGaugePath(36, 36, 28, 1.0)} fill="none" stroke={colors.border} strokeWidth="5.5" strokeLinecap="round" />
-              {totalSpent > 0 && scaledBudget > 0 && (
-                <Path
-                  d={getGaugePath(36, 36, 28, spendProgress)}
-                  fill="none"
-                  stroke="#FF9500"
-                  strokeWidth="5.5"
-                  strokeLinecap="round"
-                />
-              )}
-            </Svg>
-            <View style={styles.gaugeIconContainer}>
-              <Feather name="upload" size={14} color="#FF9500" />
-            </View>
-          </View>
-          <Text style={[styles.gaugeLabel, { color: colors.textSecondary }]}>Total Spent</Text>
-          <Text style={[styles.gaugeValue, { color: colors.text }]}>GHS {totalSpent.toFixed(0)}</Text>
-        </View>
-
-        {/* Balance Gauge */}
-        <View style={[styles.gaugeCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-          <View style={styles.gaugeWrapper}>
-            <Svg width={72} height={72} viewBox="0 0 72 72">
-              <Path d={getGaugePath(36, 36, 28, 1.0)} fill="none" stroke={colors.border} strokeWidth="5.5" strokeLinecap="round" />
-              {totalBudget > 0 && (
-                <Path
-                  d={getGaugePath(36, 36, 28, balanceProgress)}
-                  fill="none"
-                  stroke="#34C759"
-                  strokeWidth="5.5"
-                  strokeLinecap="round"
-                />
-              )}
-            </Svg>
-            <View style={styles.gaugeIconContainer}>
-              <Feather name="pie-chart" size={14} color="#34C759" />
-            </View>
-          </View>
-          <Text style={[styles.gaugeLabel, { color: colors.textSecondary }]}>Balance</Text>
-          <Text style={[styles.gaugeValue, { color: colors.text }]}>GHS {totalBudget.toFixed(0)}</Text>
-        </View>
-      </View>
-
-      {/* 3. Search Bar */}
-      <View style={[
-        styles.searchContainer,
-        { backgroundColor: colors.inputBg, borderColor: colors.border },
-        searchFocused && { borderColor: colors.primary }
-      ]}>
-        <Feather name="search" size={18} color="#8E9AA6" style={styles.searchIcon} />
-        <TextInput
-          style={[styles.searchBar, { color: colors.text }]}
-          placeholder="Search filtered list..."
-          placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          onFocus={() => setSearchFocused(true)}
-          onBlur={() => setSearchFocused(false)}
-        />
-        {searchQuery !== '' && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} activeOpacity={0.7} style={styles.clearButton}>
-            <Feather name="x" size={16} color="#8E9AA6" />
+      <ScrollView
+        style={[styles.container, { backgroundColor: colors.background }]}
+        contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.headerRow}>
+          <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>Analytics & History</Text>
+          <TouchableOpacity
+            style={[styles.exportBtn, { backgroundColor: colors.cardBg, borderColor: colors.border }, exporting && { opacity: 0.5 }]}
+            onPress={handleExportPress}
+            disabled={exporting}
+            activeOpacity={0.8}
+          >
+            {exporting ? (
+              <ActivityIndicator size="small" color={colors.text} />
+            ) : (
+              <Text style={[styles.exportBtnText, { color: colors.text }]}>📤 Export</Text>
+            )}
           </TouchableOpacity>
-        )}
-      </View>
-      {/* 3.5 Standalone Filters */}
-      <View style={styles.filterOptionsRow}>
-        <TouchableOpacity
-          style={[
-            styles.momoFilterBtn,
-            { backgroundColor: colors.neutralBg, borderColor: colors.border },
-            momoOnly && { backgroundColor: colors.accent + '20', borderColor: colors.accent }
-          ]}
-          onPress={() => setMomoOnly(!momoOnly)}
-          activeOpacity={0.8}
-        >
-          <Text style={[
-            styles.momoFilterBtnText,
-            { color: colors.textSecondary },
-            momoOnly && { color: colors.accent, fontWeight: 'bold' }
-          ]}>
-            📱 MoMo Only
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* 4. List of Transactions */}
-      {groupedExpenses.map((group) => (
-        <View key={group.date} style={styles.dateGroup}>
-          <Text style={[styles.dateHeader, { color: colors.textSecondary }]}>{group.date}</Text>
-          {group.items.map((item) => {
-            const isShared = item.isShared || item.type === "shared";
-            const isMomo = item.paymentMethod === "MOMO";
-            const isMomoTransfer = item.paymentMethod === "MOMO_TRANSFER";
-            const isSettlement = item.paymentMethod === "SETTLEMENT";
-            const { cleanDescription, tags } = parseTagsFromDescription(item.description);
+        </View>
+        <View style={[styles.timeFilterContainer, { backgroundColor: colors.neutralBg }]}>
+          {(['today', 'week', 'month', 'year'] as const).map((filter) => {
+            const labelMap = { today: 'Today', week: 'This Week', month: 'This Month', year: 'This Year' };
+            const isActive = activeTimeFilter === filter;
             return (
               <TouchableOpacity
-                // type+id — personal and shared entries can share numeric ids
-                key={`${item.type ?? (isShared ? "shared" : "personal")}-${item.id}`}
-                style={[
-                  styles.expenseCard,
-                  { backgroundColor: colors.cardBg, borderColor: colors.border },
-                  isShared && { borderColor: colors.primary, borderWidth: 1.5 }
-                ]}
-                onPress={() => openDetail(item)}
-                onLongPress={() => handleLongPress(item)}
-                activeOpacity={0.9}
+                key={filter}
+                style={[styles.timeFilterBtn, isActive && { backgroundColor: colors.cardBg }]}
+                onPress={() => setActiveTimeFilter(filter)}
+                activeOpacity={0.8}
               >
-                <View style={styles.expenseLeft}>
-                  <View style={[styles.iconBox, { backgroundColor: colors.neutralBg }]}>
-                    <Text style={styles.icon}>{isShared ? '👥' : getCategoryIcon(item.category)}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <View style={styles.descRow}>
-                      <Text style={[styles.expenseDescription, { color: colors.text }]} numberOfLines={1}>
-                        {cleanDescription || item.category}
-                      </Text>
-                    </View>
-                    <Text style={[styles.expenseCategory, { color: colors.textSecondary }]}>{item.category}</Text>
-                    
-                    <View style={styles.badgeRow}>
-                      {isSettlement && (
-                        <View style={[styles.sharedBadge, { backgroundColor: colors.positive + '15', borderColor: colors.positive + '30' }]}>
-                          <Text style={[styles.sharedBadgeText, { color: colors.positive }]}>💚 Settlement</Text>
-                        </View>
-                      )}
-                      {isShared && (
-                        <View style={[styles.sharedBadge, { backgroundColor: colors.primary + '15' }]}>
-                          <Text style={[styles.sharedBadgeText, { color: colors.primary }]}>👥 Shared</Text>
-                        </View>
-                      )}
-                      {isShared && item.settled && (
-                        <View style={[styles.sharedBadge, { backgroundColor: colors.positive + '15', borderColor: colors.positive + '30' }]}>
-                          <Text style={[styles.sharedBadgeText, { color: colors.positive }]}>Settled ✓</Text>
-                        </View>
-                      )}
-                      {item.status === 'PENDING' && (
-                        <View style={[styles.sharedBadge, { backgroundColor: '#F59E0B20', borderColor: '#F59E0B40' }]}>
-                          <Text style={[styles.sharedBadgeText, { color: '#D97706' }]}>⏳ Pending</Text>
-                        </View>
-                      )}
-                      {item.status === 'FAILED' && (
-                        <View style={[styles.sharedBadge, { backgroundColor: colors.negative + '15', borderColor: colors.negative + '30' }]}>
-                          <Text style={[styles.sharedBadgeText, { color: colors.negative }]}>✕ Failed</Text>
-                        </View>
-                      )}
-                      {!isSettlement && (
-                        <View style={[styles.paymentBadge, { backgroundColor: isMomoTransfer ? colors.accent + '15' : colors.neutralBg }]}>
-                          <Text style={[styles.paymentBadgeText, { color: isMomoTransfer ? colors.accent : colors.textSecondary }]}>
-                            {isMomoTransfer ? "📤 Transfer" : isMomo ? "📱 MoMo" : "💵 Cash"}
-                          </Text>
-                        </View>
-                      )}
-                      {item.isRecurring && (
-                        <View style={[styles.paymentBadge, { backgroundColor: colors.primary + '15' }]}>
-                          <Text style={[styles.paymentBadgeText, { color: colors.primary }]}>
-                            🔄 {item.recurrenceType
-                              ? item.recurrenceType.charAt(0) + item.recurrenceType.slice(1).toLowerCase()
-                              : 'Recurring'}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-
-                    {tags.length > 0 && (
-                      <View style={styles.tagsContainer}>
-                        {tags.map((tag) => (
-                          <View key={tag} style={[styles.tagPill, { backgroundColor: colors.neutralBg }]}>
-                            <Text style={[styles.tagText, { color: colors.textSecondary }]}>{tag}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-                  </View>
-                </View>
-                <View style={styles.expenseRight}>
-                  {/* Money going OUT unless explicitly income or a settlement received */}
-                  <Text style={[
-                    styles.expenseAmount,
-                    { color: (item.type === 'income' || isSettlement) ? colors.positive : colors.negative }
-                  ]}>
-                    {(item.type === 'income' || isSettlement)
-                      ? `+GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`
-                      : `-GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`}
-                  </Text>
-                  <Text style={[styles.chevron, { color: colors.textSecondary }]}>›</Text>
-                </View>
+                <Text style={[styles.timeFilterText, { color: colors.textSecondary }, isActive && { color: colors.text, fontWeight: 'bold' }]}>
+                  {labelMap[filter]}
+                </Text>
               </TouchableOpacity>
             );
           })}
         </View>
-      ))}
 
-      {filteredExpenses.length === 0 && (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>🔍</Text>
-          <Text style={[styles.emptyText, { color: colors.text }]}>No transactions found</Text>
-          <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Try changing your filter settings or search query</Text>
+        {/* 2. Side-by-side Gauges: Total Spend and Balance */}
+        <View style={styles.gaugesRow}>
+          {/* Total Spending Gauge */}
+          <View style={[styles.gaugeCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+            <View style={styles.gaugeWrapper}>
+              <Svg width={72} height={72} viewBox="0 0 72 72">
+                <Path d={getGaugePath(36, 36, 28, 1.0)} fill="none" stroke={colors.border} strokeWidth="5.5" strokeLinecap="round" />
+                {totalSpent > 0 && scaledBudget > 0 && (
+                  <Path
+                    d={getGaugePath(36, 36, 28, spendProgress)}
+                    fill="none"
+                    stroke="#FF9500"
+                    strokeWidth="5.5"
+                    strokeLinecap="round"
+                  />
+                )}
+              </Svg>
+              <View style={styles.gaugeIconContainer}>
+                <Feather name="upload" size={14} color="#FF9500" />
+              </View>
+            </View>
+            <Text style={[styles.gaugeLabel, { color: colors.textSecondary }]}>Total Spent</Text>
+            <Text style={[styles.gaugeValue, { color: colors.text }]}>GHS {totalSpent.toFixed(0)}</Text>
+          </View>
+
+          {/* Balance Gauge */}
+          <View style={[styles.gaugeCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+            <View style={styles.gaugeWrapper}>
+              <Svg width={72} height={72} viewBox="0 0 72 72">
+                <Path d={getGaugePath(36, 36, 28, 1.0)} fill="none" stroke={colors.border} strokeWidth="5.5" strokeLinecap="round" />
+                {totalBudget > 0 && (
+                  <Path
+                    d={getGaugePath(36, 36, 28, balanceProgress)}
+                    fill="none"
+                    stroke="#34C759"
+                    strokeWidth="5.5"
+                    strokeLinecap="round"
+                  />
+                )}
+              </Svg>
+              <View style={styles.gaugeIconContainer}>
+                <Feather name="pie-chart" size={14} color="#34C759" />
+              </View>
+            </View>
+            <Text style={[styles.gaugeLabel, { color: colors.textSecondary }]}>Balance</Text>
+            <Text style={[styles.gaugeValue, { color: colors.text }]}>GHS {totalBudget.toFixed(0)}</Text>
+          </View>
         </View>
-      )}
 
-      <Text style={[styles.hint, { color: colors.textSecondary }]}>Tip: You can also long press a transaction to delete it</Text>
-    </ScrollView>
-    {ConfirmModalComponent}
-    <ExpenseDetailModal
-      visible={showExpenseDetail}
-      expense={selectedExpense}
-      onClose={closeDetail}
-      onDelete={(expenseId) => {
-        closeDetail();
-        const item = expenses.find((e) => String(e.id) === String(expenseId));
-        if (item) handleDelete(item);
-      }}
-      customCategories={customCategories}
-    />
+        {/* 3. Search Bar */}
+        <View style={[
+          styles.searchContainer,
+          { backgroundColor: colors.inputBg, borderColor: colors.border },
+          searchFocused && { borderColor: colors.primary }
+        ]}>
+          <Feather name="search" size={18} color="#8E9AA6" style={styles.searchIcon} />
+          <TextInput
+            style={[styles.searchBar, { color: colors.text }]}
+            placeholder="Search filtered list..."
+            placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
+          />
+          {searchQuery !== '' && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} activeOpacity={0.7} style={styles.clearButton}>
+              <Feather name="x" size={16} color="#8E9AA6" />
+            </TouchableOpacity>
+          )}
+        </View>
+        {/* 3.5 Standalone Filters */}
+        <View style={styles.filterOptionsRow}>
+          <TouchableOpacity
+            style={[
+              styles.momoFilterBtn,
+              { backgroundColor: colors.neutralBg, borderColor: colors.border },
+              momoOnly && { backgroundColor: colors.accent + '20', borderColor: colors.accent }
+            ]}
+            onPress={() => setMomoOnly(!momoOnly)}
+            activeOpacity={0.8}
+          >
+            <Text style={[
+              styles.momoFilterBtnText,
+              { color: colors.textSecondary },
+              momoOnly && { color: colors.accent, fontWeight: 'bold' }
+            ]}>
+              📱 MoMo Only
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* 4. List of Transactions */}
+        {groupedExpenses.map((group) => (
+          <View key={group.date} style={styles.dateGroup}>
+            <Text style={[styles.dateHeader, { color: colors.textSecondary }]}>{group.date}</Text>
+            {group.items.map((item) => {
+              const isShared = item.isShared || item.type === "shared";
+              const isMomo = item.paymentMethod === "MOMO";
+              const isMomoTransfer = item.paymentMethod === "MOMO_TRANSFER";
+              const isSettlement = item.paymentMethod === "SETTLEMENT";
+              const { cleanDescription, tags } = parseTagsFromDescription(item.description);
+              return (
+                <TouchableOpacity
+                  // type+id — personal and shared entries can share numeric ids
+                  key={`${item.type ?? (isShared ? "shared" : "personal")}-${item.id}`}
+                  style={[
+                    styles.expenseCard,
+                    { backgroundColor: colors.cardBg, borderColor: colors.border },
+                    isShared && { borderColor: colors.primary, borderWidth: 1.5 }
+                  ]}
+                  onPress={() => openDetail(item)}
+                  onLongPress={() => handleLongPress(item)}
+                  activeOpacity={0.9}
+                >
+                  <View style={styles.expenseLeft}>
+                    <View style={[styles.iconBox, { backgroundColor: colors.neutralBg }]}>
+                      <Text style={styles.icon}>{isShared ? '👥' : getCategoryIcon(item.category)}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={styles.descRow}>
+                        <Text style={[styles.expenseDescription, { color: colors.text }]} numberOfLines={1}>
+                          {cleanDescription || item.category}
+                        </Text>
+                      </View>
+                      <Text style={[styles.expenseCategory, { color: colors.textSecondary }]}>{item.category}</Text>
+
+                      <View style={styles.badgeRow}>
+                        {isSettlement && (
+                          <View style={[styles.sharedBadge, { backgroundColor: colors.positive + '15', borderColor: colors.positive + '30' }]}>
+                            <Text style={[styles.sharedBadgeText, { color: colors.positive }]}>💚 Settlement</Text>
+                          </View>
+                        )}
+                        {isShared && (
+                          <View style={[styles.sharedBadge, { backgroundColor: colors.primary + '15' }]}>
+                            <Text style={[styles.sharedBadgeText, { color: colors.primary }]}>👥 Shared</Text>
+                          </View>
+                        )}
+                        {isShared && item.settled && (
+                          <View style={[styles.sharedBadge, { backgroundColor: colors.positive + '15', borderColor: colors.positive + '30' }]}>
+                            <Text style={[styles.sharedBadgeText, { color: colors.positive }]}>Settled ✓</Text>
+                          </View>
+                        )}
+                        {item.status === 'PENDING' && (
+                          <View style={[styles.sharedBadge, { backgroundColor: '#F59E0B20', borderColor: '#F59E0B40' }]}>
+                            <Text style={[styles.sharedBadgeText, { color: '#D97706' }]}>⏳ Pending</Text>
+                          </View>
+                        )}
+                        {item.status === 'FAILED' && (
+                          <View style={[styles.sharedBadge, { backgroundColor: colors.negative + '15', borderColor: colors.negative + '30' }]}>
+                            <Text style={[styles.sharedBadgeText, { color: colors.negative }]}>✕ Failed</Text>
+                          </View>
+                        )}
+                        {!isSettlement && (
+                          <View style={[styles.paymentBadge, { backgroundColor: isMomoTransfer ? colors.accent + '15' : colors.neutralBg }]}>
+                            <Text style={[styles.paymentBadgeText, { color: isMomoTransfer ? colors.accent : colors.textSecondary }]}>
+                              {isMomoTransfer ? "📤 Transfer" : isMomo ? "📱 MoMo" : "💵 Cash"}
+                            </Text>
+                          </View>
+                        )}
+                        {item.isRecurring && (
+                          <View style={[styles.paymentBadge, { backgroundColor: colors.primary + '15' }]}>
+                            <Text style={[styles.paymentBadgeText, { color: colors.primary }]}>
+                              🔄 {item.recurrenceType
+                                ? item.recurrenceType.charAt(0) + item.recurrenceType.slice(1).toLowerCase()
+                                : 'Recurring'}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+
+                      {tags.length > 0 && (
+                        <View style={styles.tagsContainer}>
+                          {tags.map((tag) => (
+                            <View key={tag} style={[styles.tagPill, { backgroundColor: colors.neutralBg }]}>
+                              <Text style={[styles.tagText, { color: colors.textSecondary }]}>{tag}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                  <View style={styles.expenseRight}>
+                    {/* Money going OUT unless explicitly income or a settlement received */}
+                    <Text style={[
+                      styles.expenseAmount,
+                      { color: (item.type === 'income' || isSettlement) ? colors.positive : colors.negative }
+                    ]}>
+                      {(item.type === 'income' || isSettlement)
+                        ? `+GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`
+                        : `-GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`}
+                    </Text>
+                    <Text style={[styles.chevron, { color: colors.textSecondary }]}>›</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ))}
+
+        {filteredExpenses.length === 0 && (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>🔍</Text>
+            <Text style={[styles.emptyText, { color: colors.text }]}>No transactions found</Text>
+            <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Try changing your filter settings or search query</Text>
+          </View>
+        )}
+
+        <Text style={[styles.hint, { color: colors.textSecondary }]}>Tip: You can also long press a transaction to delete it</Text>
+      </ScrollView>
+      {ConfirmModalComponent}
+      <ExpenseDetailModal
+        visible={showExpenseDetail}
+        expense={selectedExpense}
+        onClose={closeDetail}
+        onDelete={(expenseId) => {
+          closeDetail();
+          const item = expenses.find((e) => String(e.id) === String(expenseId));
+          if (item) handleDelete(item);
+        }}
+        customCategories={customCategories}
+      />
     </>
   );
 }
