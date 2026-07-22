@@ -294,7 +294,7 @@ export default function BudgetScreen() {
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
           >
             {Object.keys(summary).length === 0 ? (
-              <View style={styles.emptyContainer}>
+              <View style={[styles.emptyContainer, { backgroundColor: colors.cardBg }]}>
                 <View style={[styles.emptyIconCircle, { backgroundColor: colors.neutralBg }]}>
                   <Text style={styles.emptyIcon}>📊</Text>
                 </View>

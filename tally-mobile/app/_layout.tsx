@@ -80,8 +80,10 @@ export default function RootLayout() {
         <Stack
           screenOptions={{
             headerShown: false,
-            headerStyle: { backgroundColor: "#ffffff" },
-            headerTintColor: "#1E293B",
+            // Dark header to match the app's dark theme (used by the few
+            // screens with headerShown: true, e.g. Manage Categories).
+            headerStyle: { backgroundColor: "#0F1117" },
+            headerTintColor: "#FFFFFF",
             headerTitleStyle: { fontWeight: "bold" },
           }}
         >
