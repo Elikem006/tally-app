@@ -476,8 +476,18 @@ public class ExpenseService {
             entry.put("category", e.getCategory());
             entry.put("description", e.getDescription());
             entry.put("date", e.getDate().toString());
-            entry.put("type", "personal");
-            entry.put("isExpense", true);
+            // Income is stored as a positive amount; expenses are stored
+            // negative. MoMo vendor transfers are money-out but stored
+            // positive, and settlements have their own handling — exclude both
+            // so only genuine income is flagged. The app colours income green
+            // (+) and everything else red (-), keying off this type.
+            String personalPm = e.getPaymentMethod();
+            boolean isIncome = e.getAmount() != null
+                    && e.getAmount().signum() > 0
+                    && !"MOMO_TRANSFER".equalsIgnoreCase(personalPm)
+                    && !"SETTLEMENT".equalsIgnoreCase(personalPm);
+            entry.put("type", isIncome ? "income" : "personal");
+            entry.put("isExpense", !isIncome);
             entry.put("status", e.getStatus() != null ? e.getStatus() : "COMPLETED");
             entry.put("notes", e.getNotes());
             entry.put("hasReceipt", e.getReceiptPhoto() != null);
