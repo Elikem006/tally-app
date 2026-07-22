@@ -547,7 +547,7 @@ export default function ProfileScreen() {
 
           {/* MoMo number capsule */}
           <View style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }, editingPhone && { height: 'auto', flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={[styles.detailLabel, { color: colors.text }]}>MoMo Number</Text>
               {!editingPhone && (
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>

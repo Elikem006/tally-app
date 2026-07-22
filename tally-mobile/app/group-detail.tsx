@@ -15,7 +15,7 @@ import {
 import { useLocalSearchParams, router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { groupAPI, momoAPI } from "../services/api";
+import { groupAPI, momoAPI, isTransientApiError } from "../services/api";
 import { getUserId, currentUser } from "../services/storage";
 import { notifyNewSharedExpense, notifySettleUp } from "../services/notifications";
 import Avatar from "../components/Avatar";
@@ -240,6 +240,19 @@ export default function GroupDetailScreen() {
         String(settlingAmount),
         "Tally group settle-up",
       );
+
+      // Sandbox outage (backend signals "unavailable", no referenceId issued):
+      // no payment was initiated, so nothing to poll and nothing to settle.
+      // Present it as a calm "try again" — not a failure, not a raw error.
+      if (res.data?.status === "unavailable" || !res.data?.referenceId) {
+        setShowMomoModal(false);
+        showToast(
+          "⏳ MoMo isn't responding right now — no payment was taken. Try again shortly, or use Skip & Settle Manually.",
+          "info",
+        );
+        return;
+      }
+
       const referenceId: string = res.data.referenceId;
 
       setShowMomoModal(false);
@@ -248,10 +261,19 @@ export default function GroupDetailScreen() {
       // Wait 3 seconds then poll status
       await new Promise((r) => setTimeout(r, 3000));
 
-      const statusRes = await momoAPI.checkStatus(referenceId);
-      const status: string = statusRes.data.status;
+      // A failed status *check* is ambiguous, not a failed payment — treat it
+      // as PENDING and let the settle flow below proceed the same way it does
+      // for any pending payment.
+      let status = "PENDING";
+      try {
+        const statusRes = await momoAPI.checkStatus(referenceId);
+        status = statusRes.data?.status ?? "PENDING";
+      } catch {
+        status = "PENDING";
+      }
 
       if (status === "FAILED") {
+        // Definitive decline from MTN — an honest error, not a pending state.
         showToast("The MoMo payment failed. Please try again.", "error");
         return;
       }
@@ -272,7 +294,17 @@ export default function GroupDetailScreen() {
         showToast("Payment pending — group balance has been cleared.", "info");
       }
     } catch (e: any) {
-      showToast(e?.response?.data?.error || e?.message || "Something went wrong.", "error");
+      if (isTransientApiError(e)) {
+        // Timeout / no response — we genuinely don't know if the payment went
+        // through. Non-alarming pending message instead of a scary error.
+        setShowMomoModal(false);
+        showToast(
+          "⏳ Payment pending — the network dropped before we could confirm. Check the group balance in a moment before retrying.",
+          "info",
+        );
+      } else {
+        showToast(e?.response?.data?.error || "The payment could not be completed. Please try again.", "error");
+      }
     } finally {
       setMomoLoading(false);
     }

@@ -315,7 +315,9 @@ export default function AddScreen() {
         const addedAmt = parseFloat(amount) || 0;
         setSpent(prev => ({
           ...prev,
-          [selectedCategory]: (prev[selectedCategory] || 0) + addedAmt
+          // Expenses are stored as negative (money out); match that sign so the
+          // optimistic value agrees with what a re-fetch returns.
+          [selectedCategory]: (prev[selectedCategory] || 0) - addedAmt
         }));
       }
 
@@ -405,7 +407,9 @@ export default function AddScreen() {
         const addedAmt = parseFloat(amount) || 0;
         setSpent(prev => ({
           ...prev,
-          [selectedCategory]: (prev[selectedCategory] || 0) + addedAmt
+          // Expenses are stored as negative (money out); match that sign so the
+          // optimistic value agrees with what a re-fetch returns.
+          [selectedCategory]: (prev[selectedCategory] || 0) - addedAmt
         }));
       }
 
@@ -576,7 +580,7 @@ export default function AddScreen() {
                 </View>
                 <View style={styles.categoryRight}>
                   <Text style={[styles.categoryAmountText, { color: colors.textSecondary }]}>
-                    GHS {(spent[cat] || 0).toFixed(2)}
+                    GHS {Math.abs(spent[cat] || 0).toFixed(2)}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -600,7 +604,7 @@ export default function AddScreen() {
                 </View>
                 <View style={styles.categoryRight}>
                   <Text style={[styles.categoryAmountText, { color: colors.textSecondary }]}>
-                    GHS {(spent[cat.name] || 0).toFixed(2)}
+                    GHS {Math.abs(spent[cat.name] || 0).toFixed(2)}
                   </Text>
                 </View>
               </TouchableOpacity>

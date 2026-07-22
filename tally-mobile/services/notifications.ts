@@ -6,7 +6,6 @@ import { addHistoryItem } from "./notificationHistory";
 // This tells Expo how to show notifications when the app is open
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
     shouldShowBanner: true,

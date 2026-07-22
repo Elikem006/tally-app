@@ -1,6 +1,18 @@
 import axios from "axios";
 
-const BASE_URL = 'https://tally-app-production-939a.up.railway.app';
+// ─── Backend URL ─────────────────────────────────────────────────────────────
+// Comes from EXPO_PUBLIC_API_URL in .env.local (local dev — the hotspot/LAN IP
+// of the machine running docker-compose) or .env.production (Railway gateway).
+// To switch: edit the value in the env file, then restart Expo with
+// `npx expo start --clear` — env vars are inlined at build time, so a plain
+// reload/hot-refresh will NOT pick up the change.
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL;
+if (!BASE_URL) {
+  throw new Error(
+    "EXPO_PUBLIC_API_URL is not set. Create tally-mobile/.env.local from " +
+      ".env.example, then restart Expo with `npx expo start --clear`."
+  );
+}
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -791,6 +803,20 @@ export const groupAPI = {
     return mockResponse({ success: true });
   },
 };
+
+/**
+ * True when a request failed in a way where we can't know whether the backend
+ * completed the work: client-side timeout, dead network, or a 5xx from the
+ * gateway/resilience layer. Callers should treat these as "pending/unknown",
+ * not as a definitive failure. A 4xx with an error body is definitive.
+ */
+export function isTransientApiError(err: any): boolean {
+  if (!err) return false;
+  if (err.code === "ECONNABORTED") return true; // axios request timeout
+  const status = err.response?.status;
+  if (status === undefined) return true; // no response at all (network error)
+  return status === 502 || status === 503 || status === 504;
+}
 
 export const momoAPI = {
   requestPayment: async (
