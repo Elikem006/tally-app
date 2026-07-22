@@ -1,5 +1,16 @@
 # Running the Tally microservices locally
 
+## Option A — one command (Docker)
+
+```bash
+cd tally-backend
+docker-compose up --build
+```
+
+Postgres comes up with the schema pre-loaded (database/schema.sql), all five services start, and the system is reachable at http://localhost:8082 — nothing else to configure. Optional overrides (JWT secret, MoMo keys) go in `tally-backend/.env` (see `.env.example`).
+
+## Option B — five terminals (no Docker)
+
 Five processes, five terminals. Start order doesn't strictly matter, but starting the gateway last avoids a few noisy 500s.
 
 Each backend service already has its `application-local.properties` (gitignored, copied from the monolith's) in `src/main/resources/`, so `SPRING_PROFILES_ACTIVE=local` works exactly as it did for the monolith. The gateway needs no local override file.

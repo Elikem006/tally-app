@@ -2,26 +2,31 @@ package expense_service.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import expense_service.model.Budget;
+import expense_service.client.BearerForward;
+import expense_service.client.BudgetClient;
+import expense_service.client.DownstreamUnavailableException;
+import expense_service.client.GroupDataClient;
 import expense_service.model.Expense;
-import expense_service.model.Group;
-import expense_service.model.GroupMember;
-import expense_service.model.SharedExpense;
-import expense_service.model.User;
-import expense_service.repository.BudgetRepository;
 import expense_service.repository.ExpenseRepository;
-import expense_service.repository.GroupMemberRepository;
-import expense_service.repository.GroupRepository;
-import expense_service.repository.SharedExpenseRepository;
-import expense_service.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
 
+/**
+ * MICROSERVICES CORRECTION: this service now touches ONLY its own tables
+ * (expenses, custom_categories, reminders). The monthly report and combined
+ * history use API composition instead of the former read-only JPA mappings:
+ *   - budgets                    -> budget-service GET /api/budgets/user/{id}
+ *   - groups / shared expenses   -> group-service  GET /api/groups/user/{id}/shared-data
+ * The two report calls run CONCURRENTLY (CompletableFuture) so the extra
+ * network hops cost one round-trip, not two.
+ */
 @Service
 public class ExpenseService {
 
@@ -29,33 +34,10 @@ public class ExpenseService {
     private ExpenseRepository expenseRepository;
 
     @Autowired
-    private BudgetRepository budgetRepository;
+    private BudgetClient budgetClient;
 
     @Autowired
-    private GroupMemberRepository groupMemberRepository;
-
-    @Autowired
-    private SharedExpenseRepository sharedExpenseRepository;
-
-    @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private GroupRepository groupRepository;
-
-    private String resolveUserName(Long userId) {
-        if (userId == null) return "Unknown";
-        return userRepository.findById(userId)
-                .map(User::getName)
-                .orElse("User #" + userId);
-    }
-
-    private String resolveGroupName(Long groupId) {
-        if (groupId == null) return "Unknown Group";
-        return groupRepository.findById(groupId)
-                .map(Group::getName)
-                .orElse("Group #" + groupId);
-    }
+    private GroupDataClient groupDataClient;
 
     // MOMO_TRANSFER is a distinct method from MOMO: it marks vendor disbursements
     // sent via /api/momo/transfer. The mobile History screen renders a separate
@@ -64,6 +46,23 @@ public class ExpenseService {
             Set.of("CASH", "MOMO", "MOMO_TRANSFER", "SETTLEMENT", "PAYSTACK");
 
     private static final ObjectMapper shareMapper = new ObjectMapper();
+
+    // ── JSON DTO helpers (values arrive from other services as Maps) ─────────
+
+    private static Long asLong(Object v) {
+        return v instanceof Number n ? n.longValue() : null;
+    }
+
+    private static BigDecimal asBigDecimal(Object v) {
+        if (v == null) return null;
+        if (v instanceof BigDecimal b) return b;
+        return new BigDecimal(String.valueOf(v));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> asList(Object v) {
+        return v instanceof List ? (List<Map<String, Object>>) v : new ArrayList<>();
+    }
 
     public Expense createExpense(Long userId, BigDecimal amount, String category,
                                  String description, LocalDate date, String paymentMethod) {
@@ -284,6 +283,24 @@ public class ExpenseService {
     public Map<String, Object> getMonthlyReport(Long userId, Integer month, Integer year) {
         List<Expense> allExpenses = expenseRepository.findByUserIdOrderByDateDesc(userId);
 
+        // API composition: budgets and shared-group data come from the owning
+        // services, fetched concurrently. Capture the caller's JWT on this
+        // thread — RequestContextHolder is not visible from the async pool.
+        String authorization = BearerForward.currentAuthorization();
+        CompletableFuture<List<Map<String, Object>>> budgetsFuture =
+                CompletableFuture.supplyAsync(() -> budgetClient.getUserBudgets(userId, authorization));
+        CompletableFuture<List<Map<String, Object>>> sharedFuture =
+                CompletableFuture.supplyAsync(() -> groupDataClient.getUserSharedData(userId, authorization));
+        List<Map<String, Object>> budgets;
+        List<Map<String, Object>> sharedGroups;
+        try {
+            budgets = budgetsFuture.join();
+            sharedGroups = sharedFuture.join();
+        } catch (CompletionException ce) {
+            if (ce.getCause() instanceof DownstreamUnavailableException d) throw d;
+            throw new RuntimeException(ce.getCause() != null ? ce.getCause() : ce);
+        }
+
         LocalDate now = LocalDate.now();
         int currentYear  = (year  != null) ? year  : now.getYear();
         int currentMonth = (month != null) ? month : now.getMonthValue();
@@ -317,12 +334,15 @@ public class ExpenseService {
         BigDecimal currentShared = BigDecimal.ZERO;
         BigDecimal previousShared = BigDecimal.ZERO;
         Set<Long> countedSharedIds = new HashSet<>();
-        for (GroupMember membership : groupMemberRepository.findByUserId(userId)) {
-            List<GroupMember> groupMembers = groupMemberRepository.findByGroupId(membership.getGroupId());
-            for (SharedExpense se : sharedExpenseRepository.findByGroupId(membership.getGroupId())) {
-                if (se.getAmount() == null || se.getCreatedAt() == null) continue;
-                if (!countedSharedIds.add(se.getId())) continue;
-                LocalDate d = se.getCreatedAt().toLocalDate();
+        for (Map<String, Object> groupEntry : sharedGroups) {
+            List<Map<String, Object>> groupMembers = asList(groupEntry.get("members"));
+            for (Map<String, Object> se : asList(groupEntry.get("expenses"))) {
+                BigDecimal amount = asBigDecimal(se.get("amount"));
+                Object createdAt = se.get("createdAt");
+                if (amount == null || createdAt == null) continue;
+                Long seId = asLong(se.get("id"));
+                if (seId != null && !countedSharedIds.add(seId)) continue;
+                LocalDate d = LocalDateTime.parse(String.valueOf(createdAt)).toLocalDate();
                 boolean inCurrent  = d.getYear() == currentYear && d.getMonthValue() == currentMonth;
                 boolean inPrevious = d.getYear() == prevYear && d.getMonthValue() == prevMonth;
                 if (!inCurrent && !inPrevious) continue;
@@ -363,23 +383,25 @@ public class ExpenseService {
                     highestCategory.put("amount", entry.getValue());
                 });
 
-        // Budget performance
-        List<Budget> budgets = budgetRepository.findByUserId(userId);
+        // Budget performance — budget list fetched from budget-service
         List<Map<String, Object>> budgetPerformance = new ArrayList<>();
-        for (Budget budget : budgets) {
-            BigDecimal spent = categoryBreakdown.getOrDefault(budget.getCategory(), BigDecimal.ZERO);
-            double percentage = budget.getMonthlyLimit().compareTo(BigDecimal.ZERO) > 0
-                    ? spent.divide(budget.getMonthlyLimit(), 4, RoundingMode.HALF_UP)
+        for (Map<String, Object> budget : budgets != null ? budgets : List.<Map<String, Object>>of()) {
+            String category = String.valueOf(budget.get("category"));
+            BigDecimal monthlyLimit = asBigDecimal(budget.get("monthlyLimit"));
+            if (monthlyLimit == null) continue;
+            BigDecimal spent = categoryBreakdown.getOrDefault(category, BigDecimal.ZERO);
+            double percentage = monthlyLimit.compareTo(BigDecimal.ZERO) > 0
+                    ? spent.divide(monthlyLimit, 4, RoundingMode.HALF_UP)
                             .multiply(BigDecimal.valueOf(100)).doubleValue()
                     : 0.0;
 
-            String status = spent.compareTo(budget.getMonthlyLimit()) > 0 ? "over"
+            String status = spent.compareTo(monthlyLimit) > 0 ? "over"
                     : percentage >= 80 ? "warning"
                     : "good";
 
             Map<String, Object> entry = new HashMap<>();
-            entry.put("category", budget.getCategory());
-            entry.put("limit", budget.getMonthlyLimit());
+            entry.put("category", category);
+            entry.put("limit", monthlyLimit);
             entry.put("spent", spent);
             entry.put("percentage", percentage);
             entry.put("status", status);
@@ -397,13 +419,16 @@ public class ExpenseService {
     }
 
     /**
-     * The user's share of a shared expense, honoring the participant snapshot
-     * (members who joined after creation owe nothing) and CUSTOM split ratios.
+     * The user's share of a shared expense (DTO form, from group-service),
+     * honoring the participant snapshot and CUSTOM split ratios — same math
+     * as before the microservices correction.
      */
-    private BigDecimal userShareOf(SharedExpense se, Long userId, List<GroupMember> members) {
+    private BigDecimal userShareOf(Map<String, Object> se, Long userId,
+                                   List<Map<String, Object>> members) {
         Set<Long> participants = new HashSet<>();
-        if (se.getParticipantIds() != null && !se.getParticipantIds().isBlank()) {
-            for (String s : se.getParticipantIds().split(",")) {
+        Object participantIds = se.get("participantIds");
+        if (participantIds != null && !String.valueOf(participantIds).isBlank()) {
+            for (String s : String.valueOf(participantIds).split(",")) {
                 try {
                     participants.add(Long.parseLong(s.trim()));
                 } catch (NumberFormatException ignored) {
@@ -412,24 +437,30 @@ public class ExpenseService {
             }
         }
         if (participants.isEmpty()) {
-            for (GroupMember m : members) participants.add(m.getUserId());
+            for (Map<String, Object> m : members) {
+                Long id = asLong(m.get("userId"));
+                if (id != null) participants.add(id);
+            }
         }
         if (!participants.contains(userId)) return BigDecimal.ZERO;
 
-        if ("CUSTOM".equals(se.getSplitType()) && se.getSplitRatios() != null) {
+        BigDecimal amount = asBigDecimal(se.get("amount"));
+        if (amount == null) return BigDecimal.ZERO;
+
+        if ("CUSTOM".equals(se.get("splitType")) && se.get("splitRatios") != null) {
             try {
                 Map<String, Object> raw = shareMapper.readValue(
-                        se.getSplitRatios(), shareMapper.getTypeFactory()
+                        String.valueOf(se.get("splitRatios")), shareMapper.getTypeFactory()
                                 .constructMapType(HashMap.class, String.class, Object.class));
                 Object pct = raw.get(String.valueOf(userId));
                 if (pct == null) return BigDecimal.ZERO;
-                return se.getAmount().multiply(new BigDecimal(String.valueOf(pct)))
+                return amount.multiply(new BigDecimal(String.valueOf(pct)))
                         .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
             } catch (Exception ignored) {
                 // fall through to equal split
             }
         }
-        return se.getAmount().divide(
+        return amount.divide(
                 BigDecimal.valueOf(Math.max(participants.size(), 1)), 2, RoundingMode.HALF_UP);
     }
 
@@ -460,38 +491,43 @@ public class ExpenseService {
             combined.add(entry);
         }
 
-        // 2. All shared expenses from groups this user belongs to
+        // 2. All shared expenses from groups this user belongs to — via
+        //    group-service's aggregate API (names already enriched there)
+        List<Map<String, Object>> sharedGroups =
+                groupDataClient.getUserSharedData(userId, BearerForward.currentAuthorization());
         Set<Long> seenSharedIds = new HashSet<>();
-        List<GroupMember> memberships = groupMemberRepository.findByUserId(userId);
-        for (GroupMember membership : memberships) {
-            List<SharedExpense> sharedExpenses = sharedExpenseRepository.findByGroupId(membership.getGroupId());
-            for (SharedExpense se : sharedExpenses) {
-                if (seenSharedIds.contains(se.getId())) continue;
-                seenSharedIds.add(se.getId());
-                String groupName = resolveGroupName(se.getGroupId());
+        for (Map<String, Object> groupEntry : sharedGroups) {
+            String groupName = String.valueOf(groupEntry.get("groupName"));
+            Long groupId = asLong(groupEntry.get("groupId"));
+            for (Map<String, Object> se : asList(groupEntry.get("expenses"))) {
+                Long seId = asLong(se.get("id"));
+                if (seId == null || seenSharedIds.contains(seId)) continue;
+                seenSharedIds.add(seId);
+                Object createdAt = se.get("createdAt");
+                Object description = se.get("description");
                 Map<String, Object> entry = new HashMap<>();
-                entry.put("id", se.getId());
+                entry.put("id", seId);
                 // Amount stays positive; the frontend renders shared entries as
                 // expenses (minus sign / red) because isExpense is true.
-                entry.put("amount", se.getAmount());
+                entry.put("amount", asBigDecimal(se.get("amount")));
                 entry.put("category", "Shared");
-                entry.put("description", se.getDescription() != null
-                        ? "Paid for " + se.getDescription() + " in " + groupName
+                entry.put("description", description != null
+                        ? "Paid for " + description + " in " + groupName
                         : "Paid in " + groupName);
-                entry.put("date", se.getCreatedAt() != null
-                        ? se.getCreatedAt().toLocalDate().toString()
+                entry.put("date", createdAt != null
+                        ? LocalDateTime.parse(String.valueOf(createdAt)).toLocalDate().toString()
                         : LocalDate.now().toString());
                 entry.put("type", "shared");
                 entry.put("isExpense", true);
-                entry.put("settled", Boolean.TRUE.equals(se.getSettled()));
-                entry.put("groupId", se.getGroupId());
+                entry.put("settled", Boolean.TRUE.equals(se.get("settled")));
+                entry.put("groupId", groupId);
                 entry.put("groupName", groupName);
-                entry.put("paidBy", se.getPaidBy());
-                entry.put("paidByName", resolveUserName(se.getPaidBy()));
+                entry.put("paidBy", asLong(se.get("paidBy")));
+                entry.put("paidByName", se.get("paidByName"));
                 // Shared expenses have no stored payment method — default to CASH
                 // so every history entry carries the field.
                 entry.put("paymentMethod", "CASH");
-                entry.put("createdAt", se.getCreatedAt() != null ? se.getCreatedAt().toString() : null);
+                entry.put("createdAt", createdAt != null ? String.valueOf(createdAt) : null);
                 combined.add(entry);
             }
         }

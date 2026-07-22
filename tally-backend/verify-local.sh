@@ -11,8 +11,8 @@
 # Usage (Git Bash / WSL / any bash):
 #   ./verify-local.sh                 # everything (services must be running, see RUN-LOCAL.md)
 #   BASE_URL=http://localhost:8082 ./verify-local.sh
-#   ./verify-local.sh auth|spend|group   # run a single phase (state carries over
-#                                          in /tmp/tally-verify-state.env)
+#   ./verify-local.sh auth|spend|group|settle|report   # run a single phase
+#                                       (state carries over in /tmp/tally-verify-state.env)
 #
 # Exit code 0 = all steps passed.
 # =============================================================================
@@ -122,6 +122,13 @@ if [ "$PHASE" = "all" ] || [ "$PHASE" = "group" ]; then
   call GET "/api/groups/$GID/balances" "$T1"
   check "balances-before" '^200$' '\-20'
 
+  echo "GID=$GID" >> "$STATE"
+fi
+
+[ -f "$STATE" ] && . "$STATE"
+
+# ---------------------------------------------------------------- phase: settle
+if [ "$PHASE" = "all" ] || [ "$PHASE" = "settle" ]; then
   call POST "/api/groups/$GID/settle" "$T2" "{\"userId\":\"$U2\"}"
   check "settle-up-u2" '^200$' '"success":true'
   check "settle-amount-20" '^200$' '"settledAmount":20'
@@ -134,6 +141,25 @@ if [ "$PHASE" = "all" ] || [ "$PHASE" = "group" ]; then
 
   call GET "/api/groups/user/$U1/net" "$T1"
   check "net-balance-u1" '^200$' '"success":true'
+fi
+
+# ---------------------------------------------------------------- phase: report
+# API-composition endpoints: report (expense→budget+group), history
+# (expense→group), export (expense only). Requires all services running.
+if [ "$PHASE" = "all" ] || [ "$PHASE" = "report" ]; then
+  call GET "/api/expenses/user/$U1/report" "$T1"
+  check "monthly-report" '^200$' '"budgetPerformance"'
+  check "report-has-budget-food" '^200$' '"category":"Food"'
+  # 25.50 personal + 20.00 share of the 40.00 group dinner = 45.50
+  check "report-current-month" '^200$' '"currentMonth":45.5'
+  check "report-shared-category" '^200$' '"Shared"'
+
+  call GET "/api/expenses/user/$U1/history" "$T1"
+  check "combined-history" '^200$' '"type":"shared"'
+  check "history-group-expense" '^200$' 'Verify dinner'
+
+  call GET "/api/expenses/user/$U1/export?format=csv" "$T1"
+  check "csv-export" '^200$' 'Date,Category,Description,Amount,PaymentMethod'
 fi
 
 echo "-----------------------------------------"

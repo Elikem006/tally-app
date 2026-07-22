@@ -3,20 +3,32 @@ package group_service.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import group_service.JwtUtil;
+import group_service.client.AuthClient;
+import group_service.client.BearerForward;
+import group_service.client.ExpenseServiceClient;
 import group_service.model.Group;
 import group_service.model.GroupMember;
 import group_service.model.SharedExpense;
-import group_service.model.User;
 import group_service.repository.GroupMemberRepository;
 import group_service.repository.GroupRepository;
 import group_service.repository.SharedExpenseRepository;
-import group_service.repository.UserRepository;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.*;
 
+/**
+ * MICROSERVICES CORRECTION: this service now touches ONLY its own tables
+ * (groups, group_members, shared_expenses). Everything else goes through the
+ * owning service's HTTP API:
+ *   - user names/avatars  -> auth-service    POST /api/auth/users/lookup
+ *   - settlement expenses -> expense-service POST /api/expenses
+ *   - MoMo request-to-pay -> expense-service POST /api/momo/pay
+ * The former read-only users mapping, the trimmed createExpense copy and the
+ * duplicated MoMoService have all been removed.
+ */
 @Service
 public class GroupService {
 
@@ -30,13 +42,13 @@ public class GroupService {
     private SharedExpenseRepository sharedExpenseRepository;
 
     @Autowired
-    private UserRepository userRepository;
+    private AuthClient authClient;
 
     @Autowired
-    private MoMoService moMoService;
+    private ExpenseServiceClient expenseServiceClient;
 
     @Autowired
-    private ExpenseService expenseService;
+    private JwtUtil jwtUtil;
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
     private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
@@ -107,15 +119,25 @@ public class GroupService {
                 .divide(BigDecimal.valueOf(Math.max(participants.size(), 1)), 2, RoundingMode.HALF_UP);
     }
 
-    // Fetch a user once and return it (null-safe)
-    private User findUser(Long userId) {
-        if (userId == null) return null;
-        return userRepository.findById(userId).orElse(null);
+    // ── user display data via auth-service (batch, one HTTP call per request) ──
+
+    private Map<String, Map<String, Object>> lookupUsers(Collection<Long> userIds) {
+        return authClient.lookupUsers(userIds, BearerForward.currentAuthorization());
     }
 
-    private String resolveUserName(Long userId) {
-        User u = findUser(userId);
-        return u != null ? u.getName() : "User #" + userId;
+    private static Map<String, Object> userEntry(Map<String, Map<String, Object>> lookup, Long userId) {
+        return lookup != null ? lookup.get(String.valueOf(userId)) : null;
+    }
+
+    private static String nameOf(Map<String, Map<String, Object>> lookup, Long userId) {
+        Map<String, Object> u = userEntry(lookup, userId);
+        Object name = u != null ? u.get("name") : null;
+        return name != null ? String.valueOf(name) : "User #" + userId;
+    }
+
+    private static Object avatarOf(Map<String, Map<String, Object>> lookup, Long userId, String field) {
+        Map<String, Object> u = userEntry(lookup, userId);
+        return u != null ? u.get(field) : null;
     }
 
     // Create a new group
@@ -170,15 +192,11 @@ public class GroupService {
 
         // Block removal while the member has an outstanding balance — otherwise
         // their debts (or credits) would silently vanish from the group.
-        for (Map<String, Object> balance : calculateBalances(groupId)) {
-            if (userId.equals(balance.get("userId"))) {
-                BigDecimal b = (BigDecimal) balance.get("balance");
-                if (b.abs().compareTo(new BigDecimal("0.01")) >= 0) {
-                    throw new RuntimeException("Cannot remove member with outstanding balance of GHS "
-                            + b.abs().setScale(2, RoundingMode.HALF_UP).toPlainString()
-                            + ". They must settle up first.");
-                }
-            }
+        BigDecimal b = rawBalances(groupId).getOrDefault(userId, BigDecimal.ZERO);
+        if (b.abs().compareTo(new BigDecimal("0.01")) >= 0) {
+            throw new RuntimeException("Cannot remove member with outstanding balance of GHS "
+                    + b.abs().setScale(2, RoundingMode.HALF_UP).toPlainString()
+                    + ". They must settle up first.");
         }
 
         groupMemberRepository.delete(target);
@@ -192,18 +210,16 @@ public class GroupService {
     /**
      * Splitwise-style net position across ALL the user's groups:
      * how much they owe in total vs how much they are owed.
+     * Uses rawBalances — pure local math, no user lookups needed.
      */
     public Map<String, Object> getUserNetBalance(Long userId) {
         BigDecimal youOwe = BigDecimal.ZERO;
         BigDecimal youAreOwed = BigDecimal.ZERO;
         for (Group g : groupRepository.findGroupsByUserId(userId)) {
-            for (Map<String, Object> balance : calculateBalances(g.getId())) {
-                if (userId.equals(balance.get("userId"))) {
-                    BigDecimal b = (BigDecimal) balance.get("balance");
-                    if (b.signum() < 0) youOwe = youOwe.add(b.abs());
-                    else youAreOwed = youAreOwed.add(b);
-                }
-            }
+            BigDecimal b = rawBalances(g.getId()).getOrDefault(userId, BigDecimal.ZERO);
+            if (b.compareTo(BigDecimal.ZERO) == 0) continue;
+            if (b.signum() < 0) youOwe = youOwe.add(b.abs());
+            else youAreOwed = youAreOwed.add(b);
         }
         Map<String, Object> net = new HashMap<>();
         net.put("youOwe", youOwe.setScale(2, RoundingMode.HALF_UP));
@@ -225,18 +241,23 @@ public class GroupService {
         List<GroupMember> members = groupMemberRepository.findByGroupId(groupId);
         List<SharedExpense> expenses = sharedExpenseRepository.findByGroupId(groupId);
 
+        // ONE batch lookup for every member + payer (auth-service API)
+        Set<Long> allUserIds = new HashSet<>();
+        for (GroupMember m : members) allUserIds.add(m.getUserId());
+        for (SharedExpense se : expenses) if (se.getPaidBy() != null) allUserIds.add(se.getPaidBy());
+        Map<String, Map<String, Object>> lookup = lookupUsers(allUserIds);
+
         // Enrich members with name + avatar
         List<Map<String, Object>> enrichedMembers = new ArrayList<>();
         for (GroupMember m : members) {
-            User u = findUser(m.getUserId());
             Map<String, Object> entry = new HashMap<>();
             entry.put("id",         m.getId());
             entry.put("groupId",    m.getGroupId());
             entry.put("userId",     m.getUserId());
             entry.put("joinedAt",   m.getJoinedAt() != null ? m.getJoinedAt().toString() : null);
-            entry.put("name",       u != null ? u.getName()       : "User #" + m.getUserId());
-            entry.put("avatarData", u != null ? u.getAvatarData() : null);
-            entry.put("avatarType", u != null ? u.getAvatarType() : null);
+            entry.put("name",       nameOf(lookup, m.getUserId()));
+            entry.put("avatarData", avatarOf(lookup, m.getUserId(), "avatarData"));
+            entry.put("avatarType", avatarOf(lookup, m.getUserId(), "avatarType"));
             enrichedMembers.add(entry);
         }
 
@@ -244,14 +265,13 @@ public class GroupService {
         int memberCount = Math.max(members.size(), 1);
         List<Map<String, Object>> enrichedExpenses = new ArrayList<>();
         for (SharedExpense se : expenses) {
-            User payer = findUser(se.getPaidBy());
             Map<String, Object> entry = new HashMap<>();
             entry.put("id",              se.getId());
             entry.put("groupId",         se.getGroupId());
             entry.put("paidBy",          se.getPaidBy());
-            entry.put("paidByName",      payer != null ? payer.getName()       : "User #" + se.getPaidBy());
-            entry.put("paidByAvatarData",payer != null ? payer.getAvatarData() : null);
-            entry.put("paidByAvatarType",payer != null ? payer.getAvatarType() : null);
+            entry.put("paidByName",      nameOf(lookup, se.getPaidBy()));
+            entry.put("paidByAvatarData", avatarOf(lookup, se.getPaidBy(), "avatarData"));
+            entry.put("paidByAvatarType", avatarOf(lookup, se.getPaidBy(), "avatarType"));
             entry.put("amount",          se.getAmount());
             entry.put("description",     se.getDescription());
             entry.put("splitType",       se.getSplitType() != null ? se.getSplitType() : "EQUAL");
@@ -364,15 +384,17 @@ public class GroupService {
         return sharedExpenseRepository.save(expense);
     }
 
-    // Calculate balances — who owes whom, with names
-    public List<Map<String, Object>> calculateBalances(Long groupId) {
+    /**
+     * Pure balance math for a group: userId → net balance. Local tables only,
+     * no user lookups — used by every caller that doesn't need display names
+     * (net balance, remove-member guard, settle-up).
+     */
+    private Map<Long, BigDecimal> rawBalances(Long groupId) {
         List<GroupMember> members = groupMemberRepository.findByGroupId(groupId);
         List<SharedExpense> expenses = sharedExpenseRepository.findByGroupId(groupId);
 
-        int memberCount = members.size();
-        if (memberCount == 0) return new ArrayList<>();
-
         Map<Long, BigDecimal> balances = new HashMap<>();
+        if (members.isEmpty()) return balances;
         for (GroupMember m : members) {
             balances.put(m.getUserId(), BigDecimal.ZERO);
         }
@@ -396,16 +418,27 @@ public class GroupService {
                 }
             }
         }
+        return balances;
+    }
+
+    // Calculate balances — who owes whom, with names (names via auth-service)
+    public List<Map<String, Object>> calculateBalances(Long groupId) {
+        Map<Long, BigDecimal> balances = rawBalances(groupId);
+
+        List<Long> nonZeroIds = balances.entrySet().stream()
+                .filter(e -> e.getValue().compareTo(BigDecimal.ZERO) != 0)
+                .map(Map.Entry::getKey)
+                .toList();
+        Map<String, Map<String, Object>> lookup = lookupUsers(nonZeroIds);
 
         List<Map<String, Object>> debts = new ArrayList<>();
         for (Map.Entry<Long, BigDecimal> entry : balances.entrySet()) {
             if (entry.getValue().compareTo(BigDecimal.ZERO) != 0) {
-                User u = findUser(entry.getKey());
                 Map<String, Object> debt = new HashMap<>();
                 debt.put("userId",     entry.getKey());
-                debt.put("name",       u != null ? u.getName()       : "User #" + entry.getKey());
-                debt.put("avatarData", u != null ? u.getAvatarData() : null);
-                debt.put("avatarType", u != null ? u.getAvatarType() : null);
+                debt.put("name",       nameOf(lookup, entry.getKey()));
+                debt.put("avatarData", avatarOf(lookup, entry.getKey(), "avatarData"));
+                debt.put("avatarType", avatarOf(lookup, entry.getKey(), "avatarType"));
                 debt.put("balance",    entry.getValue());
                 debt.put("owes",       entry.getValue().compareTo(BigDecimal.ZERO) < 0);
                 debts.add(debt);
@@ -424,6 +457,9 @@ public class GroupService {
         if (!groupMemberRepository.existsByGroupIdAndUserId(groupId, userId)) {
             throw new RuntimeException("User is not a member of this group");
         }
+
+        // Capture the caller's JWT on the request thread for the MoMo call
+        String callerAuthorization = BearerForward.currentAuthorization();
 
         String momoReferenceId = null;
         String momoStatus = null;
@@ -457,22 +493,29 @@ public class GroupService {
         // correct member(s), proportionally to what each is owed.
         Map<Long, BigDecimal> owedTo = new HashMap<>();
         BigDecimal totalOwed = BigDecimal.ZERO;
-        for (Map<String, Object> balance : calculateBalances(groupId)) {
-            BigDecimal b = (BigDecimal) balance.get("balance");
-            Long owedUserId = (Long) balance.get("userId");
+        for (Map.Entry<Long, BigDecimal> balance : rawBalances(groupId).entrySet()) {
+            BigDecimal b = balance.getValue();
+            Long owedUserId = balance.getKey();
             if (b.compareTo(BigDecimal.ZERO) > 0 && !owedUserId.equals(userId)) {
                 owedTo.put(owedUserId, b);
                 totalOwed = totalOwed.add(b);
             }
         }
 
-        // If a phone number is provided, fire the MoMo request first
+        // If a phone number is provided, fire the MoMo request first — via
+        // expense-service's /api/momo/pay (the single MoMo implementation).
+        // Failures never block the settle-up, matching original behavior.
         if (phoneNumber != null && !phoneNumber.isBlank()) {
             try {
-                String refId = java.util.UUID.randomUUID().toString();
-                momoReferenceId = moMoService.requestToPay(
-                        phoneNumber, owedAmount, "Tally group settle-up", refId);
-                momoStatus = "PENDING";
+                Map<String, Object> momo = expenseServiceClient.momoRequestToPay(
+                        phoneNumber, owedAmount, "Tally group settle-up", callerAuthorization);
+                if (momo != null && Boolean.TRUE.equals(momo.get("success"))
+                        && momo.get("referenceId") != null) {
+                    momoReferenceId = String.valueOf(momo.get("referenceId"));
+                    momoStatus = "PENDING";
+                } else {
+                    momoStatus = "FAILED";
+                }
             } catch (Exception e) {
                 // Log but don't block settle-up in sandbox
                 System.err.println("MoMo request failed (sandbox): " + e.getMessage());
@@ -490,9 +533,19 @@ public class GroupService {
         }
         sharedExpenseRepository.saveAll(expenses);
 
+        // Settler's display name via auth-service; degrade gracefully rather
+        // than failing the settle if auth-service is briefly unreachable.
+        String settlerName;
+        try {
+            settlerName = nameOf(lookupUsers(List.of(userId)), userId);
+        } catch (Exception e) {
+            settlerName = "User #" + userId;
+        }
+
         // Record settlement income for the member(s) who were owed money,
-        // split proportionally to how much each was owed.
-        String settlerName = resolveUserName(userId);
+        // split proportionally to how much each was owed. The expense belongs
+        // to the OWED user, so we mint a service token for that user (shared
+        // JWT_SECRET) — expense-service's own validation still applies.
         if (totalOwed.compareTo(BigDecimal.ZERO) > 0) {
             for (Map.Entry<Long, BigDecimal> owed : owedTo.entrySet()) {
                 BigDecimal portion = owedAmount
@@ -500,13 +553,15 @@ public class GroupService {
                         .divide(totalOwed, 2, RoundingMode.HALF_UP);
                 if (portion.compareTo(BigDecimal.ZERO) <= 0) continue;
                 try {
-                    expenseService.createExpense(
+                    String serviceToken = jwtUtil.generateToken("internal@tally.service", owed.getKey());
+                    expenseServiceClient.createSettlementExpense(
                             owed.getKey(),
                             portion,
                             "Settlement",
                             "Settlement received from " + settlerName + " in " + group.getName(),
                             LocalDate.now(),
-                            "SETTLEMENT");
+                            "SETTLEMENT",
+                            serviceToken);
                 } catch (Exception e) {
                     // Non-fatal — the settle-up itself succeeded
                     System.err.println("Failed to record settlement expense: " + e.getMessage());
@@ -531,6 +586,68 @@ public class GroupService {
     // Overload for backward compatibility (no phone number)
     public Map<String, Object> settleUp(Long groupId, Long userId) {
         return settleUp(groupId, userId, null);
+    }
+
+    /**
+     * Aggregate feed for expense-service's report/history composition
+     * (GET /api/groups/user/{userId}/shared-data): every group the user is in,
+     * with members and shared expenses, payer names included — one call
+     * instead of expense-service reading group tables directly.
+     */
+    public Map<String, Object> getUserSharedData(Long userId) {
+        List<Group> groups = groupRepository.findGroupsByUserId(userId);
+
+        // one batch name lookup across ALL groups
+        Set<Long> allUserIds = new HashSet<>();
+        Map<Long, List<GroupMember>> membersByGroup = new HashMap<>();
+        Map<Long, List<SharedExpense>> expensesByGroup = new HashMap<>();
+        for (Group g : groups) {
+            List<GroupMember> members = groupMemberRepository.findByGroupId(g.getId());
+            List<SharedExpense> expenses = sharedExpenseRepository.findByGroupId(g.getId());
+            membersByGroup.put(g.getId(), members);
+            expensesByGroup.put(g.getId(), expenses);
+            for (GroupMember m : members) allUserIds.add(m.getUserId());
+            for (SharedExpense se : expenses) if (se.getPaidBy() != null) allUserIds.add(se.getPaidBy());
+        }
+        Map<String, Map<String, Object>> lookup = lookupUsers(allUserIds);
+
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Group g : groups) {
+            Map<String, Object> groupEntry = new HashMap<>();
+            groupEntry.put("groupId",   g.getId());
+            groupEntry.put("groupName", g.getName());
+
+            List<Map<String, Object>> memberList = new ArrayList<>();
+            for (GroupMember m : membersByGroup.get(g.getId())) {
+                Map<String, Object> me = new HashMap<>();
+                me.put("userId", m.getUserId());
+                me.put("name",   nameOf(lookup, m.getUserId()));
+                memberList.add(me);
+            }
+            groupEntry.put("members", memberList);
+
+            List<Map<String, Object>> expenseList = new ArrayList<>();
+            for (SharedExpense se : expensesByGroup.get(g.getId())) {
+                Map<String, Object> ee = new HashMap<>();
+                ee.put("id",             se.getId());
+                ee.put("amount",         se.getAmount());
+                ee.put("description",    se.getDescription());
+                ee.put("splitType",      se.getSplitType());
+                ee.put("splitRatios",    se.getSplitRatios());
+                ee.put("participantIds", se.getParticipantIds());
+                ee.put("settled",        Boolean.TRUE.equals(se.getSettled()));
+                ee.put("createdAt",      se.getCreatedAt() != null ? se.getCreatedAt().toString() : null);
+                ee.put("paidBy",         se.getPaidBy());
+                ee.put("paidByName",     nameOf(lookup, se.getPaidBy()));
+                expenseList.add(ee);
+            }
+            groupEntry.put("expenses", expenseList);
+            out.add(groupEntry);
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("groups", out);
+        return result;
     }
 
     public void deleteGroup(Long groupId) {

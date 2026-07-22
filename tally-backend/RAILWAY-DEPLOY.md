@@ -23,9 +23,18 @@ Shared by all 4 backend services (identical values — same Neon DB, same JWT se
 | `JWT_SECRET` | **must be identical everywhere** — auth-service signs, the rest verify |
 | `INCLUDE_ERROR_MESSAGES` | `never` (production) |
 
-expense-service and group-service additionally need all `MOMO_*` vars (same values as the monolith): `MOMO_SUBSCRIPTION_KEY`, `MOMO_API_USER`, `MOMO_API_KEY`, `MOMO_BASE_URL`, `MOMO_ENVIRONMENT`, `MOMO_CURRENCY`, `MOMO_CALLBACK_URL`, `MOMO_DISBURSEMENT_SUBSCRIPTION_KEY`, `MOMO_DISBURSEMENT_API_USER`, `MOMO_DISBURSEMENT_API_KEY`, `MOMO_DISBURSEMENT_BASE_URL`.
+**expense-service only** (group-service no longer has MoMo code) needs all `MOMO_*` vars (same values as the monolith): `MOMO_SUBSCRIPTION_KEY`, `MOMO_API_USER`, `MOMO_API_KEY`, `MOMO_BASE_URL`, `MOMO_ENVIRONMENT`, `MOMO_CURRENCY`, `MOMO_CALLBACK_URL`, `MOMO_DISBURSEMENT_SUBSCRIPTION_KEY`, `MOMO_DISBURSEMENT_API_USER`, `MOMO_DISBURSEMENT_API_KEY`, `MOMO_DISBURSEMENT_BASE_URL`.
 
 Set `MOMO_CALLBACK_URL` to `https://<gateway-domain>/api/momo/callback` (the callback route lands on expense-service via the gateway).
+
+**Inter-service URLs (microservices correction):** services now call each other over HTTP instead of sharing tables, so each backend service also needs the URLs of the services it calls — use Railway private networking domains where available:
+
+| Service | Needs |
+|---|---|
+| expense-service | `BUDGET_SERVICE_URL`, `GROUP_SERVICE_URL`, `AUTH_SERVICE_URL` |
+| budget-service | `EXPENSE_SERVICE_URL` |
+| group-service | `EXPENSE_SERVICE_URL`, `AUTH_SERVICE_URL` |
+| auth-service | none (calls nobody) |
 
 api-gateway only:
 

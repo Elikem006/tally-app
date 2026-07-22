@@ -203,4 +203,22 @@ public class AuthController {
     public ResponseEntity<?> health() {
         return ResponseEntity.ok(Map.of("status", "User service is running", "success", true));
     }
+
+    /**
+     * POST /api/auth/users/lookup — batch display-info lookup (name + avatar)
+     * for a set of userIds. Used by other Tally services (e.g. group-service
+     * enriching members/balances) instead of reading the users table directly.
+     * Requires a valid JWT like any other endpoint; returns display fields
+     * only — the same information group screens already showed to members.
+     */
+    @PostMapping("/users/lookup")
+    public ResponseEntity<?> lookupUsers(@RequestBody Map<String, java.util.List<Long>> request) {
+        try {
+            java.util.List<Long> userIds = request.get("userIds");
+            return ResponseEntity.ok(userService.lookupUsers(userIds));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", errorMessage(e), "success", false));
+        }
+    }
 }

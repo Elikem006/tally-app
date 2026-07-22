@@ -2,10 +2,10 @@ package budget_service.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import budget_service.client.BearerForward;
+import budget_service.client.ExpenseClient;
 import budget_service.model.Budget;
-import budget_service.model.Expense;
 import budget_service.repository.BudgetRepository;
-import budget_service.repository.ExpenseRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.HashMap;
@@ -20,7 +20,7 @@ public class BudgetService {
     private BudgetRepository budgetRepository;
 
     @Autowired
-    private ExpenseRepository expenseRepository;
+    private ExpenseClient expenseClient;
 
     public Budget setBudget(Long userId, String category, BigDecimal monthlyLimit) {
         // Check if budget already exists for this category
@@ -50,9 +50,15 @@ public class BudgetService {
         existing.ifPresent(budgetRepository::delete);
     }
 
+    /**
+     * Budget summary. Expense data now comes from expense-service's API
+     * (caller's JWT forwarded) instead of a direct read of the expenses table.
+     * The calculation itself is unchanged — same keys, same milestone bands.
+     */
     public Map<String, Object> getBudgetSummary(Long userId) {
         List<Budget> budgets = budgetRepository.findByUserId(userId);
-        List<Expense> expenses = expenseRepository.findByUserIdOrderByDateDesc(userId);
+        List<Map<String, Object>> expenses =
+                expenseClient.getUserExpenses(userId, BearerForward.currentAuthorization());
 
         // Only count spending for the current month
         LocalDate now = LocalDate.now();
@@ -60,10 +66,18 @@ public class BudgetService {
         int currentMonth = now.getMonthValue();
 
         Map<String, BigDecimal> spent = new HashMap<>();
-        for (Expense e : expenses) {
-            if (e.getDate().getYear() == currentYear && e.getDate().getMonthValue() == currentMonth) {
-                // Use absolute value so negative expense amounts are summed correctly
-                spent.merge(e.getCategory(), e.getAmount().abs(), BigDecimal::add);
+        if (expenses != null) {
+            for (Map<String, Object> e : expenses) {
+                Object dateRaw = e.get("date");
+                Object amountRaw = e.get("amount");
+                Object categoryRaw = e.get("category");
+                if (dateRaw == null || amountRaw == null) continue;
+                LocalDate date = LocalDate.parse(String.valueOf(dateRaw));
+                if (date.getYear() == currentYear && date.getMonthValue() == currentMonth) {
+                    // Use absolute value so negative expense amounts are summed correctly
+                    BigDecimal amount = new BigDecimal(String.valueOf(amountRaw));
+                    spent.merge(String.valueOf(categoryRaw), amount.abs(), BigDecimal::add);
+                }
             }
         }
 

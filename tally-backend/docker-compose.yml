@@ -1,0 +1,96 @@
+# Tally microservices — one-command local orchestration.
+#
+#   docker-compose up --build
+#
+# brings up Postgres (schema pre-loaded from database/schema.sql), the four
+# backend services and the api-gateway. The system is then reachable at
+# http://localhost:8082 — same port the mobile app targets. No other steps.
+#
+# Secrets/overrides live in a local .env file (see .env.example) — nothing is
+# hardcoded in the Dockerfiles. Defaults below work out of the box for a
+# fully local stack (local Postgres, dev JWT secret, MoMo disabled).
+
+services:
+  tally-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: tallydb
+      POSTGRES_USER: tally
+      POSTGRES_PASSWORD: tally
+    volumes:
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+      - tally-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tally -d tallydb"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+    ports:
+      - "5432:5432"
+
+  auth-service:
+    build: ./auth-service
+    environment: &db-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://tally-db:5432/tallydb
+      DB_USERNAME: tally
+      DB_PASSWORD: tally
+      JWT_SECRET: ${JWT_SECRET:-local-dev-jwt-secret-change-me-32chars!}
+      INCLUDE_ERROR_MESSAGES: always
+    depends_on:
+      tally-db:
+        condition: service_healthy
+
+  expense-service:
+    build: ./expense-service
+    environment:
+      <<: *db-env
+      BUDGET_SERVICE_URL: http://budget-service:8092
+      GROUP_SERVICE_URL: http://group-service:8093
+      AUTH_SERVICE_URL: http://auth-service:8090
+      MOMO_SUBSCRIPTION_KEY: ${MOMO_SUBSCRIPTION_KEY:-}
+      MOMO_API_USER: ${MOMO_API_USER:-}
+      MOMO_API_KEY: ${MOMO_API_KEY:-}
+      MOMO_DISBURSEMENT_SUBSCRIPTION_KEY: ${MOMO_DISBURSEMENT_SUBSCRIPTION_KEY:-}
+      MOMO_DISBURSEMENT_API_USER: ${MOMO_DISBURSEMENT_API_USER:-}
+      MOMO_DISBURSEMENT_API_KEY: ${MOMO_DISBURSEMENT_API_KEY:-}
+    depends_on:
+      tally-db:
+        condition: service_healthy
+
+  budget-service:
+    build: ./budget-service
+    environment:
+      <<: *db-env
+      EXPENSE_SERVICE_URL: http://expense-service:8091
+    depends_on:
+      tally-db:
+        condition: service_healthy
+
+  group-service:
+    build: ./group-service
+    environment:
+      <<: *db-env
+      EXPENSE_SERVICE_URL: http://expense-service:8091
+      AUTH_SERVICE_URL: http://auth-service:8090
+    depends_on:
+      tally-db:
+        condition: service_healthy
+
+  api-gateway:
+    build: ./api-gateway
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:8090
+      EXPENSE_SERVICE_URL: http://expense-service:8091
+      BUDGET_SERVICE_URL: http://budget-service:8092
+      GROUP_SERVICE_URL: http://group-service:8093
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
+    ports:
+      - "8082:8082"
+    depends_on:
+      - auth-service
+      - expense-service
+      - budget-service
+      - group-service
+
+volumes:
+  tally-db-data:

@@ -78,6 +78,9 @@ public class BudgetController {
             // iterates every key and would try to render "success" as a budget category.
             Map<String, Object> summary = budgetService.getBudgetSummary(userId);
             return ResponseEntity.ok(summary);
+        } catch (budget_service.client.DownstreamUnavailableException e) {
+            return ResponseEntity.status(503)
+                    .body(Map.of("error", e.getMessage(), "success", false));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", errorMessage(e), "success", false));

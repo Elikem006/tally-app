@@ -129,6 +129,9 @@ public class ExpenseController {
             Map<String, Object> response = new HashMap<>(report);
             response.put("success", true);
             return ResponseEntity.ok(response);
+        } catch (expense_service.client.DownstreamUnavailableException e) {
+            return ResponseEntity.status(503)
+                    .body(Map.of("error", errorMessage(e), "success", false));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", errorMessage(e), "success", false));
@@ -149,6 +152,9 @@ public class ExpenseController {
                 return ResponseEntity.ok(history.subList(from, to));
             }
             return ResponseEntity.ok(history);
+        } catch (expense_service.client.DownstreamUnavailableException e) {
+            return ResponseEntity.status(503)
+                    .body(Map.of("error", errorMessage(e), "success", false));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", errorMessage(e), "success", false));

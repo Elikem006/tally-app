@@ -64,6 +64,9 @@ public class ReminderController {
                     userId, title, amount, dueDate, isRecurring, recurrenceType);
             return ResponseEntity.status(HttpStatus.CREATED).body(reminder);
 
+        } catch (expense_service.client.DownstreamUnavailableException e) {
+            return ResponseEntity.status(503)
+                    .body(Map.of("error", e.getMessage(), "success", false));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", errorMessage(e), "success", false));
         }

@@ -4,7 +4,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import expense_service.model.Reminder;
 import expense_service.repository.ReminderRepository;
-import expense_service.repository.UserRepository;
+import expense_service.client.AuthClient;
+import expense_service.client.BearerForward;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -16,12 +17,14 @@ public class ReminderService {
     private ReminderRepository reminderRepository;
 
     @Autowired
-    private UserRepository userRepository;
+    private AuthClient authClient;
 
     public Reminder createReminder(Long userId, String title, BigDecimal amount,
                                    LocalDate dueDate, Boolean isRecurring,
                                    String recurrenceType) {
-        if (!userRepository.existsById(userId)) {
+        // User existence check via auth-service's API (users table is owned
+        // by auth-service; this service may not read it directly)
+        if (!authClient.userExists(userId, BearerForward.currentAuthorization())) {
             throw new RuntimeException("User not found: " + userId);
         }
         Reminder reminder = new Reminder();

@@ -42,3 +42,9 @@ jwt.secret=${JWT_SECRET}
 # setting stays permissive because only the gateway reaches this service.
 # ---------------------------------------------------------------------------
 app.cors.allowed-origins=${ALLOWED_ORIGINS:*}
+
+# ---------------------------------------------------------------------------
+# Inter-service URLs — this service calls other Tally services over HTTP only
+# (never their tables). Direct service URLs, not the gateway.
+# ---------------------------------------------------------------------------
+services.expense-url=${EXPENSE_SERVICE_URL:http://localhost:8091}

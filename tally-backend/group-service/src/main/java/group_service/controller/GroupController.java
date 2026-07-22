@@ -130,6 +130,9 @@ public class GroupController {
             // GroupService creates a new HashMap — safe to mutate directly
             details.put("success", true);
             return ResponseEntity.ok(details);
+        } catch (group_service.client.DownstreamUnavailableException e) {
+            return ResponseEntity.status(503)
+                    .body(Map.of("error", e.getMessage(), "success", false));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", errorMessage(e), "success", false));
@@ -195,6 +198,9 @@ public class GroupController {
         try {
             List<Map<String, Object>> balances = groupService.calculateBalances(groupId);
             return ResponseEntity.ok(balances);
+        } catch (group_service.client.DownstreamUnavailableException e) {
+            return ResponseEntity.status(503)
+                    .body(Map.of("error", e.getMessage(), "success", false));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", errorMessage(e), "success", false));
@@ -233,6 +239,27 @@ public class GroupController {
         try {
             groupService.deleteGroup(groupId);
             return ResponseEntity.ok(Map.of("message", "Group deleted successfully", "success", true));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", errorMessage(e), "success", false));
+        }
+    }
+
+    /**
+     * GET /api/groups/user/:id/shared-data — internal aggregate used by
+     * expense-service's report/history composition (instead of expense-service
+     * reading group tables directly). Same-user JWT enforcement applies via
+     * the /user/{id} path check in JwtAuthFilter.
+     */
+    @GetMapping("/user/{userId}/shared-data")
+    public ResponseEntity<?> getUserSharedData(@PathVariable Long userId) {
+        try {
+            Map<String, Object> data = groupService.getUserSharedData(userId);
+            data.put("success", true);
+            return ResponseEntity.ok(data);
+        } catch (group_service.client.DownstreamUnavailableException e) {
+            return ResponseEntity.status(503)
+                    .body(Map.of("error", e.getMessage(), "success", false));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", errorMessage(e), "success", false));

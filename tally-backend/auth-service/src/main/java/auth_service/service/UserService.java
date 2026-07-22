@@ -153,4 +153,22 @@ public class UserService {
         user.setResetOtpExpiry(null);
         userRepository.save(user);
     }
+
+    /**
+     * Batch user lookup for other Tally services (group-service enriches
+     * members/balances with names + avatars). Display-level fields only —
+     * no emails, no password hashes.
+     */
+    public java.util.Map<String, Object> lookupUsers(java.util.List<Long> userIds) {
+        java.util.Map<String, Object> out = new java.util.HashMap<>();
+        if (userIds == null || userIds.isEmpty()) return out;
+        for (User u : userRepository.findAllById(userIds)) {
+            java.util.Map<String, Object> entry = new java.util.HashMap<>();
+            entry.put("name",       u.getName());
+            entry.put("avatarType", u.getAvatarType());
+            entry.put("avatarData", u.getAvatarData());
+            out.put(String.valueOf(u.getId()), entry);
+        }
+        return out;
+    }
 }
