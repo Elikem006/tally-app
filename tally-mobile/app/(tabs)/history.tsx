@@ -397,13 +397,14 @@ export default function HistoryScreen() {
   }, [totalBudget, activeTimeFilter]);
 
   // Total spent = every non-income transaction (personal AND shared), regardless
-  // of stored sign — expenses are always money going out. Settlements are
-  // income (money coming back), so they reduce the net total.
+  // of stored sign — expenses are always money going out. Income and
+  // settlements are money coming IN, so they are excluded entirely (not
+  // subtracted) — "Total Spent" only ever reflects money going out and never
+  // goes negative.
   const totalSpent = useMemo(() => {
     return filteredExpenses.reduce((sum, e) => {
-      const amt = Math.abs(parseFloat(e.amount || '0'));
-      if (e.type === 'income' || e.paymentMethod === 'SETTLEMENT') return sum - amt;
-      return sum + amt;
+      if (e.type === 'income' || e.paymentMethod === 'SETTLEMENT') return sum;
+      return sum + Math.abs(parseFloat(e.amount || '0'));
     }, 0);
   }, [filteredExpenses]);
 
