@@ -87,7 +87,8 @@ function CountUpText({ value, style }: { value: number; style?: any }) {
   useEffect(() => {
     anim.setValue(0);
     const id = anim.addListener(({ value: v }) => {
-      setDisplay((value * v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+      const safeVal = (Number(value) || 0) * v;
+      setDisplay(safeVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
     });
     Animated.timing(anim, {
       toValue: 1,
@@ -206,10 +207,10 @@ export default function ReportScreen() {
     cardBorder: "#ffffff10",
     text: "#ffffff",
     textSecondary: "#8890A0",
-    accent: "#00C896",
+    accent: "#A78BFA",
     chartBg: "#1A1F2E",
     segmentBg: "#0F1117",
-    segmentActive: "#00C896",
+    segmentActive: "#A78BFA",
     segmentActiveText: "#000000",
     segmentText: "#8890A0",
     heroBase: "#203A43",
@@ -225,10 +226,10 @@ export default function ReportScreen() {
     cardBorder: "#E5E7EB",
     text: "#1A1A2E",
     textSecondary: "#6B7280",
-    accent: "#00A87A",
+    accent: "#8B5CF6",
     chartBg: "#FFFFFF",
     segmentBg: "#E5E7EB",
-    segmentActive: "#00A87A",
+    segmentActive: "#8B5CF6",
     segmentActiveText: "#FFFFFF",
     segmentText: "#6B7280",
     heroBase: "#E8F8F3",
@@ -281,11 +282,18 @@ export default function ReportScreen() {
     }, [selectedMonth, selectedYear])
   );
 
-  // Animate content in whenever the month changes
+  // Animate content in whenever the month changes or loading completes
   useEffect(() => {
-    slideAnim.setValue(0);
-    Animated.timing(slideAnim, { toValue: 1, duration: 320, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
-  }, [selectedMonth, selectedYear]);
+    if (!loading) {
+      slideAnim.setValue(0);
+      Animated.timing(slideAnim, {
+        toValue: 1,
+        duration: 320,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [selectedMonth, selectedYear, loading]);
 
   // Chart draw-in on load and whenever data/timeline changes
   useEffect(() => {
@@ -582,7 +590,7 @@ export default function ReportScreen() {
   function budgetColor(pct: number) {
     if (pct >= 100) return "#EF4444";
     if (pct >= 80) return "#F59E0B";
-    return t.accent;
+    return "#34D399";
   }
 
   // ── Error state ───────────────────────────────────────────────────────────
@@ -798,7 +806,7 @@ export default function ReportScreen() {
                   pointerEvents="none"
                 >
                   <Text style={styles.tooltipTitle}>{points[selectedPoint].dateLabel}</Text>
-                  <Text style={[styles.tooltipValue, { color: "#00C896" }]}>
+                  <Text style={[styles.tooltipValue, { color: t.accent }]}>
                     GHS {points[selectedPoint].spend.toFixed(2)}
                   </Text>
                 </View>

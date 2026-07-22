@@ -61,7 +61,7 @@ export default function PayVendorScreen() {
   useEffect(() => {
     safeStorage.getItem(RECENTS_KEY)
       .then((raw) => raw && setRecentRecipients(JSON.parse(raw)))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   async function rememberRecipient(phone: string) {
@@ -116,7 +116,7 @@ export default function PayVendorScreen() {
       if (res.data?.status === "unavailable") {
         setError(
           res.data?.message ??
-            "The payment service is not responding right now. Your transfer is pending — check the status again shortly."
+          "The payment service is not responding right now. Your transfer is pending — check the status again shortly."
         );
         setTransferStatus("PENDING");
         return; // finally block still runs → setLoading(false) + setStep(4)
@@ -128,8 +128,8 @@ export default function PayVendorScreen() {
         Alert.alert(
           "Expense not saved",
           "The transfer went through, but we could not save it to your expense history" +
-            (res.data?.expenseError ? `: ${res.data.expenseError}` : ".") +
-            "\n\nYou may need to add this expense manually.",
+          (res.data?.expenseError ? `: ${res.data.expenseError}` : ".") +
+          "\n\nYou may need to add this expense manually.",
         );
       }
 
@@ -154,9 +154,9 @@ export default function PayVendorScreen() {
 
       // Haptic feedback on payment outcome
       if (status === "SUCCESSFUL") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => { });
       } else if (status === "FAILED") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => { });
       }
 
       // Expense is recorded by the backend (MoMoController) when the transfer is initiated.
@@ -167,7 +167,7 @@ export default function PayVendorScreen() {
           title: "MoMo Transfer",
           body: `GHS ${parseFloat(amount).toFixed(2)} sent to ${vendorPhone.trim()} via MoMo.`,
           data: { screen: "history" },
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       // If navigated from Add Expense, go back to Add tab after a short delay

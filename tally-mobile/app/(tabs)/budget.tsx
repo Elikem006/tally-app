@@ -50,7 +50,7 @@ export default function BudgetScreen() {
   const { colors, theme } = useTheme();
   const [activeTab, setActiveTab] = useState(0); // 0 = Overview, 1 = Setup
   const scrollViewRef = useRef<ScrollView>(null);
-  
+
   // Data States
   const [summary, setSummary] = useState<{ [key: string]: any }>({});
   const [customCategories, setCustomCategories] = useState<any[]>([]);
@@ -85,7 +85,7 @@ export default function BudgetScreen() {
   const [error, setError] = useState<string | null>(null);
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
-  
+
   const notificationsSentRef = useRef(false);
 
   useFocusEffect(
@@ -119,7 +119,7 @@ export default function BudgetScreen() {
       // Reconstruct Setup states from Summary data
       const newLimits: { [key: string]: string } = {};
       const newSpent: { [key: string]: number } = {};
-      
+
       CATEGORIES.forEach((category) => {
         const catData = data[category];
         if (catData) {
@@ -130,7 +130,7 @@ export default function BudgetScreen() {
           newSpent[category] = 0;
         }
       });
-      
+
       setLimits(newLimits);
       setSpent(newSpent);
 
@@ -185,7 +185,7 @@ export default function BudgetScreen() {
         } else {
           try {
             await budgetAPI.deleteBudget(userId, category);
-          } catch {}
+          } catch { }
         }
       }
       showToast('Your budgets have been saved!', 'success');
@@ -210,7 +210,7 @@ export default function BudgetScreen() {
           for (const category of CATEGORIES) {
             try {
               await budgetAPI.deleteBudget(userId, category);
-            } catch {}
+            } catch { }
           }
           showToast('Budgets cleared successfully', 'success');
           await fetchData(false);
@@ -223,7 +223,7 @@ export default function BudgetScreen() {
   function getBarColor(isOverBudget: boolean, isNearLimit: boolean) {
     if (isOverBudget) return '#FF3B30'; // Red
     if (isNearLimit) return '#FF9500'; // Orange
-    return '#8B5CF6'; // Violet / Purple
+    return '#34D399'; // Green (same in Light and Dark mode)
   }
 
   if (fetching) {
@@ -377,8 +377,8 @@ export default function BudgetScreen() {
                             {hasOver
                               ? "You've exceeded your budget in some categories."
                               : hasWarning
-                              ? "Some categories are getting close to their limit."
-                              : "Great job — all budgets are under control!"}
+                                ? "Some categories are getting close to their limit."
+                                : "Great job — all budgets are under control!"}
                           </Text>
                         </View>
                       )}
@@ -401,7 +401,7 @@ export default function BudgetScreen() {
                           </View>
                           <Text style={[styles.categoryTitle, { color: colors.text }]}>{category}</Text>
                         </View>
-                        
+
                         {data.isOverBudget && (
                           <View style={styles.warningBadge}>
                             <Text style={styles.warningText}>Over!</Text>
@@ -445,9 +445,11 @@ export default function BudgetScreen() {
                         { color: colors.textSecondary },
                         data.isOverBudget && { color: colors.negative }
                       ]}>
-                        {data.isOverBudget
-                          ? `GHS ${(parseFloat(data.spent || 0) - parseFloat(data.limit || 0)).toFixed(2)} over budget`
-                          : `GHS ${(parseFloat(data.limit || 0) - parseFloat(data.spent || 0)).toFixed(2)} remaining`}
+                        {parseFloat(data.limit || 0) === 0
+                          ? 'No budget limit set'
+                          : data.isOverBudget
+                            ? `GHS ${(parseFloat(data.spent || 0) - parseFloat(data.limit || 0)).toFixed(2)} over budget`
+                            : `GHS ${(parseFloat(data.limit || 0) - parseFloat(data.spent || 0)).toFixed(2)} remaining`}
                       </Text>
                     </View>
                   );
@@ -633,7 +635,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     lineHeight: 18,
   },
-  
+
   // Overview Tab Styles
   categoryCard: {
     backgroundColor: '#F8F9FA',
@@ -871,7 +873,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  
+
   // Empty State Styles
   emptyContainer: {
     alignItems: 'center',
@@ -924,7 +926,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 15,
   },
-  
+
   // General / Error Styles
   errorIcon: {
     fontSize: 48,
