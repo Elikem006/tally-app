@@ -792,6 +792,20 @@ export const groupAPI = {
   },
 };
 
+/**
+ * True when a request failed in a way where we can't know whether the backend
+ * completed the work: client-side timeout, dead network, or a 5xx from the
+ * gateway/resilience layer. Callers should treat these as "pending/unknown",
+ * not as a definitive failure. A 4xx with an error body is definitive.
+ */
+export function isTransientApiError(err: any): boolean {
+  if (!err) return false;
+  if (err.code === "ECONNABORTED") return true; // axios request timeout
+  const status = err.response?.status;
+  if (status === undefined) return true; // no response at all (network error)
+  return status === 502 || status === 503 || status === 504;
+}
+
 export const momoAPI = {
   requestPayment: async (
     groupId: string,

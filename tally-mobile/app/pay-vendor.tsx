@@ -12,7 +12,7 @@ import {
   Alert,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { momoAPI } from "../services/api";
+import { momoAPI, isTransientApiError } from "../services/api";
 import { getUserId, currentUser, safeStorage } from "../services/storage";
 import { addHistoryItem } from "../services/notificationHistory";
 import * as Haptics from "expo-haptics";
@@ -48,6 +48,9 @@ export default function PayVendorScreen() {
   const [category, setCategory] = useState(initialCategory ?? "Other");
   const [referenceId, setReferenceId] = useState("");
   const [transferStatus, setTransferStatus] = useState("");
+  // Manual status checks that still came back PENDING — after a few, stop
+  // implying it will resolve here and point the user to History instead.
+  const [pendingChecks, setPendingChecks] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -174,12 +177,26 @@ export default function PayVendorScreen() {
         }, 2000);
       }
     } catch (err: any) {
-      const msg =
-        err?.response?.data?.error ??
-        err?.message ??
-        "Transfer failed. Please try again.";
-      setError(msg);
-      setTransferStatus("FAILED");
+      if (isTransientApiError(err)) {
+        // Timeout or dead network between app and backend — the transfer may
+        // still have gone through (the backend keeps working after our request
+        // times out). Ambiguous, so show pending, never "failed".
+        setError(
+          "We couldn't confirm the transfer — the connection dropped. If it went through it will appear in your History shortly; otherwise it's safe to try again."
+        );
+        setTransferStatus("PENDING");
+      } else {
+        // Definitive rejection (validation error or explicit MoMo decline) —
+        // show the backend's message, but translate technical auth/config
+        // failures (expired or missing sandbox credentials) into plain words.
+        const raw: string | undefined = err?.response?.data?.error;
+        const msg =
+          raw && /401|UNAUTHORIZED|token/i.test(raw)
+            ? "The payment service rejected our credentials, so no money was sent. Please try again later."
+            : raw ?? "The transfer could not be completed. Please try again.";
+        setError(msg);
+        setTransferStatus("FAILED");
+      }
     } finally {
       setLoading(false);
       setStep(4);
@@ -403,7 +420,9 @@ export default function PayVendorScreen() {
                   Payment Pending
                 </Text>
                 <Text style={styles.resultBody}>
-                  {error || "The transfer is still being processed. Check back shortly."}
+                  {pendingChecks >= 3
+                    ? "This is taking longer than usual. You can safely leave — the final result will show in your History. No money is lost if it didn't go through."
+                    : error || "The transfer is still being processed. Check back shortly."}
                 </Text>
                 {!!referenceId && (
                   <TouchableOpacity
@@ -414,12 +433,13 @@ export default function PayVendorScreen() {
                         const r = await momoAPI.checkTransferStatus(referenceId);
                         const newStatus = r.data?.status ?? "PENDING";
                         setTransferStatus(newStatus);
+                        if (newStatus === "PENDING") setPendingChecks((n) => n + 1);
                         // Expense already recorded by backend when transfer was initiated.
                         if (newStatus === "SUCCESSFUL" && fromAddExpense === "true") {
                           setTimeout(() => router.replace("/(tabs)/add"), 2000);
                         }
                       } catch {
-                        // keep PENDING
+                        setPendingChecks((n) => n + 1); // keep PENDING
                       } finally {
                         setLoading(false);
                       }
@@ -456,6 +476,7 @@ export default function PayVendorScreen() {
                   setError("");
                   setReferenceId("");
                   setTransferStatus("");
+                  setPendingChecks(0);
                 }}
                 activeOpacity={0.7}
               >
