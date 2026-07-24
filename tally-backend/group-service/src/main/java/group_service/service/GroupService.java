@@ -599,8 +599,10 @@ public class GroupService {
 
         // Record settlement income for the member(s) who were owed money,
         // split proportionally to how much each was owed. The expense belongs
-        // to the OWED user, so we mint a service token for that user (shared
-        // JWT_SECRET) — expense-service's own validation still applies.
+        // to the OWED user, so we mint a scoped internal-service token acting
+        // on their behalf (shared JWT_SECRET) — expense-service recognizes
+        // this token shape distinctly from a real user session token and
+        // only honors it on the one endpoint this flow needs.
         if (totalOwed.compareTo(BigDecimal.ZERO) > 0) {
             for (Map.Entry<Long, BigDecimal> owed : owedTo.entrySet()) {
                 BigDecimal portion = owedAmount
@@ -608,7 +610,7 @@ public class GroupService {
                         .divide(totalOwed, 2, RoundingMode.HALF_UP);
                 if (portion.compareTo(BigDecimal.ZERO) <= 0) continue;
                 try {
-                    String serviceToken = jwtUtil.generateToken("internal@tally.service", owed.getKey());
+                    String serviceToken = jwtUtil.generateInternalServiceToken(owed.getKey());
                     expenseServiceClient.createSettlementExpense(
                             owed.getKey(),
                             portion,

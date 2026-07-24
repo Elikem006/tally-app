@@ -35,6 +35,26 @@ public class JwtUtil {
                 .compact();
     }
 
+    /**
+     * Mints a credential for a service-to-service call made ON BEHALF OF a
+     * user, distinct from that user's own session token: it carries
+     * scope=internal-service and actingOnBehalfOf so the receiving service
+     * can recognize, restrict and log it as a system-initiated action rather
+     * than treat it as indistinguishable from the user's own request. Short
+     * (2 min) expiry — minted immediately before the call it's used for.
+     */
+    public String generateInternalServiceToken(Long actingOnBehalfOfUserId) {
+        return Jwts.builder()
+                .setSubject("internal@tally.service")
+                .claim("userId", actingOnBehalfOfUserId)
+                .claim("scope", "internal-service")
+                .claim("actingOnBehalfOf", actingOnBehalfOfUserId)
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + 120_000))
+                .signWith(getKey(), SignatureAlgorithm.HS256)
+                .compact();
+    }
+
     public String getEmailFromToken(String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(getKey())
