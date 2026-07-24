@@ -89,6 +89,21 @@ public class GroupController {
         }
     }
 
+    // GET /api/groups/user/:id/co-members — flat list of userIds who share at
+    // least one group with :id. Deliberately minimal (ids only, no names or
+    // expenses) — auth-service calls this to authorize POST
+    // /api/auth/users/lookup, and a richer response would call back into
+    // that same lookup endpoint to embed names, recursing.
+    @GetMapping("/user/{userId}/co-members")
+    public ResponseEntity<?> getCoMembers(@PathVariable Long userId) {
+        try {
+            return ResponseEntity.ok(groupService.getCoMemberIds(userId));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", errorMessage(e), "success", false));
+        }
+    }
+
     // GET /api/groups/user/:id — get all groups for a user
     @GetMapping("/user/{userId}")
     public ResponseEntity<?> getUserGroups(@PathVariable Long userId) {

@@ -34,7 +34,7 @@ Set `MOMO_CALLBACK_URL` to `https://<gateway-domain>/api/momo/callback` (the cal
 | expense-service | `BUDGET_SERVICE_URL`, `GROUP_SERVICE_URL`, `AUTH_SERVICE_URL` |
 | budget-service | `EXPENSE_SERVICE_URL` |
 | group-service | `EXPENSE_SERVICE_URL`, `AUTH_SERVICE_URL` |
-| auth-service | none (calls nobody) |
+| auth-service | `GROUP_SERVICE_URL` (co-member check for `/api/auth/users/lookup`) |
 
 api-gateway only:
 

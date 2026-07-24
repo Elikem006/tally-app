@@ -177,6 +177,21 @@ public class GroupService {
         return addMember(groupId, userId, null);
     }
 
+    /**
+     * Every userId that shares at least one group with {userId} — the shared
+     * context auth-service checks a lookup request against before resolving
+     * a name/avatar for someone the caller isn't otherwise connected to.
+     */
+    public Set<Long> getCoMemberIds(Long userId) {
+        Set<Long> coMembers = new HashSet<>();
+        for (GroupMember own : groupMemberRepository.findByUserId(userId)) {
+            for (GroupMember other : groupMemberRepository.findByGroupId(own.getGroupId())) {
+                coMembers.add(other.getUserId());
+            }
+        }
+        return coMembers;
+    }
+
     // Add a member to a group — only an existing member or the creator may invite someone.
     public GroupMember addMember(Long groupId, Long userId, Long requestingUserId) {
         requireMemberOrCreator(groupId, requestingUserId);

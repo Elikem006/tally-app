@@ -10,6 +10,13 @@
 # hardcoded in the Dockerfiles. Defaults below work out of the box for a
 # fully local stack (local Postgres, dev JWT secret, MoMo disabled).
 
+x-db-env: &db-env
+  SPRING_DATASOURCE_URL: jdbc:postgresql://tally-db:5432/tallydb
+  DB_USERNAME: tally
+  DB_PASSWORD: tally
+  JWT_SECRET: ${JWT_SECRET:-local-dev-jwt-secret-change-me-32chars!}
+  INCLUDE_ERROR_MESSAGES: always
+
 services:
   tally-db:
     image: postgres:16-alpine
@@ -30,12 +37,9 @@ services:
 
   auth-service:
     build: ./auth-service
-    environment: &db-env
-      SPRING_DATASOURCE_URL: jdbc:postgresql://tally-db:5432/tallydb
-      DB_USERNAME: tally
-      DB_PASSWORD: tally
-      JWT_SECRET: ${JWT_SECRET:-local-dev-jwt-secret-change-me-32chars!}
-      INCLUDE_ERROR_MESSAGES: always
+    environment:
+      <<: *db-env
+      GROUP_SERVICE_URL: http://group-service:8093
     depends_on:
       tally-db:
         condition: service_healthy

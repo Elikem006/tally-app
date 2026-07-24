@@ -42,3 +42,9 @@ jwt.secret=${JWT_SECRET}
 # setting stays permissive because only the gateway reaches this service.
 # ---------------------------------------------------------------------------
 app.cors.allowed-origins=${ALLOWED_ORIGINS:*}
+
+# ---------------------------------------------------------------------------
+# Inter-service URL — auth-service's one outbound call: asking group-service
+# who shares a group with the caller, to authorize POST /api/auth/users/lookup.
+# ---------------------------------------------------------------------------
+services.group-url=${GROUP_SERVICE_URL:http://localhost:8093}
