@@ -572,7 +572,25 @@ public class GroupService {
             }
         }
 
-        // If a phone number is provided, fire the MoMo request first — via
+        // Mark expenses as settled FIRST — history is preserved, balances
+        // reset. @Version on SharedExpense guards against concurrent
+        // settle-ups: a simultaneous update throws OptimisticLockException
+        // here and rolls back, before anything below (including the MoMo
+        // request) ever runs. This ordering matters: with the MoMo call
+        // ahead of this write, two racing requests could both pass the
+        // owedAmount check and both fire a real request-to-pay for the same
+        // money before either learned it lost the race on the DB write —
+        // confirmed live (three separate MoMo referenceIds dispatched for
+        // one eventual settlement) before this was reordered. Now only the
+        // request that actually wins the write ever reaches the MoMo call.
+        for (SharedExpense se : expenses) {
+            if (!Boolean.TRUE.equals(se.getSettled())) {
+                se.setSettled(true);
+            }
+        }
+        sharedExpenseRepository.saveAll(expenses);
+
+        // If a phone number is provided, fire the MoMo request — via
         // expense-service's /api/momo/pay (the single MoMo implementation).
         // That endpoint returns as soon as a referenceId is minted; the actual
         // MTN round trip (with its own retries) runs off its request thread,
@@ -597,16 +615,6 @@ public class GroupService {
                 momoStatus = "FAILED";
             }
         }
-
-        // Mark expenses as settled — history is preserved, balances reset.
-        // @Version on SharedExpense guards against concurrent settle-ups: a
-        // simultaneous update throws OptimisticLockException and rolls back.
-        for (SharedExpense se : expenses) {
-            if (!Boolean.TRUE.equals(se.getSettled())) {
-                se.setSettled(true);
-            }
-        }
-        sharedExpenseRepository.saveAll(expenses);
 
         // Settler's display name via auth-service; degrade gracefully rather
         // than failing the settle if auth-service is briefly unreachable.
