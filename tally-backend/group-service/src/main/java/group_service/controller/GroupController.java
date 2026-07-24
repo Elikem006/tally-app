@@ -2,6 +2,7 @@ package group_service.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -253,6 +254,13 @@ public class GroupController {
             // GroupService creates a new HashMap — safe to mutate directly
             result.put("success", true);
             return ResponseEntity.ok(result);
+        } catch (OptimisticLockingFailureException e) {
+            // Two settle-up requests raced on the same SharedExpense rows —
+            // @Version caught it and rolled back. Without this catch, the
+            // blanket Exception handler below would swallow it into a 400
+            // before it ever reached GlobalExceptionHandler's 409 mapping.
+            return ResponseEntity.status(409)
+                    .body(Map.of("error", "This settlement was already processed, please refresh", "success", false));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", errorMessage(e), "success", false));
