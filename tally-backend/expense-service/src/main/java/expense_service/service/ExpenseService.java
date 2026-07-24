@@ -189,9 +189,12 @@ public class ExpenseService {
      * Toggle recurring on/off for an expense. When enabling, recurrenceType must be
      * DAILY, WEEKLY or MONTHLY and nextDueDate is computed from today accordingly.
      */
-    public Expense updateRecurring(Long expenseId, boolean isRecurring, String recurrenceType) {
+    public Expense updateRecurring(Long expenseId, boolean isRecurring, String recurrenceType, Long requestingUserId) {
         Expense expense = expenseRepository.findById(expenseId)
                 .orElseThrow(() -> new RuntimeException("Expense not found: " + expenseId));
+        if (requestingUserId == null || !expense.getUserId().equals(requestingUserId)) {
+            throw new RuntimeException("Unauthorized: This expense does not belong to you");
+        }
 
         if (isRecurring) {
             String type = recurrenceType != null ? recurrenceType.trim().toUpperCase() : "";

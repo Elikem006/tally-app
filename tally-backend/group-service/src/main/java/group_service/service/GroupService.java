@@ -155,8 +155,31 @@ public class GroupService {
         return group;
     }
 
-    // Add a member to a group
+    /**
+     * Throws unless requestingUserId is a member (or the creator) of groupId.
+     * Callers must pass the JWT-authenticated userId here, never a
+     * client-suppliable field — this is the authorization gate for every
+     * group-scoped read/write below, not just a display-personalization hint.
+     */
+    private void requireMemberOrCreator(Long groupId, Long requestingUserId) {
+        Group group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new RuntimeException("Group not found"));
+        boolean isCreator = requestingUserId != null && requestingUserId.equals(group.getCreatedBy());
+        boolean isMember = requestingUserId != null
+                && groupMemberRepository.existsByGroupIdAndUserId(groupId, requestingUserId);
+        if (!isCreator && !isMember) {
+            throw new RuntimeException("Unauthorized: you are not a member of this group");
+        }
+    }
+
+    // Backward-compatible overload — no authorization check (internal/legacy callers)
     public GroupMember addMember(Long groupId, Long userId) {
+        return addMember(groupId, userId, null);
+    }
+
+    // Add a member to a group — only an existing member or the creator may invite someone.
+    public GroupMember addMember(Long groupId, Long userId, Long requestingUserId) {
+        requireMemberOrCreator(groupId, requestingUserId);
         if (groupMemberRepository.existsByGroupIdAndUserId(groupId, userId)) {
             throw new RuntimeException("User is already a member of this group");
         }
@@ -227,15 +250,18 @@ public class GroupService {
         return net;
     }
 
-    // Backward-compatible overload — no personalization
+    // Backward-compatible overload — no authorization check (internal/legacy callers)
     public Map<String, Object> getGroupDetails(Long groupId) {
-        return getGroupDetails(groupId, null);
+        return getGroupDetails(groupId, null, null);
     }
 
     // Get group details — members and expenses enriched with names.
-    // When viewingUserId is provided, each expense also carries the viewer's
-    // share (userShare), whether they paid (isPayer) and a displayAmount.
-    public Map<String, Object> getGroupDetails(Long groupId, Long viewingUserId) {
+    // requestingUserId is the JWT-authenticated caller and is the authorization
+    // gate (must be a member/creator). viewingUserId is a separate, purely
+    // cosmetic hint for which perspective to personalize each expense from —
+    // it grants no access on its own and is kept distinct from the auth check.
+    public Map<String, Object> getGroupDetails(Long groupId, Long viewingUserId, Long requestingUserId) {
+        requireMemberOrCreator(groupId, requestingUserId);
         Group group = groupRepository.findById(groupId)
                 .orElseThrow(() -> new RuntimeException("Group not found"));
         List<GroupMember> members = groupMemberRepository.findByGroupId(groupId);
@@ -300,18 +326,26 @@ public class GroupService {
         return details;
     }
 
-    // Add a shared expense to a group (EQUAL split)
+    // Backward-compatible overload — no authorization check (internal/legacy callers)
     public SharedExpense addSharedExpense(Long groupId, Long paidBy, BigDecimal amount, String description) {
-        return addSharedExpense(groupId, paidBy, amount, description, "EQUAL", null);
+        return addSharedExpense(groupId, paidBy, amount, description, "EQUAL", null, null);
     }
 
     /**
      * Add a shared expense with either an EQUAL split or a CUSTOM percentage split.
      * For CUSTOM, splitRatios is a JSON map of userId → percentage that must cover
      * every group member and sum to exactly 100.
+     *
+     * requestingUserId is the JWT-authenticated caller: must be a group member
+     * (or creator). paidBy must also be an actual group member — without this,
+     * anyone could attribute a fabricated expense to an arbitrary userId
+     * (including a non-member), inflating what real members appear to owe.
      */
     public SharedExpense addSharedExpense(Long groupId, Long paidBy, BigDecimal amount,
-                                          String description, String splitType, String splitRatios) {
+                                          String description, String splitType, String splitRatios,
+                                          Long requestingUserId) {
+        requireMemberOrCreator(groupId, requestingUserId);
+
         // Sanitize description: strip HTML tags (XSS), trim, treat blank as null
         if (description != null) {
             description = description.replaceAll("<[^>]*>", "").trim();
@@ -331,6 +365,24 @@ public class GroupService {
         List<GroupMember> currentMembers = groupMemberRepository.findByGroupId(groupId);
         if (currentMembers.isEmpty()) {
             throw new RuntimeException("Group has no members");
+        }
+        boolean payerIsMember = currentMembers.stream().anyMatch(m -> m.getUserId().equals(paidBy));
+        if (!payerIsMember) {
+            throw new RuntimeException("paidBy must be a member of this group");
+        }
+
+        // Idempotency guard: an identical expense (same group+payer+amount+
+        // description) added within the last 10 seconds is treated as a
+        // double-submit — return the existing record instead of duplicating it.
+        // Mirrors the same guard already applied to personal expenses.
+        java.time.LocalDateTime cutoff = java.time.LocalDateTime.now().minusSeconds(10);
+        for (SharedExpense recent : sharedExpenseRepository.findByGroupId(groupId)) {
+            if (recent.getCreatedAt() != null && recent.getCreatedAt().isAfter(cutoff)
+                    && recent.getPaidBy() != null && recent.getPaidBy().equals(paidBy)
+                    && recent.getAmount() != null && recent.getAmount().compareTo(amount) == 0
+                    && Objects.equals(recent.getDescription(), description)) {
+                return recent;
+            }
         }
         StringBuilder participantCsv = new StringBuilder();
         for (GroupMember m : currentMembers) {
@@ -421,8 +473,11 @@ public class GroupService {
         return balances;
     }
 
-    // Calculate balances — who owes whom, with names (names via auth-service)
-    public List<Map<String, Object>> calculateBalances(Long groupId) {
+    // Calculate balances — who owes whom, with names (names via auth-service).
+    // requestingUserId (the JWT-authenticated caller) must be a member/creator —
+    // otherwise anyone could read any group's financial breakdown by guessing groupId.
+    public List<Map<String, Object>> calculateBalances(Long groupId, Long requestingUserId) {
+        requireMemberOrCreator(groupId, requestingUserId);
         Map<Long, BigDecimal> balances = rawBalances(groupId);
 
         List<Long> nonZeroIds = balances.entrySet().stream()
@@ -650,7 +705,15 @@ public class GroupService {
         return result;
     }
 
-    public void deleteGroup(Long groupId) {
+    // Only the group creator may delete a group — same bar as removeMember,
+    // since this destroys every member's shared-expense history at once.
+    public void deleteGroup(Long groupId, Long requestingUserId) {
+        Group group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new RuntimeException("Group not found"));
+        if (requestingUserId == null || !requestingUserId.equals(group.getCreatedBy())) {
+            throw new RuntimeException("Only the group creator can delete this group");
+        }
+
         List<GroupMember> members = groupMemberRepository.findByGroupId(groupId);
         groupMemberRepository.deleteAll(members);
 

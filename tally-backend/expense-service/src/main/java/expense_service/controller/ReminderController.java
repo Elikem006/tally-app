@@ -94,22 +94,22 @@ public class ReminderController {
         }
     }
 
-    // PUT /api/reminders/{reminderId}/paid
+    // PUT /api/reminders/{reminderId}/paid — must belong to the caller
     @PutMapping("/{reminderId}/paid")
-    public ResponseEntity<?> markPaid(@PathVariable Long reminderId) {
+    public ResponseEntity<?> markPaid(@PathVariable Long reminderId, HttpServletRequest httpRequest) {
         try {
-            Reminder reminder = reminderService.markPaid(reminderId);
+            Reminder reminder = reminderService.markPaid(reminderId, AuthGuard.authUserId(httpRequest));
             return ResponseEntity.ok(reminder);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
-    // DELETE /api/reminders/{reminderId}
+    // DELETE /api/reminders/{reminderId} — must belong to the caller
     @DeleteMapping("/{reminderId}")
-    public ResponseEntity<?> deleteReminder(@PathVariable Long reminderId) {
+    public ResponseEntity<?> deleteReminder(@PathVariable Long reminderId, HttpServletRequest httpRequest) {
         try {
-            reminderService.deleteReminder(reminderId);
+            reminderService.deleteReminder(reminderId, AuthGuard.authUserId(httpRequest));
             return ResponseEntity.ok(Map.of("message", "Reminder deleted", "success", true));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", errorMessage(e), "success", false));
