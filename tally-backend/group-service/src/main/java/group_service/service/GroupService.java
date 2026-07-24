@@ -574,7 +574,12 @@ public class GroupService {
 
         // If a phone number is provided, fire the MoMo request first — via
         // expense-service's /api/momo/pay (the single MoMo implementation).
-        // Failures never block the settle-up, matching original behavior.
+        // That endpoint returns as soon as a referenceId is minted; the actual
+        // MTN round trip (with its own retries) runs off its request thread,
+        // so this synchronous HTTP call returns quickly regardless of MTN's
+        // real latency — no risk of this eating into the settle-up response's
+        // own timeout budget. Failures never block the settle-up either way:
+        // the caller discovers the real outcome via GET /api/momo/status.
         if (phoneNumber != null && !phoneNumber.isBlank()) {
             try {
                 Map<String, Object> momo = expenseServiceClient.momoRequestToPay(
