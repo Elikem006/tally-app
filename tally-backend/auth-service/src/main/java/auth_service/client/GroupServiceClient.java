@@ -1,5 +1,8 @@
 package auth_service.client;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
@@ -26,12 +29,14 @@ import java.util.Set;
 public class GroupServiceClient {
 
     private final RestTemplate restTemplate;
+    private final CircuitBreaker circuitBreaker;
 
     @Value("${services.group-url}")
     private String groupServiceUrl;
 
-    public GroupServiceClient(RestTemplate interServiceRestTemplate) {
+    public GroupServiceClient(RestTemplate interServiceRestTemplate, CircuitBreakerRegistry circuitBreakerRegistry) {
         this.restTemplate = interServiceRestTemplate;
+        this.circuitBreaker = circuitBreakerRegistry.circuitBreaker("group-service");
     }
 
     public Set<Long> getCoMemberIds(Long userId, String authorization) {
@@ -39,12 +44,15 @@ public class GroupServiceClient {
         if (authorization != null) headers.set(HttpHeaders.AUTHORIZATION, authorization);
 
         try {
-            List<Long> ids = restTemplate.exchange(
+            List<Long> ids = circuitBreaker.executeSupplier(() -> restTemplate.exchange(
                     groupServiceUrl + "/api/groups/user/" + userId + "/co-members",
                     HttpMethod.GET,
                     new HttpEntity<>(headers),
-                    new ParameterizedTypeReference<List<Long>>() { }).getBody();
+                    new ParameterizedTypeReference<List<Long>>() { }).getBody());
             return ids != null ? new HashSet<>(ids) : new HashSet<>();
+        } catch (CallNotPermittedException e) {
+            throw new DownstreamUnavailableException(
+                    "Group service is temporarily unavailable.", e);
         } catch (ResourceAccessException e) {
             throw new DownstreamUnavailableException(
                     "Group service is temporarily unavailable.", e);

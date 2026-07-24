@@ -1,5 +1,8 @@
 package expense_service.client;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
@@ -23,12 +26,14 @@ import java.util.Map;
 public class GroupDataClient {
 
     private final RestTemplate restTemplate;
+    private final CircuitBreaker circuitBreaker;
 
     @Value("${services.group-url}")
     private String groupServiceUrl;
 
-    public GroupDataClient(RestTemplate interServiceRestTemplate) {
+    public GroupDataClient(RestTemplate interServiceRestTemplate, CircuitBreakerRegistry circuitBreakerRegistry) {
         this.restTemplate = interServiceRestTemplate;
+        this.circuitBreaker = circuitBreakerRegistry.circuitBreaker("group-service");
     }
 
     /**
@@ -42,13 +47,16 @@ public class GroupDataClient {
         HttpHeaders headers = new HttpHeaders();
         if (authorization != null) headers.set(HttpHeaders.AUTHORIZATION, authorization);
         try {
-            Map<String, Object> body = restTemplate.exchange(
+            Map<String, Object> body = circuitBreaker.executeSupplier(() -> restTemplate.exchange(
                     groupServiceUrl + "/api/groups/user/" + userId + "/shared-data",
                     HttpMethod.GET,
                     new HttpEntity<>(headers),
-                    new ParameterizedTypeReference<Map<String, Object>>() { }).getBody();
+                    new ParameterizedTypeReference<Map<String, Object>>() { }).getBody());
             Object groups = body != null ? body.get("groups") : null;
             return groups instanceof List ? (List<Map<String, Object>>) groups : new ArrayList<>();
+        } catch (CallNotPermittedException e) {
+            throw new DownstreamUnavailableException(
+                    "Group service is temporarily unavailable. Please try again shortly.", e);
         } catch (ResourceAccessException e) {
             throw new DownstreamUnavailableException(
                     "Group service is temporarily unavailable. Please try again shortly.", e);

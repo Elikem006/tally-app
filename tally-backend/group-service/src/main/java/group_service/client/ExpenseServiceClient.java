@@ -1,5 +1,8 @@
 package group_service.client;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
@@ -27,12 +30,16 @@ import java.util.Map;
 public class ExpenseServiceClient {
 
     private final RestTemplate restTemplate;
+    // Shared by both calls below — they hit the same downstream, so a
+    // struggling expense-service should trip one breaker, not two.
+    private final CircuitBreaker circuitBreaker;
 
     @Value("${services.expense-url}")
     private String expenseServiceUrl;
 
-    public ExpenseServiceClient(RestTemplate interServiceRestTemplate) {
+    public ExpenseServiceClient(RestTemplate interServiceRestTemplate, CircuitBreakerRegistry circuitBreakerRegistry) {
         this.restTemplate = interServiceRestTemplate;
+        this.circuitBreaker = circuitBreakerRegistry.circuitBreaker("expense-service");
     }
 
     /**
@@ -58,11 +65,14 @@ public class ExpenseServiceClient {
         body.put("paymentMethod", paymentMethod);
 
         try {
-            restTemplate.exchange(
+            circuitBreaker.executeRunnable(() -> restTemplate.exchange(
                     expenseServiceUrl + "/api/expenses",
                     HttpMethod.POST,
                     new HttpEntity<>(body, headers),
-                    new ParameterizedTypeReference<Map<String, Object>>() { });
+                    new ParameterizedTypeReference<Map<String, Object>>() { }));
+        } catch (CallNotPermittedException e) {
+            throw new DownstreamUnavailableException(
+                    "Expense service is temporarily unavailable. Please try again shortly.", e);
         } catch (ResourceAccessException e) {
             throw new DownstreamUnavailableException(
                     "Expense service is temporarily unavailable. Please try again shortly.", e);
@@ -89,11 +99,14 @@ public class ExpenseServiceClient {
         body.put("description", description);
 
         try {
-            return restTemplate.exchange(
+            return circuitBreaker.executeSupplier(() -> restTemplate.exchange(
                     expenseServiceUrl + "/api/momo/pay",
                     HttpMethod.POST,
                     new HttpEntity<>(body, headers),
-                    new ParameterizedTypeReference<Map<String, Object>>() { }).getBody();
+                    new ParameterizedTypeReference<Map<String, Object>>() { }).getBody());
+        } catch (CallNotPermittedException e) {
+            throw new DownstreamUnavailableException(
+                    "Payment service is temporarily unavailable. Please try again shortly.", e);
         } catch (ResourceAccessException e) {
             throw new DownstreamUnavailableException(
                     "Payment service is temporarily unavailable. Please try again shortly.", e);

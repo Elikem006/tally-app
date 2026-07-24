@@ -1,5 +1,8 @@
 package budget_service.client;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
@@ -22,12 +25,14 @@ import java.util.Map;
 public class ExpenseClient {
 
     private final RestTemplate restTemplate;
+    private final CircuitBreaker circuitBreaker;
 
     @Value("${services.expense-url}")
     private String expenseServiceUrl;
 
-    public ExpenseClient(RestTemplate interServiceRestTemplate) {
+    public ExpenseClient(RestTemplate interServiceRestTemplate, CircuitBreakerRegistry circuitBreakerRegistry) {
         this.restTemplate = interServiceRestTemplate;
+        this.circuitBreaker = circuitBreakerRegistry.circuitBreaker("expense-service");
     }
 
     /**
@@ -39,12 +44,15 @@ public class ExpenseClient {
         HttpHeaders headers = new HttpHeaders();
         if (authorization != null) headers.set(HttpHeaders.AUTHORIZATION, authorization);
         try {
-            return restTemplate.exchange(
+            return circuitBreaker.executeSupplier(() -> restTemplate.exchange(
                     expenseServiceUrl + "/api/expenses/user/" + userId,
                     HttpMethod.GET,
                     new HttpEntity<>(headers),
                     new ParameterizedTypeReference<List<Map<String, Object>>>() { }
-            ).getBody();
+            ).getBody());
+        } catch (CallNotPermittedException e) {
+            throw new DownstreamUnavailableException(
+                    "Expense service is temporarily unavailable. Please try again shortly.", e);
         } catch (ResourceAccessException e) {
             throw new DownstreamUnavailableException(
                     "Expense service is temporarily unavailable. Please try again shortly.", e);
