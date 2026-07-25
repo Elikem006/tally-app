@@ -208,11 +208,13 @@ public class ExpenseController {
      */
     @PutMapping("/{expenseId}/recurring")
     public ResponseEntity<?> updateRecurring(@PathVariable Long expenseId,
-                                             @RequestBody Map<String, String> request) {
+                                             @RequestBody Map<String, String> request,
+                                             HttpServletRequest httpRequest) {
         try {
             boolean isRecurring = Boolean.parseBoolean(request.get("isRecurring"));
             String recurrenceType = request.get("recurrenceType");
-            Expense updated = expenseService.updateRecurring(expenseId, isRecurring, recurrenceType);
+            Expense updated = expenseService.updateRecurring(
+                    expenseId, isRecurring, recurrenceType, AuthGuard.authUserId(httpRequest));
             return ResponseEntity.ok(updated);
         } catch (Exception e) {
             return ResponseEntity.badRequest()

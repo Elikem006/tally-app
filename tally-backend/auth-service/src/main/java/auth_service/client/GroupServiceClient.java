@@ -1,4 +1,4 @@
-package budget_service.client;
+package auth_service.client;
 
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -13,52 +13,52 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 
 /**
- * budget-service's ONLY access to expense data: expense-service's real API.
- * (The former read-only JPA mapping of the expenses table has been removed —
- * a service may only touch its own tables.)
+ * auth-service's only outbound call: asking group-service who shares a group
+ * with a given user, to authorize POST /api/auth/users/lookup. The caller's
+ * own JWT is forwarded (not a minted token) — group-service's JwtAuthFilter
+ * enforces that the path userId matches that JWT's own userId, so this can
+ * only ever be asked "who do I share a group with", never on someone else's
+ * behalf.
  */
 @Component
-public class ExpenseClient {
+public class GroupServiceClient {
 
     private final RestTemplate restTemplate;
     private final CircuitBreaker circuitBreaker;
 
-    @Value("${services.expense-url}")
-    private String expenseServiceUrl;
+    @Value("${services.group-url}")
+    private String groupServiceUrl;
 
-    public ExpenseClient(RestTemplate interServiceRestTemplate, CircuitBreakerRegistry circuitBreakerRegistry) {
+    public GroupServiceClient(RestTemplate interServiceRestTemplate, CircuitBreakerRegistry circuitBreakerRegistry) {
         this.restTemplate = interServiceRestTemplate;
-        this.circuitBreaker = circuitBreakerRegistry.circuitBreaker("expense-service");
+        this.circuitBreaker = circuitBreakerRegistry.circuitBreaker("group-service");
     }
 
-    /**
-     * GET /api/expenses/user/{id} with the caller's own JWT forwarded, so
-     * expense-service's auth (token validity + /user/{id} ownership) applies
-     * exactly as if the mobile app had called it.
-     */
-    public List<Map<String, Object>> getUserExpenses(Long userId, String authorization) {
+    public Set<Long> getCoMemberIds(Long userId, String authorization) {
         HttpHeaders headers = new HttpHeaders();
         if (authorization != null) headers.set(HttpHeaders.AUTHORIZATION, authorization);
+
         try {
-            return circuitBreaker.executeSupplier(() -> restTemplate.exchange(
-                    expenseServiceUrl + "/api/expenses/user/" + userId,
+            List<Long> ids = circuitBreaker.executeSupplier(() -> restTemplate.exchange(
+                    groupServiceUrl + "/api/groups/user/" + userId + "/co-members",
                     HttpMethod.GET,
                     new HttpEntity<>(headers),
-                    new ParameterizedTypeReference<List<Map<String, Object>>>() { }
-            ).getBody());
+                    new ParameterizedTypeReference<List<Long>>() { }).getBody());
+            return ids != null ? new HashSet<>(ids) : new HashSet<>();
         } catch (CallNotPermittedException e) {
             throw new DownstreamUnavailableException(
-                    "Expense service is temporarily unavailable. Please try again shortly.", e);
+                    "Group service is temporarily unavailable.", e);
         } catch (ResourceAccessException e) {
             throw new DownstreamUnavailableException(
-                    "Expense service is temporarily unavailable. Please try again shortly.", e);
+                    "Group service is temporarily unavailable.", e);
         } catch (RestClientException e) {
             throw new DownstreamUnavailableException(
-                    "Expense service returned an unexpected error. Please try again shortly.", e);
+                    "Co-member lookup failed: " + e.getMessage(), e);
         }
     }
 }

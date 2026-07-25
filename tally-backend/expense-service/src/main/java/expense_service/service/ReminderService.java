@@ -52,9 +52,12 @@ public class ReminderService {
                 .toList();
     }
 
-    public Reminder markPaid(Long reminderId) {
+    public Reminder markPaid(Long reminderId, Long requestingUserId) {
         Reminder reminder = reminderRepository.findById(reminderId)
                 .orElseThrow(() -> new RuntimeException("Reminder not found: " + reminderId));
+        if (requestingUserId == null || !reminder.getUserId().equals(requestingUserId)) {
+            throw new RuntimeException("Unauthorized: This reminder does not belong to you");
+        }
         reminder.setIsPaid(true);
         Reminder saved = reminderRepository.save(reminder);
 
@@ -84,9 +87,11 @@ public class ReminderService {
         return saved;
     }
 
-    public void deleteReminder(Long reminderId) {
-        if (!reminderRepository.existsById(reminderId)) {
-            throw new RuntimeException("Reminder not found: " + reminderId);
+    public void deleteReminder(Long reminderId, Long requestingUserId) {
+        Reminder reminder = reminderRepository.findById(reminderId)
+                .orElseThrow(() -> new RuntimeException("Reminder not found: " + reminderId));
+        if (requestingUserId == null || !reminder.getUserId().equals(requestingUserId)) {
+            throw new RuntimeException("Unauthorized: This reminder does not belong to you");
         }
         reminderRepository.deleteById(reminderId);
     }

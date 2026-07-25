@@ -14,6 +14,7 @@ import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
 import java.util.logging.Logger;
 
 @RestController
@@ -30,6 +31,9 @@ public class MoMoController {
 
     @Autowired
     private RateLimiter rateLimiter;
+
+    @Autowired
+    private ExecutorService momoExecutor;
 
     // Sandbox phone format: digits only, 9–15 characters
     private static boolean isValidPhone(String phone) {
@@ -64,16 +68,40 @@ public class MoMoController {
      * POST /api/momo/pay
      * Body: { "userId", "phoneNumber", "amount", "description", "groupId" }
      *
-     * TODO: Add rate limiting before production to prevent abuse of MoMo payment endpoint.
-     * Consider using Spring's @RateLimiter (Resilience4j) or a Redis-based solution
-     * (e.g. Bucket4j) to limit requests per user/IP.
+     * Rate limited the same way as /transfer — without this, any authenticated
+     * user could spam MTN request-to-pay prompts at an arbitrary phone number
+     * (the recipient must still approve on their end, but repeated unwanted
+     * prompts are a real abuse vector on their own).
+     *
+     * The actual MTN round trip (including MoMoService's own internal retries
+     * on 500/503) runs on momoExecutor, off the request thread — this returns
+     * as soon as the referenceId exists, not after a third-party payment API
+     * answers. If the async call ultimately fails, it's logged server-side;
+     * the client discovers that the same way it already discovers a genuine
+     * MTN decline: by polling GET /api/momo/status/{referenceId}. Settle-up
+     * (which calls this endpoint synchronously) inherits the same fast return.
      */
     @PostMapping("/pay")
-    public ResponseEntity<?> initiatePay(@RequestBody Map<String, String> request) {
+    public ResponseEntity<?> initiatePay(@RequestBody Map<String, String> request,
+                                         HttpServletRequest httpRequest) {
         try {
             String phoneNumber = request.get("phoneNumber");
             String amountStr   = request.get("amount");
             String description = request.getOrDefault("description", "Tally group settle-up");
+            String userIdStr   = request.get("userId");
+
+            // The payment must be initiated by the authenticated user
+            if (userIdStr != null && !userIdStr.isBlank()) {
+                AuthGuard.requireSameUser(httpRequest, Long.parseLong(userIdStr));
+            }
+
+            // Rate limit: max 10 payment requests per user per hour (same budget as /transfer)
+            String limitKey = "pay:" + (userIdStr != null && !userIdStr.isBlank()
+                    ? userIdStr : String.valueOf(AuthGuard.authUserId(httpRequest)));
+            if (!rateLimiter.allow(limitKey, 10, 60 * 60 * 1000)) {
+                return ResponseEntity.status(429)
+                        .body(Map.of("error", "Payment request limit reached (10 per hour). Please try again later.", "success", false));
+            }
 
             if (phoneNumber == null || phoneNumber.isBlank()) {
                 return ResponseEntity.badRequest()
@@ -95,7 +123,15 @@ public class MoMoController {
             }
 
             String referenceId = UUID.randomUUID().toString();
-            moMoService.requestToPay(phoneNumber.trim(), amount, description, referenceId);
+            String phoneTrimmed = phoneNumber.trim();
+            momoExecutor.submit(() -> {
+                try {
+                    moMoService.requestToPay(phoneTrimmed, amount, description, referenceId);
+                } catch (Exception e) {
+                    log.severe("Async MoMo requestToPay failed. referenceId=" + referenceId
+                            + " : " + e.getMessage());
+                }
+            });
 
             return ResponseEntity.ok(Map.of(
                     "message",     "Payment request sent",

@@ -54,15 +54,18 @@ export default function PayVendorScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Recent recipients (last 3 numbers) for quick re-pay, like the MoMo app
-  const RECENTS_KEY = "tally_recent_recipients";
+  // Recent recipients (last 3 numbers) for quick re-pay, like the MoMo app.
+  // Namespaced by userId — a global key would leak one account's recent
+  // payees into whichever account is next logged in on the same device.
+  const RECENTS_KEY = `tally_recent_recipients:${getUserId()}`;
   const [recentRecipients, setRecentRecipients] = useState<string[]>([]);
 
   useEffect(() => {
+    setRecentRecipients([]); // don't show the previous key's recipients while loading
     safeStorage.getItem(RECENTS_KEY)
-      .then((raw) => raw && setRecentRecipients(JSON.parse(raw)))
+      .then((raw) => setRecentRecipients(raw ? JSON.parse(raw) : []))
       .catch(() => { });
-  }, []);
+  }, [RECENTS_KEY]);
 
   async function rememberRecipient(phone: string) {
     try {

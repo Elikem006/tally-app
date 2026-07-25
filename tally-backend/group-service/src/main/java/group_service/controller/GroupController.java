@@ -2,6 +2,7 @@ package group_service.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -54,11 +55,13 @@ public class GroupController {
         }
     }
 
-    // POST /api/groups/:id/members — add a member
+    // POST /api/groups/:id/members — add a member (caller must already be a
+    // member or the creator; enforced in GroupService.addMember)
     @PostMapping("/{groupId}/members")
     public ResponseEntity<?> addMember(
             @PathVariable Long groupId,
-            @RequestBody Map<String, String> request) {
+            @RequestBody Map<String, String> request,
+            HttpServletRequest httpRequest) {
         try {
             String userIdStr = request.get("userId");
             if (userIdStr == null || userIdStr.isBlank()) {
@@ -66,7 +69,7 @@ public class GroupController {
                         .body(Map.of("error", "userId is required", "success", false));
             }
             Long userId = Long.parseLong(userIdStr);
-            GroupMember member = groupService.addMember(groupId, userId);
+            GroupMember member = groupService.addMember(groupId, userId, AuthGuard.authUserId(httpRequest));
             return ResponseEntity.status(HttpStatus.CREATED).body(member);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
@@ -81,6 +84,21 @@ public class GroupController {
             Map<String, Object> net = groupService.getUserNetBalance(userId);
             net.put("success", true);
             return ResponseEntity.ok(net);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", errorMessage(e), "success", false));
+        }
+    }
+
+    // GET /api/groups/user/:id/co-members — flat list of userIds who share at
+    // least one group with :id. Deliberately minimal (ids only, no names or
+    // expenses) — auth-service calls this to authorize POST
+    // /api/auth/users/lookup, and a richer response would call back into
+    // that same lookup endpoint to embed names, recursing.
+    @GetMapping("/user/{userId}/co-members")
+    public ResponseEntity<?> getCoMembers(@PathVariable Long userId) {
+        try {
+            return ResponseEntity.ok(groupService.getCoMemberIds(userId));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", errorMessage(e), "success", false));
@@ -119,14 +137,17 @@ public class GroupController {
         }
     }
 
-    // GET /api/groups/:id — group details with members and expenses.
-    // Optional viewingUserId personalizes each expense (userShare, isPayer, displayAmount).
+    // GET /api/groups/:id — group details with members and expenses. Caller
+    // must be a member/creator (enforced in GroupService). Optional
+    // viewingUserId personalizes each expense (userShare, isPayer, displayAmount)
+    // — cosmetic only, not the authorization check.
     @GetMapping("/{groupId}")
     public ResponseEntity<?> getGroupDetails(
             @PathVariable Long groupId,
-            @RequestParam(required = false) Long viewingUserId) {
+            @RequestParam(required = false) Long viewingUserId,
+            HttpServletRequest httpRequest) {
         try {
-            Map<String, Object> details = groupService.getGroupDetails(groupId, viewingUserId);
+            Map<String, Object> details = groupService.getGroupDetails(groupId, viewingUserId, AuthGuard.authUserId(httpRequest));
             // GroupService creates a new HashMap — safe to mutate directly
             details.put("success", true);
             return ResponseEntity.ok(details);
@@ -139,11 +160,14 @@ public class GroupController {
         }
     }
 
-    // POST /api/groups/:id/expenses — add a shared expense
+    // POST /api/groups/:id/expenses — add a shared expense. Caller must be a
+    // member/creator, and paidBy must be an actual group member (both
+    // enforced in GroupService.addSharedExpense).
     @PostMapping("/{groupId}/expenses")
     public ResponseEntity<?> addSharedExpense(
             @PathVariable Long groupId,
-            @RequestBody Map<String, String> request) {
+            @RequestBody Map<String, String> request,
+            HttpServletRequest httpRequest) {
         try {
             String paidByStr = request.get("paidBy");
             String amountStr = request.get("amount");
@@ -184,7 +208,8 @@ public class GroupController {
             }
 
             SharedExpense expense = groupService.addSharedExpense(
-                    groupId, paidBy, amount, description, splitType, splitRatios);
+                    groupId, paidBy, amount, description, splitType, splitRatios,
+                    AuthGuard.authUserId(httpRequest));
             return ResponseEntity.status(HttpStatus.CREATED).body(expense);
         } catch (Exception e) {
             return ResponseEntity.badRequest()
@@ -192,11 +217,12 @@ public class GroupController {
         }
     }
 
-    // GET /api/groups/:id/balances — calculate who owes whom
+    // GET /api/groups/:id/balances — calculate who owes whom. Caller must be
+    // a member/creator (enforced in GroupService.calculateBalances).
     @GetMapping("/{groupId}/balances")
-    public ResponseEntity<?> getBalances(@PathVariable Long groupId) {
+    public ResponseEntity<?> getBalances(@PathVariable Long groupId, HttpServletRequest httpRequest) {
         try {
-            List<Map<String, Object>> balances = groupService.calculateBalances(groupId);
+            List<Map<String, Object>> balances = groupService.calculateBalances(groupId, AuthGuard.authUserId(httpRequest));
             return ResponseEntity.ok(balances);
         } catch (group_service.client.DownstreamUnavailableException e) {
             return ResponseEntity.status(503)
@@ -228,16 +254,25 @@ public class GroupController {
             // GroupService creates a new HashMap — safe to mutate directly
             result.put("success", true);
             return ResponseEntity.ok(result);
+        } catch (OptimisticLockingFailureException e) {
+            // Two settle-up requests raced on the same SharedExpense rows —
+            // @Version caught it and rolled back. Without this catch, the
+            // blanket Exception handler below would swallow it into a 400
+            // before it ever reached GlobalExceptionHandler's 409 mapping.
+            return ResponseEntity.status(409)
+                    .body(Map.of("error", "This settlement was already processed, please refresh", "success", false));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", errorMessage(e), "success", false));
         }
     }
 
+    // DELETE /api/groups/:id — only the group creator may delete a group
+    // (enforced in GroupService.deleteGroup).
     @DeleteMapping("/{groupId}")
-    public ResponseEntity<?> deleteGroup(@PathVariable Long groupId) {
+    public ResponseEntity<?> deleteGroup(@PathVariable Long groupId, HttpServletRequest httpRequest) {
         try {
-            groupService.deleteGroup(groupId);
+            groupService.deleteGroup(groupId, AuthGuard.authUserId(httpRequest));
             return ResponseEntity.ok(Map.of("message", "Group deleted successfully", "success", true));
         } catch (Exception e) {
             return ResponseEntity.badRequest()

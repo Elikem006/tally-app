@@ -1,13 +1,20 @@
 package auth_service.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import auth_service.AuthGuard;
 import auth_service.RateLimiter;
+import auth_service.client.DownstreamUnavailableException;
+import auth_service.client.GroupServiceClient;
 import auth_service.model.User;
 import auth_service.service.UserService;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -22,6 +29,15 @@ public class AuthController {
 
     @Autowired
     private RateLimiter rateLimiter;
+
+    @Autowired
+    private GroupServiceClient groupServiceClient;
+
+    // Lookup is called once per screen render (batched), not once per user —
+    // 60/min per caller comfortably covers real usage while still bounding
+    // enumeration attempts against the co-member filter below.
+    private static final int LOOKUP_MAX_PER_WINDOW = 60;
+    private static final long LOOKUP_WINDOW_MS = 60 * 1000;
 
     // Exceptions like NullPointerException can carry a null message — Map.of rejects null values
     private static String errorMessage(Exception e) {
@@ -103,6 +119,31 @@ public class AuthController {
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", errorMessage(e), "success", false));
         }
+    }
+
+    /**
+     * GET /api/auth/users/{userId}/exists — bare existence check, no PII.
+     *
+     * Deliberately separate from GET /user/{userId} (which JwtAuthFilter
+     * restricts to self-lookup only) and from POST /users/lookup (which
+     * requires a shared-group context — useless here, since checking
+     * whether someone you're ABOUT to invite exists is exactly the case
+     * where you don't share a group with them yet). Any authenticated user
+     * may check any userId; the response reveals nothing beyond a boolean,
+     * so there's nothing worth restricting further than rate-limiting.
+     */
+    @GetMapping("/users/{userId}/exists")
+    public ResponseEntity<?> userExists(@PathVariable Long userId, HttpServletRequest httpRequest) {
+        Long callerId = AuthGuard.authUserId(httpRequest);
+        if (callerId == null) {
+            return ResponseEntity.status(401)
+                    .body(Map.of("error", "Session expired. Please log in again.", "success", false));
+        }
+        if (!rateLimiter.allow("exists:" + callerId, 60, 60 * 1000)) {
+            return ResponseEntity.status(429)
+                    .body(Map.of("error", "Too many requests. Please slow down.", "success", false));
+        }
+        return ResponseEntity.ok(Map.of("userId", userId, "exists", userService.userExists(userId), "success", true));
     }
 
     @GetMapping("/user/{userId}")
@@ -208,14 +249,50 @@ public class AuthController {
      * POST /api/auth/users/lookup — batch display-info lookup (name + avatar)
      * for a set of userIds. Used by other Tally services (e.g. group-service
      * enriching members/balances) instead of reading the users table directly.
-     * Requires a valid JWT like any other endpoint; returns display fields
-     * only — the same information group screens already showed to members.
+     *
+     * Resolution is restricted to userIds the caller actually shares a group
+     * with (plus the caller's own id) — verified against group-service on
+     * every call, not trusted from the request. Without this, any
+     * authenticated user could pass an arbitrary userId and get back a
+     * stranger's name and avatar. Requested ids outside that set are
+     * silently dropped rather than erroring the whole batch, so one stale
+     * id in a client-cached list doesn't break the rest of the response.
      */
     @PostMapping("/users/lookup")
-    public ResponseEntity<?> lookupUsers(@RequestBody Map<String, java.util.List<Long>> request) {
+    public ResponseEntity<?> lookupUsers(@RequestBody Map<String, List<Long>> request,
+                                         HttpServletRequest httpRequest) {
         try {
-            java.util.List<Long> userIds = request.get("userIds");
-            return ResponseEntity.ok(userService.lookupUsers(userIds));
+            Long callerId = AuthGuard.authUserId(httpRequest);
+            if (callerId == null) {
+                return ResponseEntity.status(401)
+                        .body(Map.of("error", "Session expired. Please log in again.", "success", false));
+            }
+
+            if (!rateLimiter.allow("lookup:" + callerId, LOOKUP_MAX_PER_WINDOW, LOOKUP_WINDOW_MS)) {
+                return ResponseEntity.status(429)
+                        .body(Map.of("error", "Too many lookup requests. Please slow down.", "success", false));
+            }
+
+            List<Long> requested = request.get("userIds");
+            if (requested == null || requested.isEmpty()) {
+                return ResponseEntity.ok(Map.of());
+            }
+
+            Set<Long> allowed;
+            try {
+                allowed = groupServiceClient.getCoMemberIds(callerId, httpRequest.getHeader("Authorization"));
+            } catch (DownstreamUnavailableException e) {
+                // Fail closed: no verified shared context means no disclosure,
+                // rather than trusting the request while group-service is down.
+                allowed = new HashSet<>();
+            }
+            allowed = new HashSet<>(allowed);
+            allowed.add(callerId); // callers can always resolve their own display info
+
+            Set<Long> allowedFinal = allowed;
+            List<Long> filtered = requested.stream().filter(allowedFinal::contains).toList();
+
+            return ResponseEntity.ok(userService.lookupUsers(filtered));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", errorMessage(e), "success", false));

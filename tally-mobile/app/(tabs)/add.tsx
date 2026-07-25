@@ -96,16 +96,19 @@ export default function AddScreen() {
     description: string;
     paymentMethod?: 'CASH' | 'MOMO';
   };
-  const TEMPLATES_KEY = 'tallyExpenseTemplates';
+  // Namespaced by userId — a global key would leak one account's saved
+  // templates into whichever account is next logged in on the same device.
+  const TEMPLATES_KEY = `tallyExpenseTemplates:${getUserId()}`;
   const [templates, setTemplates] = useState<ExpenseTemplate[]>([]);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [templateName, setTemplateName] = useState('');
 
   useEffect(() => {
+    setTemplates([]); // don't show the previous key's templates while loading
     safeStorage.getItem(TEMPLATES_KEY)
-      .then((saved) => saved && setTemplates(JSON.parse(saved)))
+      .then((saved) => setTemplates(saved ? JSON.parse(saved) : []))
       .catch(() => {});
-  }, []);
+  }, [TEMPLATES_KEY]);
 
   function applyTemplate(t: ExpenseTemplate) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});

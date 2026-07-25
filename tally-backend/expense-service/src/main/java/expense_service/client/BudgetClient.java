@@ -1,5 +1,8 @@
 package expense_service.client;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
@@ -22,12 +25,14 @@ import java.util.Map;
 public class BudgetClient {
 
     private final RestTemplate restTemplate;
+    private final CircuitBreaker circuitBreaker;
 
     @Value("${services.budget-url}")
     private String budgetServiceUrl;
 
-    public BudgetClient(RestTemplate interServiceRestTemplate) {
+    public BudgetClient(RestTemplate interServiceRestTemplate, CircuitBreakerRegistry circuitBreakerRegistry) {
         this.restTemplate = interServiceRestTemplate;
+        this.circuitBreaker = circuitBreakerRegistry.circuitBreaker("budget-service");
     }
 
     /** GET /api/budgets/user/{id} with the caller's JWT forwarded. */
@@ -35,11 +40,14 @@ public class BudgetClient {
         HttpHeaders headers = new HttpHeaders();
         if (authorization != null) headers.set(HttpHeaders.AUTHORIZATION, authorization);
         try {
-            return restTemplate.exchange(
+            return circuitBreaker.executeSupplier(() -> restTemplate.exchange(
                     budgetServiceUrl + "/api/budgets/user/" + userId,
                     HttpMethod.GET,
                     new HttpEntity<>(headers),
-                    new ParameterizedTypeReference<List<Map<String, Object>>>() { }).getBody();
+                    new ParameterizedTypeReference<List<Map<String, Object>>>() { }).getBody());
+        } catch (CallNotPermittedException e) {
+            throw new DownstreamUnavailableException(
+                    "Budget service is temporarily unavailable. Please try again shortly.", e);
         } catch (ResourceAccessException e) {
             throw new DownstreamUnavailableException(
                     "Budget service is temporarily unavailable. Please try again shortly.", e);

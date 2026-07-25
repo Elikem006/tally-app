@@ -67,4 +67,20 @@ public class JwtUtil {
             return false;
         }
     }
+
+    /**
+     * True when this token was minted by another service acting on a user's
+     * behalf (see group_service.JwtUtil#generateInternalServiceToken), not by
+     * that user's own login — distinguishes system-initiated calls from the
+     * user's own session so callers can restrict and log them differently.
+     */
+    public boolean isInternalServiceToken(String token) {
+        Object claim = Jwts.parserBuilder()
+                .setSigningKey(getKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody()
+                .get("scope");
+        return "internal-service".equals(claim);
+    }
 }

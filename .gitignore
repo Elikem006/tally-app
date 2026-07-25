@@ -56,3 +56,6 @@ Thumbs.db
 
 # ---------- Scratch / local dumps ----------
 *.diff.txt
+
+# ---------- DB migration backups (real PII/password hashes — never commit) ----------
+backups/
