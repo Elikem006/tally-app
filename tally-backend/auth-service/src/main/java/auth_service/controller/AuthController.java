@@ -121,6 +121,31 @@ public class AuthController {
         }
     }
 
+    /**
+     * GET /api/auth/users/{userId}/exists — bare existence check, no PII.
+     *
+     * Deliberately separate from GET /user/{userId} (which JwtAuthFilter
+     * restricts to self-lookup only) and from POST /users/lookup (which
+     * requires a shared-group context — useless here, since checking
+     * whether someone you're ABOUT to invite exists is exactly the case
+     * where you don't share a group with them yet). Any authenticated user
+     * may check any userId; the response reveals nothing beyond a boolean,
+     * so there's nothing worth restricting further than rate-limiting.
+     */
+    @GetMapping("/users/{userId}/exists")
+    public ResponseEntity<?> userExists(@PathVariable Long userId, HttpServletRequest httpRequest) {
+        Long callerId = AuthGuard.authUserId(httpRequest);
+        if (callerId == null) {
+            return ResponseEntity.status(401)
+                    .body(Map.of("error", "Session expired. Please log in again.", "success", false));
+        }
+        if (!rateLimiter.allow("exists:" + callerId, 60, 60 * 1000)) {
+            return ResponseEntity.status(429)
+                    .body(Map.of("error", "Too many requests. Please slow down.", "success", false));
+        }
+        return ResponseEntity.ok(Map.of("userId", userId, "exists", userService.userExists(userId), "success", true));
+    }
+
     @GetMapping("/user/{userId}")
     public ResponseEntity<?> getUserById(@PathVariable Long userId) {
         try {

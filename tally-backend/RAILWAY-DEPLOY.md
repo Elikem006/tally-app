@@ -13,13 +13,15 @@ Each module has a committed `application.properties` with env-var placeholders o
 
 ## Environment variables
 
-Shared by all 4 backend services (identical values — same Neon DB, same JWT secret):
+**Database-per-service**: each backend service has its own dedicated Neon project — `DB_HOST`
+and `DB_NAME` are DIFFERENT per service (see `backups/NEW-NEON-PROJECTS-credentials.md`,
+gitignored, for the actual values). Everything else below is still shared:
 
 | Var | Value |
 |---|---|
-| `DB_HOST` | ep-…neon.tech (same as monolith) |
-| `DB_NAME` | tallydb |
-| `DB_USERNAME` / `DB_PASSWORD` | same as monolith |
+| `DB_HOST` | **per-service** — that service's own Neon project host, not shared |
+| `DB_NAME` | **per-service** — `neondb` on each project (Neon's default database name) |
+| `DB_USERNAME` / `DB_PASSWORD` | **per-service** — each project has its own `neondb_owner` credentials |
 | `JWT_SECRET` | **must be identical everywhere** — auth-service signs, the rest verify |
 | `INCLUDE_ERROR_MESSAGES` | `never` (production) |
 

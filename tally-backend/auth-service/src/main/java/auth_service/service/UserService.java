@@ -97,6 +97,10 @@ public class UserService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
     }
 
+    public boolean userExists(Long userId) {
+        return userId != null && userRepository.existsById(userId);
+    }
+
     public User updatePhoneNumber(Long userId, String phoneNumber) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));

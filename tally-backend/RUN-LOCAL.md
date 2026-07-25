@@ -7,7 +7,7 @@ cd tally-backend
 docker-compose up --build
 ```
 
-Postgres comes up with the schema pre-loaded (database/schema.sql), all five services start, and the system is reachable at http://localhost:8082 — nothing else to configure. Optional overrides (JWT secret, MoMo keys) go in `tally-backend/.env` (see `.env.example`).
+Postgres comes up with 4 separate databases, one per backend service, each pre-loaded with just its own schema (see `database/README.md`), all five services start, and the system is reachable at http://localhost:8082 — nothing else to configure. Optional overrides (JWT secret, MoMo keys) go in `tally-backend/.env` (see `.env.example`).
 
 ## Option B — five terminals (no Docker)
 

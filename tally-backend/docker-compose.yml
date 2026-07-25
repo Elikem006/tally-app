@@ -2,16 +2,23 @@
 #
 #   docker-compose up --build
 #
-# brings up Postgres (schema pre-loaded from database/schema.sql), the four
-# backend services and the api-gateway. The system is then reachable at
+# brings up Postgres (4 databases, one per service — schema pre-loaded from
+# database/*-schema.sql via database/init-multi-db.sh), the four backend
+# services and the api-gateway. The system is then reachable at
 # http://localhost:8082 — same port the mobile app targets. No other steps.
+#
+# Database-per-service: each service gets its own dedicated local database
+# (mirroring the 4 separate Neon projects in production) rather than sharing
+# one. Still one Postgres *container* though — 4 separate local containers
+# would add real startup/resource overhead with no isolation benefit anyone
+# would actually observe locally; the isolation that matters is the one in
+# production, which is genuinely separate servers.
 #
 # Secrets/overrides live in a local .env file (see .env.example) — nothing is
 # hardcoded in the Dockerfiles. Defaults below work out of the box for a
 # fully local stack (local Postgres, dev JWT secret, MoMo disabled).
 
-x-db-env: &db-env
-  SPRING_DATASOURCE_URL: jdbc:postgresql://tally-db:5432/tallydb
+x-app-env: &app-env
   DB_USERNAME: tally
   DB_PASSWORD: tally
   JWT_SECRET: ${JWT_SECRET:-local-dev-jwt-secret-change-me-32chars!}
@@ -21,14 +28,14 @@ services:
   tally-db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: tallydb
       POSTGRES_USER: tally
       POSTGRES_PASSWORD: tally
     volumes:
-      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+      - ./database:/schemas:ro
+      - ./database/init-multi-db.sh:/docker-entrypoint-initdb.d/init-multi-db.sh:ro
       - tally-db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U tally -d tallydb"]
+      test: ["CMD-SHELL", "pg_isready -U tally -d postgres"]
       interval: 3s
       timeout: 3s
       retries: 15
@@ -38,7 +45,8 @@ services:
   auth-service:
     build: ./auth-service
     environment:
-      <<: *db-env
+      <<: *app-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://tally-db:5432/tally_auth
       GROUP_SERVICE_URL: http://group-service:8093
     depends_on:
       tally-db:
@@ -47,7 +55,8 @@ services:
   expense-service:
     build: ./expense-service
     environment:
-      <<: *db-env
+      <<: *app-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://tally-db:5432/tally_expense
       BUDGET_SERVICE_URL: http://budget-service:8092
       GROUP_SERVICE_URL: http://group-service:8093
       AUTH_SERVICE_URL: http://auth-service:8090
@@ -64,7 +73,8 @@ services:
   budget-service:
     build: ./budget-service
     environment:
-      <<: *db-env
+      <<: *app-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://tally-db:5432/tally_budget
       EXPENSE_SERVICE_URL: http://expense-service:8091
     depends_on:
       tally-db:
@@ -73,7 +83,8 @@ services:
   group-service:
     build: ./group-service
     environment:
-      <<: *db-env
+      <<: *app-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://tally-db:5432/tally_group
       EXPENSE_SERVICE_URL: http://expense-service:8091
       AUTH_SERVICE_URL: http://auth-service:8090
     depends_on:

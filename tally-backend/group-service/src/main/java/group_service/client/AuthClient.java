@@ -67,4 +67,32 @@ public class AuthClient {
                     "User lookup failed: " + e.getMessage(), e);
         }
     }
+
+    /**
+     * GET /api/auth/users/{userId}/exists with the caller's JWT forwarded.
+     * The only application-level guard against fabricated group members now
+     * that the database has no foreign key to auth-service's users table —
+     * see GroupService.addMember.
+     */
+    public boolean userExists(Long userId, String authorization) {
+        HttpHeaders headers = new HttpHeaders();
+        if (authorization != null) headers.set(HttpHeaders.AUTHORIZATION, authorization);
+        try {
+            Map<String, Object> body = circuitBreaker.executeSupplier(() -> restTemplate.exchange(
+                    authServiceUrl + "/api/auth/users/" + userId + "/exists",
+                    HttpMethod.GET,
+                    new HttpEntity<>(headers),
+                    new ParameterizedTypeReference<Map<String, Object>>() { }).getBody());
+            return body != null && Boolean.TRUE.equals(body.get("exists"));
+        } catch (CallNotPermittedException e) {
+            throw new DownstreamUnavailableException(
+                    "User service is temporarily unavailable. Please try again shortly.", e);
+        } catch (ResourceAccessException e) {
+            throw new DownstreamUnavailableException(
+                    "User service is temporarily unavailable. Please try again shortly.", e);
+        } catch (RestClientException e) {
+            throw new DownstreamUnavailableException(
+                    "User existence check failed: " + e.getMessage(), e);
+        }
+    }
 }

@@ -11,7 +11,9 @@ spring.application.name=auth-service
 server.port=${PORT:8090}
 
 # ---------------------------------------------------------------------------
-# Database — shared Neon PostgreSQL (same DB across all Tally services)
+# Database — this service's own dedicated Neon project. Each Tally
+# service now has a separate database (true database-per-service); DB_HOST/
+# DB_NAME here point at THIS service's project only, not a shared one.
 # ---------------------------------------------------------------------------
 spring.datasource.url=jdbc:postgresql://${DB_HOST}/${DB_NAME}?sslmode=require
 spring.datasource.username=${DB_USERNAME}

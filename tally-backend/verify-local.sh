@@ -11,7 +11,7 @@
 # Usage (Git Bash / WSL / any bash):
 #   ./verify-local.sh                 # everything (services must be running, see RUN-LOCAL.md)
 #   BASE_URL=http://localhost:8082 ./verify-local.sh
-#   ./verify-local.sh auth|spend|group|settle|report   # run a single phase
+#   ./verify-local.sh auth|spend|group|settle|report|security|integrity   # run a single phase
 #                                       (state carries over in /tmp/tally-verify-state.env)
 #
 # Exit code 0 = all steps passed.
@@ -232,6 +232,30 @@ if [ "$PHASE" = "all" ] || [ "$PHASE" = "security" ]; then
   # work — confirms the fix blocks the exploit without breaking real invites.
   call POST "/api/groups/$GID/members" "$T1" "{\"userId\":\"$U3\"}"
   check "security-creator-can-still-invite" '^201$'
+fi
+
+# --------------------------------------------------------------- phase: integrity
+# True database-per-service (separate Neon project per service, no shared
+# tables, no FK constraints anywhere — see database/README.md) means nothing
+# at the DB level stops a fabricated cross-service reference. This phase
+# exercises the application-level replacement: group-service now calls
+# auth-service's GET /api/auth/users/{id}/exists before writing an invite to
+# group_members, since that's the one place an arbitrary (not the caller's
+# own JWT-derived) userId could enter the system.
+if [ "$PHASE" = "all" ] || [ "$PHASE" = "integrity" ]; then
+  # A userId this large will never collide with a real registered user.
+  FAKE_USER_ID=999999999
+
+  call POST "/api/groups/$GID/members" "$T1" "{\"userId\":\"$FAKE_USER_ID\"}"
+  check "integrity-block-fake-user-invite" '^4'
+
+  # The rejection must be a real application-level check, not a lucky error
+  # from something else — confirm the existence-check endpoint itself agrees.
+  call GET "/api/auth/users/$FAKE_USER_ID/exists" "$T1"
+  check "integrity-fake-user-reported-nonexistent" '^200$' '"exists":false'
+
+  call GET "/api/auth/users/$U1/exists" "$T1"
+  check "integrity-real-user-reported-existent" '^200$' '"exists":true'
 fi
 
 echo "-----------------------------------------"

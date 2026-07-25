@@ -198,6 +198,14 @@ public class GroupService {
         if (groupMemberRepository.existsByGroupIdAndUserId(groupId, userId)) {
             throw new RuntimeException("User is already a member of this group");
         }
+        // The database has no foreign key to auth-service's users table (true
+        // database-per-service — see database/README.md), so this HTTP check
+        // is the only thing standing between an invite and a fabricated
+        // userId silently entering group_members, where it would then dilute
+        // balance splits and be eligible as a shared expense's paidBy.
+        if (!authClient.userExists(userId, BearerForward.currentAuthorization())) {
+            throw new RuntimeException("No such user");
+        }
         GroupMember member = new GroupMember();
         member.setGroupId(groupId);
         member.setUserId(userId);
