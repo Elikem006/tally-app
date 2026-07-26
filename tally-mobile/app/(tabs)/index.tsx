@@ -620,9 +620,12 @@ export default function HomeScreen() {
               borderColor: `${paceOverBudget ? colors.negative : colors.positive}35`,
             },
           ]}>
-            <Text style={[typography.bodyStrong, { color: paceOverBudget ? colors.negative : colors.positive }]}>
-              📈 Spending pace: GHS {dailyAvg.toFixed(2)}/day — projected GHS {projected.toFixed(0)} this month
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+              <Feather name="trending-up" size={15} color={paceOverBudget ? colors.negative : colors.positive} />
+              <Text style={[typography.bodyStrong, { color: paceOverBudget ? colors.negative : colors.positive, flex: 1 }]}>
+                Spending pace: GHS {dailyAvg.toFixed(2)}/day — projected GHS {projected.toFixed(0)} this month
+              </Text>
+            </View>
             {totalBudget > 0 && (
               <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
                 {paceOverBudget

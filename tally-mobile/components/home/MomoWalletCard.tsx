@@ -1,5 +1,6 @@
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { Svg, Path } from 'react-native-svg';
+import Feather from '@expo/vector-icons/Feather';
 import { useTheme } from '../../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius } from '../../theme';
 import { Button } from '../ui';
@@ -70,7 +71,7 @@ export function MomoWalletCard({
     >
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.icon}>📱</Text>
+          <Feather name="smartphone" size={18} color={colors.accent} />
           <Text style={[typography.bodyStrong, { color: colors.accent, flex: 1 }]}>MTN MoMo Sandbox Wallet</Text>
         </View>
         {!balanceLoading && status === 'available' && (
@@ -112,7 +113,7 @@ export function MomoWalletCard({
       {!balanceLoading && status === 'unavailable' && (
         <View>
           <View style={styles.stateRow}>
-            <Text style={styles.smallIcon}>📡</Text>
+            <Feather name="wifi-off" size={14} color={colors.accent} />
             <Text style={[typography.bodyStrong, { color: colors.accent }]}>Sandbox balance temporarily unavailable</Text>
           </View>
           <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: spacing.xs }]}>
@@ -148,12 +149,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     gap: spacing.xs,
-  },
-  icon: {
-    fontSize: 20,
-  },
-  smallIcon: {
-    fontSize: 14,
   },
   hideBtn: {
     padding: spacing.xs + 2,

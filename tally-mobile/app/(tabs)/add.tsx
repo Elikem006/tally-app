@@ -605,8 +605,9 @@ export default function AddScreen() {
             if (left <= 0) {
               return (
                 <View style={[styles.warnBanner, { backgroundColor: `${colors.negative}12`, borderColor: `${colors.negative}35` }]}>
-                  <Text style={[typography.caption, { color: colors.negative, fontFamily: typography.bodyStrong.fontFamily }]}>
-                    🚨 You've already used your entire {selectedCategory} budget (GHS {limit.toFixed(0)}) this month.
+                  <Feather name="alert-octagon" size={15} color={colors.negative} style={{ marginRight: spacing.xs }} />
+                  <Text style={[typography.caption, { color: colors.negative, fontFamily: typography.bodyStrong.fontFamily, flex: 1 }]}>
+                    You've already used your entire {selectedCategory} budget (GHS {limit.toFixed(0)}) this month.
                   </Text>
                 </View>
               );
@@ -614,8 +615,9 @@ export default function AddScreen() {
             if (pending > left || left <= limit * 0.2) {
               return (
                 <View style={[styles.warnBanner, { backgroundColor: colors.warningSubtle, borderColor: `${colors.warning}40` }]}>
-                  <Text style={[typography.caption, { color: colors.warning, fontFamily: typography.bodyStrong.fontFamily }]}>
-                    ⚠️ You have only GHS {left.toFixed(2)} left in your {selectedCategory} budget this month{pending > left ? ' — this expense will exceed it' : ''}.
+                  <Feather name="alert-triangle" size={15} color={colors.warning} style={{ marginRight: spacing.xs }} />
+                  <Text style={[typography.caption, { color: colors.warning, fontFamily: typography.bodyStrong.fontFamily, flex: 1 }]}>
+                    You have only GHS {left.toFixed(2)} left in your {selectedCategory} budget this month{pending > left ? ' — this expense will exceed it' : ''}.
                   </Text>
                 </View>
               );
@@ -899,6 +901,8 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   warnBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     borderRadius: radius.sm,
     borderWidth: 1,
     paddingHorizontal: spacing.md,
