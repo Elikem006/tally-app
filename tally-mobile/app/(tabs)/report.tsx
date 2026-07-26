@@ -11,6 +11,7 @@ import {
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
+  useAnimatedProps,
   withTiming,
   withDelay,
   FadeInDown,
@@ -19,7 +20,16 @@ import { LinearGradient } from "expo-linear-gradient";
 import Feather from "@expo/vector-icons/Feather";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useFocusEffect, router } from "expo-router";
-import Svg, { Circle, Path, Line } from "react-native-svg";
+import Svg, {
+  Circle,
+  Path,
+  Line,
+  Defs,
+  Stop,
+  LinearGradient as SvgGradient,
+} from "react-native-svg";
+
+const AnimatedPath = Animated.createAnimatedComponent(Path);
 import { expenseAPI, categoriesAPI, remindersAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
 import { useTheme } from "../../hooks/useTheme";
@@ -70,6 +80,121 @@ function formatGhs(n: number): string {
 function spendOf(e: any): number {
   if (e.type === "income" || e.paymentMethod === "SETTLEMENT") return 0;
   return Math.abs(parseFloat(e.amount) || 0);
+}
+
+function parseLocalDate(dateStr: string) {
+  if (!dateStr) return new Date();
+  const parts = dateStr.split("-");
+  if (parts.length < 3) return new Date(dateStr);
+  return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+}
+
+export interface ChartBar {
+  day: string;
+  spend: number;
+  dateLabel: string;
+}
+
+/**
+ * Buckets spend into the timeline's windows, ending at `refDate`. Lifted out
+ * of the component so the current and previous periods are built by exactly
+ * the same code — the comparison is only honest if both series agree on how
+ * a bucket is defined.
+ */
+function buildBars(expenses: any[], timeline: Timeline, refDate: Date): ChartBar[] {
+  if (timeline === "day") {
+    const bars: ChartBar[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(refDate);
+      d.setDate(d.getDate() - i);
+      const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const spend = expenses.filter((e) => e.date === dateKey).reduce((s, e) => s + spendOf(e), 0);
+      bars.push({ day: SHORT_DAYS[d.getDay()], spend, dateLabel: `${SHORT_MONTHS[d.getMonth()]} ${d.getDate()}` });
+    }
+    return bars;
+  }
+
+  if (timeline === "week") {
+    const bars: ChartBar[] = [];
+    for (let i = 3; i >= 0; i--) {
+      const start = new Date(refDate);
+      start.setDate(refDate.getDate() - (i + 1) * 7 + 1);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(refDate);
+      end.setDate(refDate.getDate() - i * 7);
+      end.setHours(23, 59, 59, 999);
+      const spend = expenses.filter((e) => {
+        if (!e.date) return false;
+        const ed = parseLocalDate(e.date);
+        return ed >= start && ed <= end;
+      }).reduce((s, e) => s + spendOf(e), 0);
+      bars.push({ day: `W${4 - i}`, spend, dateLabel: `Week ${4 - i}` });
+    }
+    return bars;
+  }
+
+  if (timeline === "month") {
+    const bars: ChartBar[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(refDate.getFullYear(), refDate.getMonth() - i, 1);
+      const spend = expenses.filter((e) => {
+        if (!e.date) return false;
+        const ed = parseLocalDate(e.date);
+        return ed.getFullYear() === d.getFullYear() && ed.getMonth() === d.getMonth();
+      }).reduce((s, e) => s + spendOf(e), 0);
+      bars.push({ day: SHORT_MONTHS[d.getMonth()], spend, dateLabel: `${SHORT_MONTHS[d.getMonth()]} ${d.getFullYear()}` });
+    }
+    return bars;
+  }
+
+  const bars: ChartBar[] = [];
+  for (let i = 2; i >= 0; i--) {
+    const yr = refDate.getFullYear() - i;
+    const spend = expenses.filter((e) => {
+      if (!e.date) return false;
+      return parseLocalDate(e.date).getFullYear() === yr;
+    }).reduce((s, e) => s + spendOf(e), 0);
+    bars.push({ day: String(yr), spend, dateLabel: String(yr) });
+  }
+  return bars;
+}
+
+/** The reference date one full window earlier — the series we compare against. */
+function previousWindowRef(timeline: Timeline, refDate: Date): Date {
+  const d = new Date(refDate);
+  if (timeline === "day") d.setDate(d.getDate() - 7);
+  else if (timeline === "week") d.setDate(d.getDate() - 28);
+  else if (timeline === "month") d.setMonth(d.getMonth() - 6);
+  else d.setFullYear(d.getFullYear() - 3);
+  return d;
+}
+
+/**
+ * Cosine-interpolated polyline through the points, plus its own arc length so
+ * the line can draw itself in with strokeDashoffset.
+ */
+function buildCurve(pts: { x: number; y: number }[]) {
+  if (pts.length === 0) return { path: "", length: 0 };
+  const steps = 12;
+  let d = `M ${pts[0].x} ${pts[0].y}`;
+  let length = 0;
+  let prevX = pts[0].x;
+  let prevY = pts[0].y;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    for (let j = 1; j <= steps; j++) {
+      const tt = j / steps;
+      const mu = (1 - Math.cos(tt * Math.PI)) / 2;
+      const x = p1.x + tt * (p2.x - p1.x);
+      const y = p1.y + mu * (p2.y - p1.y);
+      d += ` L ${x.toFixed(2)} ${y.toFixed(2)}`;
+      length += Math.hypot(x - prevX, y - prevY);
+      prevX = x;
+      prevY = y;
+    }
+  }
+  return { path: d, length };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -274,70 +399,16 @@ export default function ReportScreen() {
   const selectedMonthName = MONTH_NAMES[selectedMonth];
 
   // ── Chart data (memoized) ─────────────────────────────────────────────────
-  const { chartBars } = useMemo(() => {
-    const parseLocalDate = (dateStr: string) => {
-      if (!dateStr) return new Date();
-      const parts = dateStr.split("-");
-      if (parts.length < 3) return new Date(dateStr);
-      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-    };
+  const chartBars = useMemo(
+    () => buildBars(expenses, chartTimeline, refDate),
+    [expenses, chartTimeline, refDate],
+  );
 
-    if (chartTimeline === "day") {
-      const bars = [];
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date(refDate);
-        d.setDate(d.getDate() - i);
-        const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-        const spend = expenses.filter((e) => e.date === dateKey).reduce((s, e) => s + spendOf(e), 0);
-        bars.push({ day: SHORT_DAYS[d.getDay()], spend, dateLabel: `${SHORT_MONTHS[d.getMonth()]} ${d.getDate()}` });
-      }
-      return { chartBars: bars };
-    }
-
-    if (chartTimeline === "week") {
-      const bars = [];
-      for (let i = 3; i >= 0; i--) {
-        const start = new Date(refDate);
-        start.setDate(refDate.getDate() - (i + 1) * 7 + 1);
-        start.setHours(0, 0, 0, 0);
-        const end = new Date(refDate);
-        end.setDate(refDate.getDate() - i * 7);
-        end.setHours(23, 59, 59, 999);
-        const spend = expenses.filter((e) => {
-          if (!e.date) return false;
-          const ed = parseLocalDate(e.date);
-          return ed >= start && ed <= end;
-        }).reduce((s, e) => s + spendOf(e), 0);
-        bars.push({ day: `W${4 - i}`, spend, dateLabel: `Week ${4 - i}` });
-      }
-      return { chartBars: bars };
-    }
-
-    if (chartTimeline === "month") {
-      const bars = [];
-      for (let i = 5; i >= 0; i--) {
-        const d = new Date(refDate.getFullYear(), refDate.getMonth() - i, 1);
-        const spend = expenses.filter((e) => {
-          if (!e.date) return false;
-          const ed = parseLocalDate(e.date);
-          return ed.getFullYear() === d.getFullYear() && ed.getMonth() === d.getMonth();
-        }).reduce((s, e) => s + spendOf(e), 0);
-        bars.push({ day: SHORT_MONTHS[d.getMonth()], spend, dateLabel: `${SHORT_MONTHS[d.getMonth()]} ${d.getFullYear()}` });
-      }
-      return { chartBars: bars };
-    }
-
-    const bars = [];
-    for (let i = 2; i >= 0; i--) {
-      const yr = refDate.getFullYear() - i;
-      const spend = expenses.filter((e) => {
-        if (!e.date) return false;
-        return parseLocalDate(e.date).getFullYear() === yr;
-      }).reduce((s, e) => s + spendOf(e), 0);
-      bars.push({ day: String(yr), spend, dateLabel: String(yr) });
-    }
-    return { chartBars: bars };
-  }, [expenses, chartTimeline, refDate]);
+  // The same window, one period earlier — drawn behind as a ghost line.
+  const prevBars = useMemo(
+    () => buildBars(expenses, chartTimeline, previousWindowRef(chartTimeline, refDate)),
+    [expenses, chartTimeline, refDate],
+  );
 
   // ── Chart geometry (memoized) ─────────────────────────────────────────────
   // Screen pads by spacing.lg each side, the Card another spacing.lg each side.
@@ -348,36 +419,37 @@ export default function ReportScreen() {
   const chartInset = 20;
   const plotWidth = chartWidth - 2 * chartInset;
   const plotHeight = chartHeight - 2 * padV;
-  const maxSpendVal = Math.max(...chartBars.map((b) => b.spend), 0);
+  // Both series share one scale — the comparison is meaningless otherwise.
+  const maxSpendVal = Math.max(...chartBars.map((b) => b.spend), ...prevBars.map((b) => b.spend), 0);
 
-  const { points, curvePath, areaPath } = useMemo(() => {
-    const pts = chartBars.map((bar, idx) => {
-      const x = chartBars.length > 1
-        ? chartInset + (plotWidth / (chartBars.length - 1)) * idx
-        : chartInset + plotWidth / 2;
-      const y = maxSpendVal > 0
-        ? chartHeight - (padV + (bar.spend / maxSpendVal) * plotHeight)
-        : chartHeight / 2;
-      return { x, y, ...bar };
-    });
+  const project = useCallback(
+    (bars: ChartBar[]) =>
+      bars.map((bar, idx) => {
+        const x = bars.length > 1
+          ? chartInset + (plotWidth / (bars.length - 1)) * idx
+          : chartInset + plotWidth / 2;
+        const y = maxSpendVal > 0
+          ? chartHeight - (padV + (bar.spend / maxSpendVal) * plotHeight)
+          : chartHeight / 2;
+        return { x, y, ...bar };
+      }),
+    [plotWidth, plotHeight, maxSpendVal],
+  );
 
-    // Same cosine interpolation the previous rotated-View implementation used,
-    // emitted as a single SVG path instead of ~240 absolutely-positioned Views.
-    if (pts.length === 0) return { points: pts, curvePath: "", areaPath: "" };
-    const steps = 12;
-    let d = `M ${pts[0].x} ${pts[0].y}`;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p1 = pts[i];
-      const p2 = pts[i + 1];
-      for (let j = 1; j <= steps; j++) {
-        const tt = j / steps;
-        const mu = (1 - Math.cos(tt * Math.PI)) / 2;
-        d += ` L ${(p1.x + tt * (p2.x - p1.x)).toFixed(2)} ${(p1.y + mu * (p2.y - p1.y)).toFixed(2)}`;
-      }
-    }
-    const area = `${d} L ${pts[pts.length - 1].x} ${chartHeight - padV} L ${pts[0].x} ${chartHeight - padV} Z`;
-    return { points: pts, curvePath: d, areaPath: area };
-  }, [chartBars, plotWidth, plotHeight, maxSpendVal]);
+  const { points, curvePath, curveLength, areaPath } = useMemo(() => {
+    const pts = project(chartBars);
+    const { path, length } = buildCurve(pts);
+    const area = pts.length
+      ? `${path} L ${pts[pts.length - 1].x} ${chartHeight - padV} L ${pts[0].x} ${chartHeight - padV} Z`
+      : "";
+    return { points: pts, curvePath: path, curveLength: length, areaPath: area };
+  }, [chartBars, project]);
+
+  const prevCurvePath = useMemo(() => {
+    // Only worth drawing if the previous window actually had spending.
+    if (!prevBars.some((b) => b.spend > 0)) return "";
+    return buildCurve(project(prevBars)).path;
+  }, [prevBars, project]);
 
   // min / max / average chips
   const chartStats = useMemo(() => {
@@ -390,9 +462,12 @@ export default function ReportScreen() {
     };
   }, [chartBars]);
 
-  // Reveal mask width: covers the chart from the right, shrinking to 0
-  const maskStyle = useAnimatedStyle(() => ({
-    width: (1 - chartProgress.value) * chartWidth,
+  // The line draws itself in; the fill, ghost and dots fade up behind it.
+  const drawProps = useAnimatedProps(() => ({
+    strokeDashoffset: curveLength * (1 - chartProgress.value),
+  }));
+  const fadeUpStyle = useAnimatedStyle(() => ({
+    opacity: Math.max(0, chartProgress.value * 1.6 - 0.6),
   }));
 
   // ── Hero card stats (memoized) ────────────────────────────────────────────
@@ -705,8 +780,15 @@ export default function ReportScreen() {
             </View>
 
             <View style={{ height: chartHeight, position: "relative", marginTop: spacing.sm }}>
-              {/* Grid, area fill and curve — one SVG instead of ~240 rotated Views */}
+              {/* Grid, area fill, ghost comparison and curve — one SVG */}
               <Svg width={chartWidth} height={chartHeight}>
+                <Defs>
+                  <SvgGradient id="spendFill" x1="0" y1="0" x2="0" y2="1">
+                    <Stop offset="0" stopColor={colors.primary} stopOpacity={0.28} />
+                    <Stop offset="1" stopColor={colors.primary} stopOpacity={0} />
+                  </SvgGradient>
+                </Defs>
+
                 {[padV, chartHeight / 2, chartHeight - padV].map((y, i) => (
                   <Line
                     key={`grid-${i}`}
@@ -718,15 +800,32 @@ export default function ReportScreen() {
                     strokeWidth={1}
                   />
                 ))}
-                {!!areaPath && <Path d={areaPath} fill={colors.primary} fillOpacity={0.1} />}
-                {!!curvePath && (
+
+                {!!areaPath && <Path d={areaPath} fill="url(#spendFill)" />}
+
+                {/* Previous period, behind and dimmed */}
+                {!!prevCurvePath && (
                   <Path
+                    d={prevCurvePath}
+                    stroke={colors.textTertiary}
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    strokeOpacity={0.65}
+                    fill="none"
+                    strokeLinecap="round"
+                  />
+                )}
+
+                {!!curvePath && (
+                  <AnimatedPath
                     d={curvePath}
                     stroke={colors.primary}
                     strokeWidth={2.5}
                     fill="none"
                     strokeLinecap="round"
                     strokeLinejoin="round"
+                    strokeDasharray={curveLength}
+                    animatedProps={drawProps}
                   />
                 )}
               </Svg>
@@ -741,24 +840,25 @@ export default function ReportScreen() {
                 </Text>
               ))}
 
-              {/* Tappable data points */}
+              {/* Tappable data points — fade up once the line has drawn */}
               {points.map((point, idx) => (
-                <TouchableOpacity
-                  key={`dot-${idx}`}
-                  style={[styles.dotTouch, { left: point.x - 14, top: point.y - 14 }]}
-                  onPress={() => setSelectedPoint(selectedPoint === idx ? null : idx)}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${point.dateLabel}: GHS ${point.spend.toFixed(2)}`}
-                >
-                  <View
-                    style={[
-                      styles.chartDot,
-                      { backgroundColor: colors.surfaceElevated, borderColor: colors.primary },
-                      selectedPoint === idx && { backgroundColor: colors.primary },
-                    ]}
-                  />
-                </TouchableOpacity>
+                <Animated.View key={`dot-${idx}`} style={[styles.dotTouch, { left: point.x - 14, top: point.y - 14 }, fadeUpStyle]}>
+                  <TouchableOpacity
+                    onPress={() => setSelectedPoint(selectedPoint === idx ? null : idx)}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${point.dateLabel}: GHS ${point.spend.toFixed(2)}`}
+                    hitSlop={6}
+                  >
+                    <View
+                      style={[
+                        styles.chartDot,
+                        { backgroundColor: colors.surfaceElevated, borderColor: colors.primary },
+                        selectedPoint === idx && { backgroundColor: colors.primary },
+                      ]}
+                    />
+                  </TouchableOpacity>
+                </Animated.View>
               ))}
 
               {/* Tooltip — inverse surface so it reads in both themes */}
@@ -783,15 +883,21 @@ export default function ReportScreen() {
                 </View>
               )}
 
-              {/* Draw-in reveal mask (shrinks from the right) */}
-              <Animated.View
-                style={[
-                  { position: "absolute", top: 0, bottom: 0, right: 0, backgroundColor: colors.surfaceElevated },
-                  maskStyle,
-                ]}
-                pointerEvents="none"
-              />
             </View>
+
+            {/* Legend — only shown when there's a comparison to explain */}
+            {!!prevCurvePath && (
+              <View style={styles.chartLegend}>
+                <View style={styles.chartLegendItem}>
+                  <View style={[styles.legendSwatch, { backgroundColor: colors.primary }]} />
+                  <Text style={[typography.caption, { color: colors.textSecondary }]}>This period</Text>
+                </View>
+                <View style={styles.chartLegendItem}>
+                  <View style={[styles.legendSwatchDashed, { borderColor: colors.textTertiary }]} />
+                  <Text style={[typography.caption, { color: colors.textSecondary }]}>Previous</Text>
+                </View>
+              </View>
+            )}
 
             {/* X labels */}
             <View style={styles.xLabelsRow}>
@@ -993,6 +1099,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     zIndex: 10,
   },
+  chartLegend: { flexDirection: "row", gap: spacing.lg, marginTop: spacing.sm },
+  chartLegendItem: { flexDirection: "row", alignItems: "center", gap: spacing.xs + 2 },
+  legendSwatch: { width: 14, height: 3, borderRadius: 2 },
+  legendSwatchDashed: { width: 14, height: 0, borderTopWidth: 2, borderStyle: "dashed" },
   xLabelsRow: { position: "relative", height: 18, marginTop: spacing.sm },
   xLabelCol: { position: "absolute", width: 40, alignItems: "center" },
   statChipsRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
