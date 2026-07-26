@@ -3,8 +3,11 @@ import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withDelay, withTiming } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius, easing, reveal } from '../../theme';
+import { getExtendedColors, typography, spacing, radius, easing, duration } from '../../theme';
 import { AmountText, ProgressBar } from '../ui';
+
+/** Beat of stillness between the amount settling and the highlight crossing. */
+const SWEEP_HOLD_MS = 180;
 
 interface ExpensesHeroCardProps {
   totalSpent: number;
@@ -32,7 +35,21 @@ export function ExpensesHeroCard({ totalSpent, totalIncome, totalBudget, remaini
 
   useEffect(() => {
     sweep.value = 0;
-    sweep.value = withDelay(reveal.primary + 260, withTiming(1, { duration: 900, easing: easing.standard }));
+    // Sequenced, not simultaneous, and with a real gap between the two.
+    //
+    // The card enters and the amount counts up over the same 0–350ms. The
+    // sweep previously started at exactly 350ms, so it began while the eye
+    // was still resolving the settling digits — the number never quite
+    // landed and the sweep never quite registered as its own gesture. It
+    // also ran 900ms, nearly three times the app's slowest duration token,
+    // so it drifted rather than passed.
+    //
+    // Now the amount settles, the card holds still for a beat, and only then
+    // does the highlight cross it: information first, finish second.
+    sweep.value = withDelay(
+      duration.slow + SWEEP_HOLD_MS,
+      withTiming(1, { duration: 620, easing: easing.standard }),
+    );
   }, []);
 
   const sweepStyle = useAnimatedStyle(() => ({

@@ -23,6 +23,7 @@ import { MomoWalletCard } from '../../components/home/MomoWalletCard';
 import { SpendingChart, ChartTimeline } from '../../components/home/SpendingChart';
 import { SpendingRing } from '../../components/home/SpendingRing';
 import { HomeSkeleton } from '../../components/home/HomeSkeleton';
+import { HomeBackdrop } from '../../components/home/HomeBackdrop';
 import { TransactionRow } from '../../components/home/TransactionRow';
 import { QuickAddModal } from '../../components/home/QuickAddModal';
 import Toast from '../../components/Toast';
@@ -525,8 +526,10 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.wrapper, { backgroundColor: colors.background }]}>
+      <HomeBackdrop />
       <ScrollView
-        style={[styles.container, { backgroundColor: colors.background }]}
+        // Transparent so the backdrop shows through; the wrapper owns the fill.
+        style={styles.container}
         contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, spacing.xl) }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
         keyboardShouldPersistTaps="handled"
