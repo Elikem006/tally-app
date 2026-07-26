@@ -375,9 +375,10 @@ export default function BudgetScreen() {
                   );
                 })()}
 
-                {Object.entries(summary).map(([category, data]: [string, any]) => (
+                {Object.entries(summary).map(([category, data]: [string, any], idx: number) => (
                   <BudgetCategoryCard
                     key={category}
+                    index={idx}
                     category={category}
                     icon={getCategoryIcon(category)}
                     spent={parseFloat(data.spent || 0)}
@@ -417,9 +418,10 @@ export default function BudgetScreen() {
               </Text>
 
               <View style={{ marginBottom: spacing.md }}>
-                {CATEGORIES.map((category) => (
+                {CATEGORIES.map((category, idx) => (
                   <BudgetLimitRow
                     key={category}
+                    index={idx}
                     category={category}
                     icon={getCategoryIcon(category)}
                     spent={spent[category] || 0}

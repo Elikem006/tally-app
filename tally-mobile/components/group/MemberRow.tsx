@@ -3,7 +3,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import Feather from '@expo/vector-icons/Feather';
 import Avatar from '../Avatar';
 import { useTheme } from '../../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius, duration, easing } from '../../theme';
+import { getExtendedColors, typography, spacing, radius, duration, easing, staggerDelay } from '../../theme';
 
 interface MemberRowProps {
   userId: number | string;
@@ -11,16 +11,18 @@ interface MemberRowProps {
   avatarData?: string;
   isCreator?: boolean;
   onRemove?: () => void;
+  /** Position within its list — staggers the entrance animation, capped after the 8th item. */
+  index?: number;
 }
 
 /** One group member row — avatar, name (+ crown if creator), user id, optional remove action. */
-export function MemberRow({ userId, name, avatarData, isCreator, onRemove }: MemberRowProps) {
+export function MemberRow({ userId, name, avatarData, isCreator, onRemove, index = 0 }: MemberRowProps) {
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
 
   return (
     <Animated.View
-      entering={FadeInDown.duration(duration.base).easing(easing.decelerate)}
+      entering={FadeInDown.duration(duration.base).delay(staggerDelay(index)).easing(easing.decelerate)}
       style={[styles.row, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}
     >
       <Avatar userId={userId} name={name} size={40} avatarData={avatarData} style={{ marginRight: spacing.md }} />

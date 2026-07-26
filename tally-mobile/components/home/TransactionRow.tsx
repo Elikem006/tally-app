@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Feather from '@expo/vector-icons/Feather';
 import { useTheme } from '../../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius, duration, easing } from '../../theme';
+import { getExtendedColors, typography, spacing, radius, duration, easing, staggerDelay } from '../../theme';
 
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
@@ -18,16 +18,18 @@ interface TransactionRowProps {
   onPress?: () => void;
   onLongPress?: () => void;
   accentBorder?: boolean;
+  /** Position within its list — staggers the entrance animation, capped after the 8th item. */
+  index?: number;
 }
 
 /** A generic transaction/reminder/recurring row — icon chip, title/subtitle, optional badges + tags, trailing amount. */
-export function TransactionRow({ leading, title, subtitle, badges, tags, amount, amountColor, onPress, onLongPress, accentBorder }: TransactionRowProps) {
+export function TransactionRow({ leading, title, subtitle, badges, tags, amount, amountColor, onPress, onLongPress, accentBorder, index = 0 }: TransactionRowProps) {
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
 
   return (
     <AnimatedTouchable
-      entering={FadeInDown.duration(duration.base).easing(easing.decelerate)}
+      entering={FadeInDown.duration(duration.base).delay(staggerDelay(index)).easing(easing.decelerate)}
       style={[
         styles.card,
         { backgroundColor: colors.surfaceElevated, borderColor: accentBorder ? `${colors.primary}40` : colors.borderSubtle },

@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTheme } from '../../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius, duration, easing } from '../../theme';
+import { getExtendedColors, typography, spacing, radius, duration, easing, staggerDelay } from '../../theme';
 
 interface SharedExpenseRowProps {
   title: string;
@@ -9,16 +9,18 @@ interface SharedExpenseRowProps {
   amount: string;
   amountColor: string;
   settled?: boolean;
+  /** Position within its list — staggers the entrance animation, capped after the 8th item. */
+  index?: number;
 }
 
 /** One shared-expense row — payer view, "your share" view, or the non-personalized fallback. */
-export function SharedExpenseRow({ title, subtitle, amount, amountColor, settled }: SharedExpenseRowProps) {
+export function SharedExpenseRow({ title, subtitle, amount, amountColor, settled, index = 0 }: SharedExpenseRowProps) {
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
 
   return (
     <Animated.View
-      entering={FadeInDown.duration(duration.base).easing(easing.decelerate)}
+      entering={FadeInDown.duration(duration.base).delay(staggerDelay(index)).easing(easing.decelerate)}
       style={[styles.row, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}
     >
       <View style={{ flex: 1, marginRight: spacing.sm + 2 }}>

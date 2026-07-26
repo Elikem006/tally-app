@@ -546,7 +546,7 @@ export default function HistoryScreen() {
         {groupedExpenses.map((group) => (
           <View key={group.date} style={styles.dateGroup}>
             <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm + 2 }]}>{group.date}</Text>
-            {group.items.map((item) => {
+            {group.items.map((item, idx) => {
               const isShared = item.isShared || item.type === 'shared';
               const isMomo = item.paymentMethod === 'MOMO';
               const isMomoTransfer = item.paymentMethod === 'MOMO_TRANSFER';
@@ -556,6 +556,7 @@ export default function HistoryScreen() {
               return (
                 <TransactionRow
                   key={`${item.type ?? (isShared ? 'shared' : 'personal')}-${item.id}`}
+                  index={idx}
                   leading={
                     <View style={[styles.iconBox, { backgroundColor: colors.neutralBg }]}>
                       <Text style={{ fontSize: 20 }}>{isShared ? '👥' : getCategoryIcon(item.category)}</Text>

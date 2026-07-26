@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTheme } from '../../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius, duration, easing } from '../../theme';
+import { getExtendedColors, typography, spacing, radius, duration, easing, staggerDelay } from '../../theme';
 import { ProgressBar } from '../ui';
 
 interface BudgetCategoryCardProps {
@@ -12,17 +12,19 @@ interface BudgetCategoryCardProps {
   percentage: number;
   isOverBudget: boolean;
   isNearLimit: boolean;
+  /** Position within its list — staggers the entrance animation, capped after the 8th item. */
+  index?: number;
 }
 
 /** One category's spend-vs-limit card in the Budget Overview tab. */
-export function BudgetCategoryCard({ category, icon, spent, limit, percentage, isOverBudget, isNearLimit }: BudgetCategoryCardProps) {
+export function BudgetCategoryCard({ category, icon, spent, limit, percentage, isOverBudget, isNearLimit, index = 0 }: BudgetCategoryCardProps) {
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
   const barColor = isOverBudget ? colors.negative : isNearLimit ? colors.warning : colors.positive;
 
   return (
     <Animated.View
-      entering={FadeInDown.duration(duration.base).easing(easing.decelerate)}
+      entering={FadeInDown.duration(duration.base).delay(staggerDelay(index)).easing(easing.decelerate)}
       style={[styles.card, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}
     >
       <View style={styles.header}>

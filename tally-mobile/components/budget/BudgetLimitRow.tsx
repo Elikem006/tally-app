@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTheme } from '../../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius, duration, easing } from '../../theme';
+import { getExtendedColors, typography, spacing, radius, duration, easing, staggerDelay } from '../../theme';
 
 interface BudgetLimitRowProps {
   category: string;
@@ -10,17 +10,19 @@ interface BudgetLimitRowProps {
   spent: number;
   value: string;
   onChangeValue: (v: string) => void;
+  /** Position within its list — staggers the entrance animation, capped after the 8th item. */
+  index?: number;
 }
 
 /** One category's editable monthly limit row in the Budget Setup tab. */
-export function BudgetLimitRow({ category, icon, spent, value, onChangeValue }: BudgetLimitRowProps) {
+export function BudgetLimitRow({ category, icon, spent, value, onChangeValue, index = 0 }: BudgetLimitRowProps) {
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
   const [focused, setFocused] = useState(false);
 
   return (
     <Animated.View
-      entering={FadeInDown.duration(duration.base).easing(easing.decelerate)}
+      entering={FadeInDown.duration(duration.base).delay(staggerDelay(index)).easing(easing.decelerate)}
       style={[styles.capsule, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}
     >
       <View style={styles.left}>

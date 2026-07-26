@@ -684,9 +684,10 @@ export default function HomeScreen() {
         {upcomingReminders.length > 0 && (
           <View style={styles.section}>
             <Text style={[typography.headline, { color: colors.text, marginBottom: spacing.md }]}>Upcoming Bills</Text>
-            {upcomingReminders.slice(0, 3).map((reminder: any) => (
+            {upcomingReminders.slice(0, 3).map((reminder: any, idx: number) => (
               <TransactionRow
                 key={reminder.id}
+                index={idx}
                 leading={
                   <View style={[styles.iconBox, { backgroundColor: colors.neutralBg, borderColor: colors.borderSubtle }]}>
                     <Feather name="calendar" size={18} color={colors.textSecondary} />
@@ -713,9 +714,10 @@ export default function HomeScreen() {
         {recurringExpenses.length > 0 && (
           <View style={styles.section}>
             <Text style={[typography.headline, { color: colors.text, marginBottom: spacing.md }]}>Recurring Expenses</Text>
-            {recurringExpenses.map((item: any) => (
+            {recurringExpenses.map((item: any, idx: number) => (
               <TransactionRow
                 key={`recurring-${item.id}`}
+                index={idx}
                 leading={
                   <View style={[styles.iconBox, { backgroundColor: colors.neutralBg, borderColor: colors.borderSubtle }]}>
                     <Feather name="repeat" size={18} color={colors.textSecondary} />
@@ -751,11 +753,12 @@ export default function HomeScreen() {
         {Object.keys(categoryTotals).length > 0 && (
           <View style={styles.section}>
             <Text style={[typography.headline, { color: colors.text, marginBottom: spacing.md }]}>By Category</Text>
-            {Object.entries(categoryTotals).map(([category, total]: any) => {
+            {Object.entries(categoryTotals).map(([category, total]: any, idx: number) => {
               const percentage = totalSpent > 0 ? (total / totalSpent) * 100 : 0;
               return (
                 <TransactionRow
                   key={category}
+                  index={idx}
                   leading={
                     <View style={[styles.iconBox, { backgroundColor: colors.neutralBg, borderColor: colors.borderSubtle }]}>
                       <Text style={{ fontSize: 18 }}>{getCategoryIcon(category)}</Text>
@@ -784,7 +787,7 @@ export default function HomeScreen() {
               No expenses yet
             </Text>
           ) : (
-            recentExpenses.map((item) => {
+            recentExpenses.map((item, idx) => {
               const isShared = item.isShared || item.type === 'shared';
               const isMomo = item.paymentMethod === 'MOMO';
               const { cleanDescription, tags } = parseTagsFromDescription(item.description);
@@ -794,6 +797,7 @@ export default function HomeScreen() {
                 <TransactionRow
                   // type+id — personal and shared entries can share numeric ids
                   key={`${item.type ?? (isShared ? 'shared' : 'personal')}-${item.id}`}
+                  index={idx}
                   leading={
                     <View style={[styles.iconBox, { backgroundColor: colors.neutralBg, borderColor: colors.borderSubtle }]}>
                       <Text style={{ fontSize: 18 }}>{isShared ? '👥' : getCategoryIcon(item.category)}</Text>

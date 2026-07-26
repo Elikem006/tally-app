@@ -2,7 +2,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import Avatar from '../Avatar';
 import { useTheme } from '../../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius, duration, easing } from '../../theme';
+import { getExtendedColors, typography, spacing, radius, duration, easing, staggerDelay } from '../../theme';
 import { Button } from '../ui';
 
 interface BalanceRowProps {
@@ -13,17 +13,19 @@ interface BalanceRowProps {
   amount: number;
   isCurrentUser: boolean;
   onSettleUp?: () => void;
+  /** Position within its list — staggers the entrance animation, capped after the 8th item. */
+  index?: number;
 }
 
 /** One member's net balance in the group — owes/owed badge, Settle Up when it's the viewer's own debt. */
-export function BalanceRow({ userId, name, avatarData, owes, amount, isCurrentUser, onSettleUp }: BalanceRowProps) {
+export function BalanceRow({ userId, name, avatarData, owes, amount, isCurrentUser, onSettleUp, index = 0 }: BalanceRowProps) {
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
   const tintColor = owes ? colors.negative : colors.positive;
 
   return (
     <Animated.View
-      entering={FadeInDown.duration(duration.base).easing(easing.decelerate)}
+      entering={FadeInDown.duration(duration.base).delay(staggerDelay(index)).easing(easing.decelerate)}
       style={[
         styles.row,
         { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle },

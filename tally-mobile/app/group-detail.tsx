@@ -459,9 +459,10 @@ export default function GroupDetailScreen() {
           {/* Members Section */}
           <View style={styles.section}>
             <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.md }]}>Members</Text>
-            {details?.members?.map((member: any) => (
+            {details?.members?.map((member: any, idx: number) => (
               <MemberRow
                 key={member.id}
+                index={idx}
                 userId={member.userId}
                 name={member.name || `User #${member.userId}`}
                 avatarData={member.avatarData}
@@ -521,6 +522,7 @@ export default function GroupDetailScreen() {
                 return (
                   <BalanceRow
                     key={index}
+                    index={index}
                     userId={b.userId}
                     name={b.name || `User #${b.userId}`}
                     avatarData={b.avatarData}
@@ -576,7 +578,7 @@ export default function GroupDetailScreen() {
             {details?.expenses?.length === 0 ? (
               <Text style={[typography.body, { color: colors.textSecondary, fontStyle: 'italic', paddingVertical: spacing.sm }]}>No shared expenses yet</Text>
             ) : (
-              details?.expenses?.map((expense: any) => {
+              details?.expenses?.map((expense: any, idx: number) => {
                 const hasPersonalized = expense.userShare !== undefined && expense.userShare !== null;
                 const userShare = parseFloat(expense.userShare ?? '0') || 0;
                 const fullAmount = parseFloat(expense.amount) || 0;
@@ -586,6 +588,7 @@ export default function GroupDetailScreen() {
                   return (
                     <SharedExpenseRow
                       key={expense.id}
+                      index={idx}
                       title={`You paid GHS ${fullAmount.toFixed(2)} for ${expense.description}`}
                       subtitle={`Split with ${othersCount} other${othersCount === 1 ? '' : 's'} — you covered GHS ${userShare.toFixed(2)} • ${splitLabel(expense)}`}
                       amount={`GHS ${fullAmount.toFixed(2)}`}
@@ -599,6 +602,7 @@ export default function GroupDetailScreen() {
                   return (
                     <SharedExpenseRow
                       key={expense.id}
+                      index={idx}
                       title={`Your share: GHS ${userShare.toFixed(2)}`}
                       subtitle={`${expense.paidByName || `User #${expense.paidBy}`} paid GHS ${fullAmount.toFixed(2)} total for ${expense.description} • ${splitLabel(expense)}`}
                       amount={`GHS ${userShare.toFixed(2)}`}
@@ -611,6 +615,7 @@ export default function GroupDetailScreen() {
                 return (
                   <SharedExpenseRow
                     key={expense.id}
+                    index={idx}
                     title={expense.description}
                     subtitle={`Paid by ${expense.paidByName || `User #${expense.paidBy}`} • ${splitLabel(expense)}`}
                     amount={`GHS ${fullAmount.toFixed(2)}`}
