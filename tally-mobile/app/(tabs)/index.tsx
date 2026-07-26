@@ -17,7 +17,7 @@ import { getUserId, getUserName, safeStorage } from '../../services/storage';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius, FONT_FAMILY } from '../../theme';
-import { Button, CategoryIcon, EmptyState, EmptyExpensesArt } from '../../components/ui';
+import { Button, CategoryIcon, EmptyState, EmptyExpensesArt, Reveal } from '../../components/ui';
 import { ExpensesHeroCard } from '../../components/home/ExpensesHeroCard';
 import { MomoWalletCard } from '../../components/home/MomoWalletCard';
 import { SpendingChart, ChartTimeline } from '../../components/home/SpendingChart';
@@ -604,13 +604,15 @@ export default function HomeScreen() {
           </View>
         )}
 
-        <ExpensesHeroCard
-          totalSpent={totalSpent}
-          totalIncome={totalIncome}
-          totalBudget={totalBudget}
-          remaining={remaining}
-          transactionCount={expenses.length}
-        />
+        <Reveal beat="hero">
+          <ExpensesHeroCard
+            totalSpent={totalSpent}
+            totalIncome={totalIncome}
+            totalBudget={totalBudget}
+            remaining={remaining}
+            transactionCount={expenses.length}
+          />
+        </Reveal>
 
         {/* Spending pace indicator — needs at least 3 days of data to project */}
         {monthSpent > 0 && dayOfMonth > 3 && (
@@ -660,16 +662,18 @@ export default function HomeScreen() {
           </TouchableOpacity>
         )}
 
-        <MomoWalletCard
-          status={momoStatus}
-          balanceLoading={momoBalanceLoading}
-          balance={momoBalance}
-          hideBalance={hideMomoBalance}
-          monthlySpent={momoMonthlySpent}
-          onToggleHide={toggleHideMomoBalance}
-          onRefresh={() => fetchMomoBalance(true)}
-          onPayVendor={() => router.push('/pay-vendor')}
-        />
+        <Reveal beat="primary">
+          <MomoWalletCard
+            status={momoStatus}
+            balanceLoading={momoBalanceLoading}
+            balance={momoBalance}
+            hideBalance={hideMomoBalance}
+            monthlySpent={momoMonthlySpent}
+            onToggleHide={toggleHideMomoBalance}
+            onRefresh={() => fetchMomoBalance(true)}
+            onPayVendor={() => router.push('/pay-vendor')}
+          />
+        </Reveal>
 
         {/* Upcoming Bills / Reminders */}
         {upcomingReminders.length > 0 && (
@@ -738,16 +742,18 @@ export default function HomeScreen() {
           </View>
         )}
 
-        <SpendingChart bars={chartBars} sum={chartSum} timeline={chartTimeline} onTimelineChange={setChartTimeline} />
+        <Reveal beat="secondary">
+          <SpendingChart bars={chartBars} sum={chartSum} timeline={chartTimeline} onTimelineChange={setChartTimeline} />
+        </Reveal>
 
         {/* Where the money went — one ring, tap a segment to break it down */}
         {Object.keys(categoryTotals).length > 0 && (
-          <View style={styles.section}>
+          <Reveal beat="secondary" delay={80} style={styles.section}>
             <Text style={[typography.headline, { color: colors.text, marginBottom: spacing.lg }]}>
               Where it went
             </Text>
             <SpendingRing categoryTotals={categoryTotals} />
-          </View>
+          </Reveal>
         )}
 
         {/* Recent Expenses List */}

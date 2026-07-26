@@ -1,6 +1,9 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { useEffect } from 'react';
+import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withDelay, withTiming } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius } from '../../theme';
+import { getExtendedColors, typography, spacing, radius, easing, reveal } from '../../theme';
 import { AmountText, ProgressBar } from '../ui';
 
 interface ExpensesHeroCardProps {
@@ -11,34 +14,74 @@ interface ExpensesHeroCardProps {
   transactionCount: number;
 }
 
-/** The dark hero card at the top of the dashboard — total spend, transaction count, budget progress. */
+/**
+ * The dashboard's headline card — total spend, transaction count, budget
+ * progress. Shares the hero gradient tokens with the report screen's hero so
+ * the app has one hero treatment rather than two that disagree.
+ *
+ * On first paint the amount counts up and a single specular band sweeps
+ * across the card. The sweep runs once on mount, not on a loop: a repeating
+ * shimmer reads as a loading skeleton, a single pass reads as material.
+ */
 export function ExpensesHeroCard({ totalSpent, totalIncome, totalBudget, remaining, transactionCount }: ExpensesHeroCardProps) {
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
-  const isDark = theme === 'dark';
-  const heroBg = isDark ? colors.surfaceHigh : '#111318';
+  const { width: screenWidth } = useWindowDimensions();
+
+  const sweep = useSharedValue(0);
+
+  useEffect(() => {
+    sweep.value = 0;
+    sweep.value = withDelay(reveal.primary + 260, withTiming(1, { duration: 900, easing: easing.standard }));
+  }, []);
+
+  const sweepStyle = useAnimatedStyle(() => ({
+    opacity: sweep.value > 0 && sweep.value < 1 ? 1 : 0,
+    transform: [{ translateX: -screenWidth + sweep.value * (screenWidth * 2) }, { rotate: '18deg' }],
+  }));
 
   return (
-    <View style={[styles.card, { backgroundColor: heroBg }]}>
-      <View style={[styles.radialCircle1, { backgroundColor: colors.primary }]} />
-      <View style={[styles.radialCircle2, { backgroundColor: colors.accent }]} />
-      <View style={[styles.radialCircle3, { backgroundColor: colors.negative }]} />
+    <LinearGradient
+      colors={[colors.heroGradientFrom, colors.heroGradientTo]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.card}
+    >
+      {/* Depth: two soft blooms behind the content */}
+      <View style={[styles.bloomTop, { backgroundColor: colors.onHero }]} />
+      <View style={[styles.bloomBottom, { backgroundColor: colors.accent }]} />
 
-      <Text style={[typography.label, { color: colors.textTertiary, marginBottom: spacing.xs }]}>
+      {/* One-pass specular sweep */}
+      <Animated.View style={[styles.sweep, sweepStyle]} pointerEvents="none">
+        <LinearGradient
+          colors={['transparent', colors.heroChipBg, 'transparent']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
+
+      <Text style={[typography.label, { color: colors.onHeroDim, marginBottom: spacing.xs }]}>
         YOUR EXPENSES
       </Text>
 
-      <AmountText value={totalSpent} size="displayLarge" color="#FFFFFF" style={{ marginBottom: spacing.md }} />
+      <AmountText
+        value={totalSpent}
+        size="displayLarge"
+        color={colors.onHero}
+        animate
+        style={{ marginBottom: spacing.md }}
+      />
 
       <View style={styles.trendRow}>
-        <View style={styles.trendBadge}>
-          <Text style={[typography.caption, { color: '#FFFFFF', fontFamily: typography.bodyStrong.fontFamily }]}>
+        <View style={[styles.trendBadge, { backgroundColor: colors.heroChipBg }]}>
+          <Text style={[typography.caption, { color: colors.onHero, fontFamily: typography.bodyStrong.fontFamily }]}>
             {transactionCount} transaction{transactionCount !== 1 ? 's' : ''}
           </Text>
         </View>
         {totalIncome > 0 && (
           <View style={[styles.trendBadge, { backgroundColor: `${colors.positive}30` }]}>
-            <Text style={[typography.caption, { color: colors.positive, fontFamily: typography.bodyStrong.fontFamily }]}>
+            <Text style={[typography.caption, { color: colors.onHero, fontFamily: typography.bodyStrong.fontFamily }]}>
               +GHS {totalIncome.toFixed(2)}
             </Text>
           </View>
@@ -49,10 +92,10 @@ export function ExpensesHeroCard({ totalSpent, totalIncome, totalBudget, remaini
         <>
           <ProgressBar percentage={(totalSpent / totalBudget) * 100} style={{ marginBottom: spacing.sm }} />
           <View style={styles.budgetStatsRow}>
-            <Text style={[typography.caption, { color: colors.textTertiary, fontFamily: typography.bodyStrong.fontFamily }]}>
+            <Text style={[typography.caption, { color: colors.onHeroDim, fontFamily: typography.bodyStrong.fontFamily }]}>
               Budget: GHS {totalBudget.toLocaleString()}
             </Text>
-            <Text style={[typography.caption, { color: '#FFFFFF', fontFamily: typography.bodyStrong.fontFamily }]}>
+            <Text style={[typography.caption, { color: colors.onHero, fontFamily: typography.bodyStrong.fontFamily }]}>
               {remaining >= 0
                 ? `Remaining: GHS ${remaining.toLocaleString()}`
                 : `Overspent: GHS ${Math.abs(remaining).toLocaleString()}`}
@@ -60,7 +103,7 @@ export function ExpensesHeroCard({ totalSpent, totalIncome, totalBudget, remaini
           </View>
         </>
       )}
-    </View>
+    </LinearGradient>
   );
 }
 
@@ -71,38 +114,30 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     position: 'relative',
     overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    elevation: 8,
   },
-  radialCircle1: {
+  bloomTop: {
     position: 'absolute',
     width: 240,
     height: 240,
     borderRadius: 120,
-    opacity: 0.15,
+    opacity: 0.09,
     top: -120,
     right: -80,
   },
-  radialCircle2: {
+  bloomBottom: {
     position: 'absolute',
     width: 180,
     height: 180,
     borderRadius: 90,
-    opacity: 0.1,
+    opacity: 0.14,
     bottom: -90,
     left: -40,
   },
-  radialCircle3: {
+  sweep: {
     position: 'absolute',
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    opacity: 0.05,
-    top: 40,
-    left: 80,
+    top: -40,
+    bottom: -40,
+    width: 110,
   },
   trendRow: {
     flexDirection: 'row',
@@ -111,7 +146,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   trendBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     paddingVertical: 4,

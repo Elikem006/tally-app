@@ -12,6 +12,7 @@ export { Skeleton, SkeletonRow, SkeletonCard } from './Skeleton';
 export { EmptyState } from './EmptyState';
 export { EmptyExpensesArt, EmptyBudgetsArt, EmptyGroupsArt } from './Illustration';
 export { BrandMark, BrandLockup } from './BrandMark';
+export { Reveal } from './Reveal';
 export { ActionSheet } from './ActionSheet';
 export type { ActionSheetOption } from './ActionSheet';
 export { SectionHeader } from './SectionHeader';
