@@ -4,46 +4,56 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
-  withRepeat,
-  withSequence,
-  Easing as ReanimatedEasing,
+  withDelay,
+  FadeIn,
 } from 'react-native-reanimated';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { router } from 'expo-router';
 import { safeStorage } from '../services/storage';
 import { useTheme } from '../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius, duration, easing } from '../theme';
-import { Button } from '../components/ui';
+import {
+  getExtendedColors,
+  getCategoryColor,
+  typography,
+  spacing,
+  radius,
+  duration,
+  easing,
+  staggerDelay,
+} from '../theme';
+import { Button, BrandMark, BrandLockup, EmptyBudgetsArt, EmptyGroupsArt, getCategoryIconName } from '../components/ui';
 
 const ONBOARDING_KEY = 'tallyOnboardingComplete';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+/** How long the brand lockup holds before the first step takes over. */
+const COLD_OPEN_MS = 1750;
+
 const STEPS = [
   {
-    emoji: '💰',
-    title: 'Welcome to Tally! 👋',
-    body: 'Your personal finance companion for tracking expenses and splitting costs with friends',
+    title: 'Every cedi accounted for',
+    body: 'Track what you spend, split what you share, and always know where you stand.',
   },
   {
-    emoji: '📊',
-    title: 'Track Every Cedi',
-    body: 'Add expenses instantly, set budgets and see where your money goes with beautiful charts',
+    title: 'Track every cedi',
+    body: 'Add expenses instantly, set budgets and see exactly where your money goes.',
   },
   {
-    emoji: '👥',
-    title: 'Split Fairly with Friends',
-    body: 'Create groups, add shared expenses and settle up — even with MTN MoMo payments',
+    title: 'Split fairly with friends',
+    body: 'Create groups, add shared expenses and settle up — even with MTN MoMo.',
   },
 ];
 
-const CATEGORY_PREVIEW = ['🍔 Food', '🚗 Transport', '🎮 Fun', '💡 Utilities'];
+const CATEGORY_PREVIEW = ['Food', 'Transport', 'Entertainment', 'Utilities'];
 
 export default function OnboardingScreen() {
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
-  const [currentStep, setCurrentStep] = useState(1); // 1-3
+  // Step 0 is the cold open — the brand lockup drawing itself on.
+  const [currentStep, setCurrentStep] = useState(0);
 
   const slideProgress = useSharedValue(0);
-  const floatY = useSharedValue(0);
+  const coldOpenOut = useSharedValue(1);
 
   const GROUP_PREVIEW = [
     { name: 'Elikem', label: 'is owed', amount: '+GHS 60', color: colors.positive },
@@ -51,31 +61,31 @@ export default function OnboardingScreen() {
     { name: 'Ishmael', label: 'owes', amount: '-GHS 30', color: colors.negative },
   ];
 
+  // Hold the lockup, then hand over to step 1. Skipping mid-open jumps
+  // straight to the app, so an impatient tap is never blocked by the intro.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      coldOpenOut.value = withTiming(0, { duration: duration.base, easing: easing.accelerate });
+      setTimeout(() => setCurrentStep(1), duration.base);
+    }, COLD_OPEN_MS);
+    return () => clearTimeout(t);
+  }, []);
+
   // Slide the content in from the right on every step change
   useEffect(() => {
+    if (currentStep === 0) return;
     slideProgress.value = 0;
     slideProgress.value = withTiming(1, { duration: duration.slow, easing: easing.decelerate });
   }, [currentStep]);
-
-  // Gentle floating loop for the hero emoji
-  useEffect(() => {
-    floatY.value = withRepeat(
-      withSequence(
-        withTiming(-14, { duration: 1400, easing: ReanimatedEasing.inOut(ReanimatedEasing.quad) }),
-        withTiming(0, { duration: 1400, easing: ReanimatedEasing.inOut(ReanimatedEasing.quad) }),
-      ),
-      -1,
-      false,
-    );
-  }, []);
 
   const contentStyle = useAnimatedStyle(() => ({
     opacity: slideProgress.value,
     transform: [{ translateX: (1 - slideProgress.value) * SCREEN_WIDTH * 0.25 }],
   }));
 
-  const emojiStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: floatY.value }],
+  const coldOpenStyle = useAnimatedStyle(() => ({
+    opacity: coldOpenOut.value,
+    transform: [{ scale: 0.96 + coldOpenOut.value * 0.04 }],
   }));
 
   async function finish() {
@@ -92,16 +102,47 @@ export default function OnboardingScreen() {
     else finish();
   }
 
+  // ── Cold open ─────────────────────────────────────────────────────────────
+  if (currentStep === 0) {
+    return (
+      <View style={[styles.container, styles.coldOpen, { backgroundColor: colors.background }]}>
+        <TouchableOpacity
+          style={styles.skipBtn}
+          onPress={finish}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Skip intro"
+        >
+          <Text style={[typography.bodyStrong, { color: colors.textSecondary }]}>Skip</Text>
+        </TouchableOpacity>
+        <Animated.View style={coldOpenStyle}>
+          <BrandLockup size={132} animate />
+        </Animated.View>
+      </View>
+    );
+  }
+
   const step = STEPS[currentStep - 1];
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <TouchableOpacity style={styles.skipBtn} onPress={finish} activeOpacity={0.7}>
+      <TouchableOpacity
+        style={styles.skipBtn}
+        onPress={finish}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel="Skip intro"
+      >
         <Text style={[typography.bodyStrong, { color: colors.textSecondary }]}>Skip</Text>
       </TouchableOpacity>
 
       <Animated.View style={[styles.content, contentStyle]}>
-        <Animated.Text style={[styles.heroEmoji, emojiStyle]}>{step.emoji}</Animated.Text>
+        <View style={styles.artWrap}>
+          {currentStep === 1 && <BrandMark size={128} />}
+          {currentStep === 2 && <EmptyBudgetsArt size={148} />}
+          {currentStep === 3 && <EmptyGroupsArt size={148} />}
+        </View>
+
         <Text style={[typography.display, { color: colors.text, textAlign: 'center', marginBottom: spacing.md }]} accessibilityRole="header">
           {step.title}
         </Text>
@@ -111,17 +152,22 @@ export default function OnboardingScreen() {
 
         {currentStep === 2 && (
           <View style={styles.previewRow}>
-            {CATEGORY_PREVIEW.map((cat) => (
-              <View
-                key={cat}
-                style={[
-                  styles.categoryChip,
-                  { backgroundColor: colors.surfaceElevated, borderColor: colors.primarySubtle },
-                ]}
-              >
-                <Text style={[typography.bodyStrong, { color: colors.text }]}>{cat}</Text>
-              </View>
-            ))}
+            {CATEGORY_PREVIEW.map((cat, idx) => {
+              const catColor = getCategoryColor(cat);
+              return (
+                <Animated.View
+                  key={cat}
+                  entering={FadeIn.duration(duration.base).delay(staggerDelay(idx, 70))}
+                  style={[
+                    styles.categoryChip,
+                    { backgroundColor: `${catColor}1A`, borderColor: `${catColor}40` },
+                  ]}
+                >
+                  <MaterialCommunityIcons name={getCategoryIconName(cat)} size={15} color={catColor} />
+                  <Text style={[typography.labelStrong, { color: colors.text }]}>{cat}</Text>
+                </Animated.View>
+              );
+            })}
           </View>
         )}
 
@@ -183,8 +229,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  heroEmoji: {
-    fontSize: 80,
+  coldOpen: { alignItems: 'center', justifyContent: 'center' },
+  artWrap: {
+    height: 152,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: spacing.xl,
   },
   previewRow: {
@@ -195,6 +244,9 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
   },
   categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs + 2,
     borderWidth: 1,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
