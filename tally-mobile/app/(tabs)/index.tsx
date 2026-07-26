@@ -21,6 +21,7 @@ import { Button, CategoryIcon } from '../../components/ui';
 import { ExpensesHeroCard } from '../../components/home/ExpensesHeroCard';
 import { MomoWalletCard } from '../../components/home/MomoWalletCard';
 import { SpendingChart, ChartTimeline } from '../../components/home/SpendingChart';
+import { SpendingRing } from '../../components/home/SpendingRing';
 import { TransactionRow } from '../../components/home/TransactionRow';
 import { QuickAddModal } from '../../components/home/QuickAddModal';
 import Toast from '../../components/Toast';
@@ -739,23 +740,13 @@ export default function HomeScreen() {
 
         <SpendingChart bars={chartBars} sum={chartSum} timeline={chartTimeline} onTimelineChange={setChartTimeline} />
 
-        {/* By Category Section */}
+        {/* Where the money went — one ring, tap a segment to break it down */}
         {Object.keys(categoryTotals).length > 0 && (
           <View style={styles.section}>
-            <Text style={[typography.headline, { color: colors.text, marginBottom: spacing.md }]}>By Category</Text>
-            {Object.entries(categoryTotals).map(([category, total]: any, idx: number) => {
-              const percentage = totalSpent > 0 ? (total / totalSpent) * 100 : 0;
-              return (
-                <TransactionRow
-                  key={category}
-                  index={idx}
-                  leading={<CategoryIcon category={category} customEmoji={getCustomEmoji(category)} size={44} />}
-                  title={category}
-                  subtitle={`GHS ${total.toFixed(2)} spent • ${percentage.toFixed(0)}%`}
-                  amount={`${percentage.toFixed(0)}%`}
-                />
-              );
-            })}
+            <Text style={[typography.headline, { color: colors.text, marginBottom: spacing.lg }]}>
+              Where it went
+            </Text>
+            <SpendingRing categoryTotals={categoryTotals} />
           </View>
         )}
 
