@@ -17,7 +17,7 @@ import { getUserId, getUserName, safeStorage } from '../../services/storage';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius, FONT_FAMILY } from '../../theme';
-import { Button, CategoryIcon } from '../../components/ui';
+import { Button, CategoryIcon, EmptyState, EmptyExpensesArt } from '../../components/ui';
 import { ExpensesHeroCard } from '../../components/home/ExpensesHeroCard';
 import { MomoWalletCard } from '../../components/home/MomoWalletCard';
 import { SpendingChart, ChartTimeline } from '../../components/home/SpendingChart';
@@ -760,9 +760,14 @@ export default function HomeScreen() {
           </View>
 
           {recentExpenses.length === 0 ? (
-            <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.xl }]}>
-              No expenses yet
-            </Text>
+            <EmptyState
+              icon="file-text"
+              illustration={<EmptyExpensesArt />}
+              title="No expenses yet"
+              body="Log your first one and it'll show up here, along with your spending breakdown."
+              ctaLabel="Add an expense"
+              onPressCta={() => setShowQuickAdd(true)}
+            />
           ) : (
             recentExpenses.map((item, idx) => {
               const isShared = item.isShared || item.type === 'shared';
