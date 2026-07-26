@@ -56,6 +56,9 @@ Thumbs.db
 
 # ---------- Scratch / local dumps ----------
 *.diff.txt
+audit.json
+auditfix-output.txt
+outdated.txt
 
 # ---------- DB migration backups (real PII/password hashes — never commit) ----------
 backups/
