@@ -19,6 +19,7 @@ import Animated, {
   Easing,
 } from "react-native-reanimated";
 import { Feather } from "@expo/vector-icons";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, router } from "expo-router";
 import Svg, { Circle } from "react-native-svg";
@@ -26,20 +27,11 @@ import { expenseAPI, categoriesAPI, remindersAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
 import { useTheme } from "../../hooks/useTheme";
 import { getExtendedColors, getCategoryColor } from "../../theme";
+import { CategoryIcon, getCategoryIconName } from "../../components/ui";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
-
-const CATEGORY_ICONS: { [key: string]: string } = {
-  Food: "🍔",
-  Transport: "🚗",
-  Entertainment: "🎮",
-  Utilities: "💡",
-  Other: "📦",
-  Shared: "👥",
-  Settlement: "💚",
-};
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -106,8 +98,8 @@ function AnimatedBar({ pct, color, delay, trackColor }: { pct: number; color: st
 
 /** Category breakdown row — fades in with stagger, bar animates after */
 function CategoryRow({
-  cat, amount, pct, index, icon, t,
-}: { cat: string; amount: number; pct: number; index: number; icon: string; t: any }) {
+  cat, amount, pct, index, customEmoji, t,
+}: { cat: string; amount: number; pct: number; index: number; customEmoji?: string; t: any }) {
   const fade = useSharedValue(0);
   const color = getCategoryColor(cat);
 
@@ -125,9 +117,7 @@ function CategoryRow({
     <Animated.View style={[styles.catRow, rowStyle]}>
       <View style={styles.catHeader}>
         <View style={styles.catLeft}>
-          <View style={[styles.catEmojiCircle, { backgroundColor: color + "22", borderColor: color + "44" }]}>
-            <Text style={styles.catEmoji}>{icon}</Text>
-          </View>
+          <CategoryIcon category={cat} customEmoji={customEmoji} size={36} />
           <Text style={[styles.catName, { color: t.text }]} numberOfLines={1}>{cat}</Text>
         </View>
         <View style={{ alignItems: "flex-end" }}>
@@ -226,11 +216,8 @@ export default function ReportScreen() {
   // Chart draw-in reveal
   const chartProgress = useSharedValue(0);
 
-  const getCategoryIcon = useCallback((categoryName: string): string => {
-    if (CATEGORY_ICONS[categoryName]) return CATEGORY_ICONS[categoryName];
-    const custom = customCategories.find((c: any) => c.name === categoryName);
-    if (custom?.emoji) return custom.emoji;
-    return "📦";
+  const getCustomEmoji = useCallback((categoryName: string): string | undefined => {
+    return customCategories.find((c: any) => c.name === categoryName)?.emoji;
   }, [customCategories]);
 
   const isCurrentMonth = selectedMonth === todayMonth && selectedYear === todayYear;
@@ -826,7 +813,7 @@ export default function ReportScreen() {
                   amount={entry.amount}
                   pct={breakdown.total > 0 ? (entry.amount / breakdown.total) * 100 : 0}
                   index={index}
-                  icon={getCategoryIcon(entry.cat)}
+                  customEmoji={getCustomEmoji(entry.cat)}
                   t={t}
                 />
               ))}
@@ -870,9 +857,12 @@ export default function ReportScreen() {
                     : { label: "On Track ✓", color: colors.positive };
                   return (
                     <View key={item.category} style={[styles.budgetCard, { backgroundColor: t.segmentBg, borderColor: t.cardBorder }]}>
-                      <Text style={[styles.budgetCardTitle, { color: t.text }]} numberOfLines={1}>
-                        {getCategoryIcon(item.category)} {item.category}
-                      </Text>
+                      <View style={styles.budgetCardTitleRow}>
+                        <MaterialCommunityIcons name={getCategoryIconName(item.category)} size={13} color={t.text} />
+                        <Text style={[styles.budgetCardTitle, { color: t.text }]} numberOfLines={1}>
+                          {item.category}
+                        </Text>
+                      </View>
                       <Donut pct={pct} color={color} size={78} trackColor={isDark ? "#ffffff14" : "#00000010"} t={t} />
                       <Text style={[styles.budgetAmounts, { color: t.textSecondary }]}>
                         GHS {(parseFloat(item.spent) || 0).toFixed(0)} of GHS {(parseFloat(item.limit) || 0).toFixed(0)}
@@ -1044,15 +1034,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   catLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1, marginRight: 10 },
-  catEmojiCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  catEmoji: { fontSize: 16 },
   catName: { fontSize: 14, fontWeight: "700", flexShrink: 1 },
   catAmount: { fontSize: 14, fontWeight: "bold" },
   catPct: { fontSize: 10, fontWeight: "600", marginTop: 1 },
@@ -1076,7 +1057,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
-  budgetCardTitle: { fontSize: 13, fontWeight: "700" },
+  budgetCardTitleRow: { flexDirection: "row", alignItems: "center", gap: 4, maxWidth: "100%" },
+  budgetCardTitle: { fontSize: 13, fontWeight: "700", flexShrink: 1 },
   donutPct: { fontSize: 13, fontWeight: "bold" },
   budgetAmounts: { fontSize: 11, fontWeight: "600" },
   budgetStatusBadge: {

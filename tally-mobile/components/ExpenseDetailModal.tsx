@@ -3,21 +3,11 @@ import { Modal, View, Text, TouchableOpacity, StyleSheet, Dimensions, ScrollView
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { useTheme } from '../hooks/useTheme';
-import { getExtendedColors, getCategoryColor, typography, spacing, radius, duration, easing } from '../theme';
+import { getExtendedColors, typography, spacing, radius, duration, easing } from '../theme';
 import { CategoryIcon, Button } from './ui';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.75;
-
-const CATEGORY_ICONS: { [key: string]: string } = {
-  Food: '🍔',
-  Transport: '🚗',
-  Entertainment: '🎮',
-  Utilities: '💡',
-  Other: '📦',
-  Shared: '👥',
-  Settlement: '💚',
-};
 
 function parseTagsFromDescription(description: string | null | undefined): {
   cleanDescription: string;
@@ -104,12 +94,7 @@ export default function ExpenseDetailModal({
   const { cleanDescription, tags } = parseTagsFromDescription(expense.description);
 
   const categoryName = expense.category || 'Other';
-  const catColor = getCategoryColor(categoryName);
-  let catEmoji = CATEGORY_ICONS[categoryName];
-  if (!catEmoji) {
-    const custom = customCategories.find((c: any) => c.name === categoryName);
-    catEmoji = custom?.emoji || '📦';
-  }
+  const customEmoji = customCategories.find((c: any) => c.name === categoryName)?.emoji;
 
   const isRecurring = expense.isRecurring === true || expense.isRecurring === 'true';
   const recurrenceTypeStr = expense.recurrenceType
@@ -135,7 +120,7 @@ export default function ExpenseDetailModal({
         <View style={[styles.handleBar, { backgroundColor: colors.borderSubtle }]} />
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} bounces={false}>
-          <CategoryIcon category={categoryName} size={80} style={{ marginBottom: spacing.lg }} />
+          <CategoryIcon category={categoryName} customEmoji={customEmoji} size={80} style={{ marginBottom: spacing.lg }} />
 
           <Text style={[typography.displayLarge, { color: amountColor, textAlign: 'center', marginBottom: spacing.sm }]}>
             {amountStr}
@@ -151,7 +136,7 @@ export default function ExpenseDetailModal({
 
           <View style={styles.detailRows}>
             <DetailRow label="📅 Date" value={formatDate(expense.date)} colors={colors} />
-            <DetailRow label="🏷️ Category" value={`${catEmoji} ${categoryName}`} colors={colors} />
+            <DetailRow label="🏷️ Category" value={categoryName} colors={colors} />
             <DetailRow label="💳 Payment" value={paymentLabel} colors={colors} />
             {expense.isRecurring !== undefined && <DetailRow label="🔄 Recurring" value={recurringLabel} colors={colors} />}
             <DetailRow label="👥 Type" value={typeLabel} colors={colors} />

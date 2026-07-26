@@ -23,17 +23,9 @@ import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import { useTheme } from '../../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius } from '../../theme';
-import { Button, Input, Chip } from '../../components/ui';
+import { Button, Input, Chip, CategoryIcon } from '../../components/ui';
 
 const CATEGORIES = ['Food', 'Transport', 'Entertainment', 'Utilities', 'Other'];
-
-const CATEGORY_ICONS: { [key: string]: string } = {
-  Food: '🍔',
-  Transport: '🚗',
-  Entertainment: '🎮',
-  Utilities: '💡',
-  Other: '📦',
-};
 
 // Smart categorization — keyword → category suggestions (frontend only)
 const CATEGORY_KEYWORDS: { [category: string]: string[] } = {
@@ -85,10 +77,13 @@ export default function AddScreen() {
   // Custom categories
   const [customCategories, setCustomCategories] = useState<{ id: string; name: string; emoji: string }[]>([]);
 
+  function getCustomEmoji(categoryName: string): string | undefined {
+    return customCategories.find((c) => c.name === categoryName)?.emoji;
+  }
+
   // Quick expense templates (stored in AsyncStorage)
   type ExpenseTemplate = {
     name: string;
-    emoji: string;
     amount: string;
     category: string;
     description: string;
@@ -126,14 +121,10 @@ export default function AddScreen() {
       showToast('Enter a valid amount before saving a template', 'error');
       return;
     }
-    const emoji = CATEGORY_ICONS[selectedCategory]
-      || customCategories.find((c) => c.name === selectedCategory)?.emoji
-      || '📦';
     const next = [
       ...templates.filter((t) => t.name !== templateName.trim()),
       {
         name: templateName.trim(),
-        emoji,
         amount: parseFloat(amount).toFixed(2),
         category: selectedCategory,
         description: description.trim(),
@@ -507,7 +498,7 @@ export default function AddScreen() {
                 onLongPress={() => removeTemplate(template.name)}
                 activeOpacity={0.75}
               >
-                <Text style={{ fontSize: 20 }}>{template.emoji}</Text>
+                <CategoryIcon category={template.category} customEmoji={getCustomEmoji(template.category)} size={32} />
                 <View>
                   <Text style={[typography.bodyStrong, { color: colors.text, fontSize: 13 }]} numberOfLines={1}>{template.name}</Text>
                   <Text style={[typography.label, { color: colors.textSecondary }]}>GHS {template.amount}</Text>
@@ -560,7 +551,7 @@ export default function AddScreen() {
                 activeOpacity={0.8}
               >
                 <View style={styles.categoryLeft}>
-                  <Text style={{ fontSize: 20 }}>{CATEGORY_ICONS[cat]}</Text>
+                  <CategoryIcon category={cat} size={28} />
                   <Text style={[typography.bodyStrong, { color: colors.text }]}>{cat}</Text>
                 </View>
                 <Text style={[typography.bodyStrong, { color: colors.textSecondary, fontSize: 13 }]}>
@@ -581,7 +572,7 @@ export default function AddScreen() {
                 activeOpacity={0.8}
               >
                 <View style={styles.categoryLeft}>
-                  <Text style={{ fontSize: 20 }}>{cat.emoji}</Text>
+                  <CategoryIcon category={cat.name} customEmoji={cat.emoji} size={28} />
                   <Text style={[typography.bodyStrong, { color: colors.text }]}>{cat.name}</Text>
                 </View>
                 <Text style={[typography.bodyStrong, { color: colors.textSecondary, fontSize: 13 }]}>
@@ -736,11 +727,13 @@ export default function AddScreen() {
             <Text style={[typography.headline, { color: colors.text, textAlign: 'center', marginBottom: spacing.xs }]}>
               Save as Template
             </Text>
-            <Text style={[typography.caption, { color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.lg }]}>
-              {CATEGORY_ICONS[selectedCategory] || customCategories.find((c) => c.name === selectedCategory)?.emoji || '📦'}
-              {'  '}{selectedCategory} • GHS {parseFloat(amount || '0').toFixed(2)}
-              {description.trim() ? ` • ${description.trim()}` : ''}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, marginBottom: spacing.lg }}>
+              <CategoryIcon category={selectedCategory} customEmoji={getCustomEmoji(selectedCategory)} size={20} />
+              <Text style={[typography.caption, { color: colors.textSecondary, textAlign: 'center', flexShrink: 1 }]}>
+                {selectedCategory} • GHS {parseFloat(amount || '0').toFixed(2)}
+                {description.trim() ? ` • ${description.trim()}` : ''}
+              </Text>
+            </View>
             <Input
               label="Template name"
               placeholder='e.g. "Morning Coffee"'

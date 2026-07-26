@@ -2,11 +2,12 @@ import { View, Text, StyleSheet } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTheme } from '../../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius, duration, easing, staggerDelay } from '../../theme';
-import { ProgressBar } from '../ui';
+import { ProgressBar, CategoryIcon } from '../ui';
 
 interface BudgetCategoryCardProps {
   category: string;
-  icon: string;
+  /** User-chosen emoji for a custom category — ignored for built-ins. */
+  customEmoji?: string;
   spent: number;
   limit: number;
   percentage: number;
@@ -17,7 +18,7 @@ interface BudgetCategoryCardProps {
 }
 
 /** One category's spend-vs-limit card in the Budget Overview tab. */
-export function BudgetCategoryCard({ category, icon, spent, limit, percentage, isOverBudget, isNearLimit, index = 0 }: BudgetCategoryCardProps) {
+export function BudgetCategoryCard({ category, customEmoji, spent, limit, percentage, isOverBudget, isNearLimit, index = 0 }: BudgetCategoryCardProps) {
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
   const barColor = isOverBudget ? colors.negative : isNearLimit ? colors.warning : colors.positive;
@@ -29,9 +30,7 @@ export function BudgetCategoryCard({ category, icon, spent, limit, percentage, i
     >
       <View style={styles.header}>
         <View style={styles.left}>
-          <View style={[styles.iconCircle, { backgroundColor: colors.neutralBg }]}>
-            <Text style={{ fontSize: 18 }}>{icon}</Text>
-          </View>
+          <CategoryIcon category={category} customEmoji={customEmoji} size={36} />
           <Text style={[typography.bodyStrong, { color: colors.text }]}>{category}</Text>
         </View>
 
@@ -87,13 +86,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-  },
-  iconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   badge: {
     borderRadius: radius.sm,

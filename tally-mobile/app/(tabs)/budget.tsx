@@ -22,21 +22,13 @@ import { useToast } from '../../hooks/useToast';
 import { useConfirmModal } from '../../hooks/useConfirmModal';
 import { useTheme } from '../../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius } from '../../theme';
-import { Button } from '../../components/ui';
+import { Button, CategoryIcon } from '../../components/ui';
 import { BudgetCategoryCard } from '../../components/budget/BudgetCategoryCard';
 import { BudgetLimitRow } from '../../components/budget/BudgetLimitRow';
 
 const { width: screenWidth } = Dimensions.get('window');
 
 const CATEGORIES = ['Food', 'Transport', 'Entertainment', 'Utilities', 'Other'];
-
-const CATEGORY_ICONS: { [key: string]: string } = {
-  Food: '🍔',
-  Transport: '🚗',
-  Entertainment: '🎮',
-  Utilities: '💡',
-  Other: '📦',
-};
 
 // Tracks "category-tier" milestone notifications already sent this app session,
 // so re-visiting the screen doesn't re-fire the same alert
@@ -60,12 +52,8 @@ export default function BudgetScreen() {
   const [summary, setSummary] = useState<{ [key: string]: any }>({});
   const [customCategories, setCustomCategories] = useState<any[]>([]);
 
-  // Emoji for default categories first, then user-created custom categories
-  function getCategoryIcon(categoryName: string): string {
-    if (CATEGORY_ICONS[categoryName]) return CATEGORY_ICONS[categoryName];
-    const custom = customCategories.find((c: any) => c.name === categoryName);
-    if (custom?.emoji) return custom.emoji;
-    return '📦';
+  function getCustomEmoji(categoryName: string): string | undefined {
+    return customCategories.find((c: any) => c.name === categoryName)?.emoji;
   }
   const [report, setReport] = useState<any>(null);
   const [limits, setLimits] = useState<{ [key: string]: string }>({
@@ -341,7 +329,7 @@ export default function BudgetScreen() {
                         <View style={[styles.insightCard, { backgroundColor: colors.inputBg, borderColor: colors.borderSubtle }]}>
                           <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.xs }]}>Top Spending Category</Text>
                           <View style={styles.topCatRow}>
-                            <Text style={{ fontSize: 28 }}>{getCategoryIcon(highCat.category)}</Text>
+                            <CategoryIcon category={highCat.category} customEmoji={getCustomEmoji(highCat.category)} size={40} />
                             <View>
                               <Text style={[typography.bodyStrong, { color: colors.text }]}>{highCat.category}</Text>
                               <Text style={[typography.caption, { color: colors.textSecondary, fontFamily: typography.bodyStrong.fontFamily }]}>
@@ -380,7 +368,7 @@ export default function BudgetScreen() {
                     key={category}
                     index={idx}
                     category={category}
-                    icon={getCategoryIcon(category)}
+                    customEmoji={getCustomEmoji(category)}
                     spent={parseFloat(data.spent || 0)}
                     limit={parseFloat(data.limit || 0)}
                     percentage={Math.min(data.percentage || 0, 100)}
@@ -423,7 +411,7 @@ export default function BudgetScreen() {
                     key={category}
                     index={idx}
                     category={category}
-                    icon={getCategoryIcon(category)}
+                    customEmoji={getCustomEmoji(category)}
                     spent={spent[category] || 0}
                     value={limits[category]}
                     onChangeValue={(text) => setLimits((prev) => ({ ...prev, [category]: text }))}

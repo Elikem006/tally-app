@@ -17,7 +17,7 @@ import { getUserId, getUserName, safeStorage } from '../../services/storage';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius } from '../../theme';
-import { Button } from '../../components/ui';
+import { Button, CategoryIcon } from '../../components/ui';
 import { ExpensesHeroCard } from '../../components/home/ExpensesHeroCard';
 import { MomoWalletCard } from '../../components/home/MomoWalletCard';
 import { SpendingChart, ChartTimeline } from '../../components/home/SpendingChart';
@@ -36,15 +36,6 @@ import { consumeMomoRefresh } from '../../services/momoRefresh';
 let lastMomoFetch = 0;
 let cachedMomoBalance: string | null = null;
 let cachedMomoStatus: 'loading' | 'available' | 'unavailable' = 'loading';
-
-const CATEGORY_ICONS: { [key: string]: string } = {
-  Food: '🍔',
-  Transport: '🚗',
-  Entertainment: '🎮',
-  Utilities: '💡',
-  Other: '📦',
-  Shared: '👥',
-};
 
 const CATEGORIES = ['Food', 'Transport', 'Entertainment', 'Utilities', 'Other'];
 
@@ -80,12 +71,8 @@ export default function HomeScreen() {
   // Splitwise-style net position across all groups
   const [groupNet, setGroupNet] = useState<{ youOwe: number; youAreOwed: number } | null>(null);
 
-  // Emoji for default categories first, then user-created custom categories
-  function getCategoryIcon(categoryName: string): string {
-    if (CATEGORY_ICONS[categoryName]) return CATEGORY_ICONS[categoryName];
-    const custom = customCategories.find((c: any) => c.name === categoryName);
-    if (custom?.emoji) return custom.emoji;
-    return '📦';
+  function getCustomEmoji(categoryName: string): string | undefined {
+    return customCategories.find((c: any) => c.name === categoryName)?.emoji;
   }
 
   // Chart timeline switcher state
@@ -759,11 +746,7 @@ export default function HomeScreen() {
                 <TransactionRow
                   key={category}
                   index={idx}
-                  leading={
-                    <View style={[styles.iconBox, { backgroundColor: colors.neutralBg, borderColor: colors.borderSubtle }]}>
-                      <Text style={{ fontSize: 18 }}>{getCategoryIcon(category)}</Text>
-                    </View>
-                  }
+                  leading={<CategoryIcon category={category} customEmoji={getCustomEmoji(category)} size={44} />}
                   title={category}
                   subtitle={`GHS ${total.toFixed(2)} spent • ${percentage.toFixed(0)}%`}
                   amount={`${percentage.toFixed(0)}%`}
@@ -799,9 +782,11 @@ export default function HomeScreen() {
                   key={`${item.type ?? (isShared ? 'shared' : 'personal')}-${item.id}`}
                   index={idx}
                   leading={
-                    <View style={[styles.iconBox, { backgroundColor: colors.neutralBg, borderColor: colors.borderSubtle }]}>
-                      <Text style={{ fontSize: 18 }}>{isShared ? '👥' : getCategoryIcon(item.category)}</Text>
-                    </View>
+                    <CategoryIcon
+                      category={isShared ? 'Shared' : item.category}
+                      customEmoji={isShared ? undefined : getCustomEmoji(item.category)}
+                      size={44}
+                    />
                   }
                   title={cleanDescription || item.category}
                   subtitle={`${item.category} • ${item.date}`}
@@ -860,7 +845,6 @@ export default function HomeScreen() {
         category={quickCategory}
         description={quickDescription}
         categories={CATEGORIES}
-        getCategoryIcon={getCategoryIcon}
         saving={savingExpense}
         onAmountChange={setQuickAmount}
         onCategoryChange={setQuickCategory}

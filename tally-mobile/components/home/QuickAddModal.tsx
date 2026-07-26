@@ -1,7 +1,8 @@
 import { Modal, View, Text, TextInput, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, StyleSheet } from 'react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useTheme } from '../../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius } from '../../theme';
-import { Button, Chip } from '../ui';
+import { getExtendedColors, getCategoryColor, typography, spacing, radius } from '../../theme';
+import { Button, Chip, getCategoryIconName } from '../ui';
 
 interface QuickAddModalProps {
   visible: boolean;
@@ -9,7 +10,6 @@ interface QuickAddModalProps {
   category: string;
   description: string;
   categories: string[];
-  getCategoryIcon: (category: string) => string;
   saving: boolean;
   onAmountChange: (v: string) => void;
   onCategoryChange: (v: string) => void;
@@ -24,7 +24,6 @@ export function QuickAddModal({
   category,
   description,
   categories,
-  getCategoryIcon,
   saving,
   onAmountChange,
   onCategoryChange,
@@ -59,7 +58,7 @@ export function QuickAddModal({
               <Chip
                 key={cat}
                 label={cat}
-                icon={<Text style={{ fontSize: 16 }}>{getCategoryIcon(cat)}</Text>}
+                icon={<MaterialCommunityIcons name={getCategoryIconName(cat)} size={14} color={category === cat ? '#FFFFFF' : getCategoryColor(cat)} />}
                 selected={category === cat}
                 onPress={() => onCategoryChange(cat)}
               />

@@ -26,14 +26,17 @@ export function getCategoryIconName(categoryName: string | null | undefined) {
 
 interface CategoryIconProps {
   category: string;
+  /** User-chosen emoji for a custom category. Ignored for built-ins, which always render the vector glyph. */
+  customEmoji?: string | null;
   size?: number;
   style?: StyleProp<ViewStyle>;
 }
 
 /** A circular, category-colored icon chip — no text. */
-export function CategoryIcon({ category, size = 40, style }: CategoryIconProps) {
+export function CategoryIcon({ category, customEmoji, size = 40, style }: CategoryIconProps) {
   const color = getCategoryColor(category);
   const iconName = getCategoryIconName(category);
+  const showCustomEmoji = !CATEGORY_ICON_NAMES[category] && customEmoji;
 
   return (
     <View
@@ -51,22 +54,28 @@ export function CategoryIcon({ category, size = 40, style }: CategoryIconProps) 
       accessibilityRole="image"
       accessibilityLabel={`${category} category`}
     >
-      <MaterialCommunityIcons name={iconName} size={size * 0.5} color={color} />
+      {showCustomEmoji ? (
+        <Text style={{ fontSize: size * 0.45 }}>{customEmoji}</Text>
+      ) : (
+        <MaterialCommunityIcons name={iconName} size={size * 0.5} color={color} />
+      )}
     </View>
   );
 }
 
 interface CategoryBadgeProps {
   category: string;
+  customEmoji?: string | null;
   style?: StyleProp<ViewStyle>;
 }
 
 /** Icon + label pill — category filter chips, expense list rows. */
-export function CategoryBadge({ category, style }: CategoryBadgeProps) {
+export function CategoryBadge({ category, customEmoji, style }: CategoryBadgeProps) {
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
   const color = getCategoryColor(category);
   const iconName = getCategoryIconName(category);
+  const showCustomEmoji = !CATEGORY_ICON_NAMES[category] && customEmoji;
 
   return (
     <View
@@ -85,7 +94,11 @@ export function CategoryBadge({ category, style }: CategoryBadgeProps) {
       accessibilityRole="text"
       accessibilityLabel={`${category} category`}
     >
-      <MaterialCommunityIcons name={iconName} size={14} color={color} />
+      {showCustomEmoji ? (
+        <Text style={{ fontSize: 14 }}>{customEmoji}</Text>
+      ) : (
+        <MaterialCommunityIcons name={iconName} size={14} color={color} />
+      )}
       <Text style={[typography.label, { color }]}>{category}</Text>
     </View>
   );

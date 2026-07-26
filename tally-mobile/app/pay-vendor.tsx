@@ -6,18 +6,13 @@ import { getUserId, safeStorage } from '../services/storage';
 import { addHistoryItem } from '../services/notificationHistory';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius } from '../theme';
-import { Input, Button, Chip } from '../components/ui';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { getExtendedColors, getCategoryColor, typography, spacing, radius } from '../theme';
+import { Input, Button, Chip, getCategoryIconName } from '../components/ui';
 import Toast from '../components/Toast';
 import { useToast } from '../hooks/useToast';
 
-const CATEGORIES = [
-  { name: 'Food', emoji: '🍔' },
-  { name: 'Transport', emoji: '🚗' },
-  { name: 'Entertainment', emoji: '🎮' },
-  { name: 'Utilities', emoji: '💡' },
-  { name: 'Other', emoji: '📦' },
-];
+const CATEGORIES = ['Food', 'Transport', 'Entertainment', 'Utilities', 'Other'];
 
 export default function PayVendorScreen() {
   const router = useRouter();
@@ -249,12 +244,12 @@ export default function PayVendorScreen() {
             <View style={styles.categoryGrid}>
               {CATEGORIES.map((cat) => (
                 <Chip
-                  key={cat.name}
-                  label={cat.name}
-                  icon={<Text style={{ fontSize: 16 }}>{cat.emoji}</Text>}
-                  selected={category === cat.name}
-                  onPress={() => setCategory(cat.name)}
-                  style={category === cat.name ? { backgroundColor: colors.accent } : undefined}
+                  key={cat}
+                  label={cat}
+                  icon={<MaterialCommunityIcons name={getCategoryIconName(cat)} size={14} color={category === cat ? '#FFFFFF' : getCategoryColor(cat)} />}
+                  selected={category === cat}
+                  onPress={() => setCategory(cat)}
+                  style={category === cat ? { backgroundColor: colors.accent } : undefined}
                 />
               ))}
             </View>

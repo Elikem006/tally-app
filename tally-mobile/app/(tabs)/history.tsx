@@ -16,19 +16,9 @@ import { useActionSheet } from '../../hooks/useActionSheet';
 import { useToast } from '../../hooks/useToast';
 import { useTheme } from '../../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius } from '../../theme';
-import { Button, EmptyState, Skeleton, SkeletonRow } from '../../components/ui';
+import { Button, CategoryIcon, EmptyState, Skeleton, SkeletonRow } from '../../components/ui';
 import { TransactionRow } from '../../components/home/TransactionRow';
 import Toast from '../../components/Toast';
-
-const CATEGORY_ICONS: { [key: string]: string } = {
-  Food: '🍔',
-  Transport: '🚗',
-  Entertainment: '🎮',
-  Utilities: '💡',
-  Other: '📦',
-  Shared: '👥',
-  Settlement: '💚',
-};
 
 const parseLocalDate = (dateStr: string) => {
   if (!dateStr) return new Date();
@@ -72,11 +62,8 @@ export default function HistoryScreen() {
   const [budgets, setBudgets] = useState<any[]>([]);
   const [customCategories, setCustomCategories] = useState<any[]>([]);
 
-  function getCategoryIcon(categoryName: string): string {
-    if (CATEGORY_ICONS[categoryName]) return CATEGORY_ICONS[categoryName];
-    const custom = customCategories.find((c: any) => c.name === categoryName);
-    if (custom?.emoji) return custom.emoji;
-    return '📦';
+  function getCustomEmoji(categoryName: string): string | undefined {
+    return customCategories.find((c: any) => c.name === categoryName)?.emoji;
   }
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -566,9 +553,11 @@ export default function HistoryScreen() {
                   key={`${item.type ?? (isShared ? 'shared' : 'personal')}-${item.id}`}
                   index={idx}
                   leading={
-                    <View style={[styles.iconBox, { backgroundColor: colors.neutralBg }]}>
-                      <Text style={{ fontSize: 20 }}>{isShared ? '👥' : getCategoryIcon(item.category)}</Text>
-                    </View>
+                    <CategoryIcon
+                      category={isShared ? 'Shared' : item.category}
+                      customEmoji={isShared ? undefined : getCustomEmoji(item.category)}
+                      size={44}
+                    />
                   }
                   title={cleanDescription || item.category}
                   subtitle={item.category}
@@ -743,13 +732,6 @@ const styles = StyleSheet.create({
   },
   dateGroup: {
     marginBottom: spacing.xl,
-  },
-  iconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   badgeRow: {
     flexDirection: 'row',

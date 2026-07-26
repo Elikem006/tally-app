@@ -3,10 +3,12 @@ import { View, Text, TextInput, StyleSheet } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTheme } from '../../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius, duration, easing, staggerDelay } from '../../theme';
+import { CategoryIcon } from '../ui';
 
 interface BudgetLimitRowProps {
   category: string;
-  icon: string;
+  /** User-chosen emoji for a custom category — ignored for built-ins. */
+  customEmoji?: string;
   spent: number;
   value: string;
   onChangeValue: (v: string) => void;
@@ -15,7 +17,7 @@ interface BudgetLimitRowProps {
 }
 
 /** One category's editable monthly limit row in the Budget Setup tab. */
-export function BudgetLimitRow({ category, icon, spent, value, onChangeValue, index = 0 }: BudgetLimitRowProps) {
+export function BudgetLimitRow({ category, customEmoji, spent, value, onChangeValue, index = 0 }: BudgetLimitRowProps) {
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
   const [focused, setFocused] = useState(false);
@@ -26,9 +28,7 @@ export function BudgetLimitRow({ category, icon, spent, value, onChangeValue, in
       style={[styles.capsule, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}
     >
       <View style={styles.left}>
-        <View style={[styles.iconCircle, { backgroundColor: colors.neutralBg }]}>
-          <Text style={{ fontSize: 18 }}>{icon}</Text>
-        </View>
+        <CategoryIcon category={category} customEmoji={customEmoji} size={36} />
         <View style={{ flex: 1 }}>
           <Text style={[typography.bodyStrong, { color: colors.text, fontSize: 14 }]}>{category}</Text>
           <Text style={[typography.label, { color: colors.textSecondary, marginTop: 2 }]} numberOfLines={1}>
@@ -71,13 +71,6 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     flex: 1,
     marginRight: spacing.md,
-  },
-  iconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   inputBox: {
     flexDirection: 'row',

@@ -26,15 +26,7 @@ import { useConfirmModal } from '../../hooks/useConfirmModal';
 import { useActionSheet } from '../../hooks/useActionSheet';
 import { useTheme } from '../../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius } from '../../theme';
-import { Card, Button, Input } from '../../components/ui';
-
-const CATEGORY_ICONS: { [key: string]: string } = {
-  Food: '🍔',
-  Transport: '🚗',
-  Entertainment: '🎮',
-  Utilities: '💡',
-  Other: '📦',
-};
+import { Card, Button, Input, CategoryIcon } from '../../components/ui';
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
@@ -395,7 +387,7 @@ export default function ProfileScreen() {
 
               {stats.topCategory?.category && (
                 <View style={[styles.topCategoryCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-                  <Text style={{ fontSize: 28 }}>{CATEGORY_ICONS[stats.topCategory.category] || '📦'}</Text>
+                  <CategoryIcon category={stats.topCategory.category} size={40} />
                   <View>
                     <Text style={[typography.bodyStrong, { color: colors.text }]}>{stats.topCategory.category}</Text>
                     <Text style={[typography.label, { color: colors.textSecondary, marginTop: 2 }]}>Your most spent category</Text>

@@ -18,11 +18,11 @@ import { useConfirmModal } from '../hooks/useConfirmModal';
 const TYPE_CONFIG: Record<HistoryNotif['type'], { icon: string; color: string; bg: string }> = {
   budget_over: { icon: '🚨', color: '#E05C5C', bg: '#E05C5C18' },
   budget_near: { icon: '⚠️', color: '#F7A84F', bg: '#F7A84F18' },
-  expense_added: { icon: '💰', color: '#00C896', bg: '#00C89618' },
+  expense_added: { icon: '💰', color: '#EC4899', bg: '#EC489918' },
   income_added: { icon: '📈', color: '#10B981', bg: '#10B98118' },
   reminder_due: { icon: '⏰', color: '#60A5FA', bg: '#60A5FA18' },
   shared_expense: { icon: '💸', color: '#A78BFA', bg: '#A78BFA18' },
-  settle_up: { icon: '✅', color: '#00C896', bg: '#00C89618' },
+  settle_up: { icon: '✅', color: '#06B6D4', bg: '#06B6D418' },
   monthly_report: { icon: '📊', color: '#FFC107', bg: '#FFC10718' },
 };
 
