@@ -1,11 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import ExpenseDetailModal from '../../components/ExpenseDetailModal';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  ActivityIndicator,
   TouchableOpacity,
   Image,
   RefreshControl,
@@ -16,12 +15,14 @@ import { expenseAPI, remindersAPI, budgetAPI, momoAPI, categoriesAPI, groupAPI }
 import { getUserId, getUserName, safeStorage } from '../../services/storage';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius, FONT_FAMILY } from '../../theme';
+import Animated, { FadeOut } from 'react-native-reanimated';
+import { getExtendedColors, typography, spacing, radius, duration, FONT_FAMILY } from '../../theme';
 import { Button, CategoryIcon, EmptyState, EmptyExpensesArt, Reveal } from '../../components/ui';
 import { ExpensesHeroCard } from '../../components/home/ExpensesHeroCard';
 import { MomoWalletCard } from '../../components/home/MomoWalletCard';
 import { SpendingChart, ChartTimeline } from '../../components/home/SpendingChart';
 import { SpendingRing } from '../../components/home/SpendingRing';
+import { HomeSkeleton } from '../../components/home/HomeSkeleton';
 import { TransactionRow } from '../../components/home/TransactionRow';
 import { QuickAddModal } from '../../components/home/QuickAddModal';
 import Toast from '../../components/Toast';
@@ -362,6 +363,28 @@ export default function HomeScreen() {
   const projected = dailyAvg * daysInMonth;
   const paceOverBudget = totalBudget > 0 && projected > totalBudget;
 
+  // Greeting. The salutation is time-of-day; the line above it reports what
+  // has actually happened today, so the header says something rather than
+  // greeting the user twice — and reads as part of the same screen as the
+  // hero figure instead of unrelated decoration sitting above it.
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    const salutation = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+
+    // Same date construction the create path uses, so this matches what is stored.
+    const todayKey = new Date().toISOString().split('T')[0];
+    const loggedToday = expenses.filter(
+      (e) => e.date === todayKey && e.type !== 'income' && e.paymentMethod !== 'SETTLEMENT',
+    ).length;
+
+    const lead =
+      loggedToday === 0
+        ? 'Nothing logged today yet'
+        : `${loggedToday} expense${loggedToday === 1 ? '' : 's'} logged today`;
+
+    return { salutation, lead };
+  }, [expenses]);
+
   // Group expenses dynamically by Category (spending only)
   const categoryTotals = expenses.reduce((acc: { [key: string]: number }, e) => {
     const category = e.category || 'Other';
@@ -486,14 +509,6 @@ export default function HomeScreen() {
 
   const { chartBars, chartSum } = getChartData();
 
-  if (loading) {
-    return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
-
   if (error && expenses.length === 0) {
     return (
       <ScrollView
@@ -518,9 +533,15 @@ export default function HomeScreen() {
       >
         {/* Header Row */}
         <View style={styles.headerRow}>
-          <View>
-            <Text style={[typography.label, { color: colors.textSecondary }]}>Welcome back 👋</Text>
-            <Text style={[typography.headline, { color: colors.text, marginTop: 2 }]} accessibilityRole="header">Good day, {userName}</Text>
+          <View style={{ flex: 1, marginRight: spacing.sm }}>
+            <Text style={[typography.label, { color: colors.textSecondary }]}>{greeting.lead}</Text>
+            <Text
+              style={[typography.headline, { color: colors.text, marginTop: 2 }]}
+              accessibilityRole="header"
+              numberOfLines={1}
+            >
+              {greeting.salutation}, {userName}
+            </Text>
           </View>
           <View style={styles.headerRightActions}>
             <TouchableOpacity
@@ -568,6 +589,16 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* The header above stays put through loading; only the body below
+            swaps, so nothing on screen jumps when data lands. */}
+        {loading && (
+          <Animated.View exiting={FadeOut.duration(duration.fast)}>
+            <HomeSkeleton />
+          </Animated.View>
+        )}
+
+        {!loading && (
+        <>
         {/* Budget Alerts */}
         {budgetAlerts.length > 0 && (
           <View style={styles.alertsSection}>
@@ -828,6 +859,9 @@ export default function HomeScreen() {
             })
           )}
         </View>
+
+        </>
+        )}
 
         {/* Bottom padding so FAB doesn't cover last item */}
         <View style={{ height: 80 }} />
