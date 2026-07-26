@@ -119,7 +119,7 @@ function getVariantStyle(
   const opacity = isDisabled ? 0.5 : 1;
   switch (variant) {
     case 'primary':
-      return { backgroundColor: withOpacity(colors.primary, opacity), borderColor: 'transparent', borderWidth: 0, textColor: '#FFFFFF' };
+      return { backgroundColor: withOpacity(colors.primary, opacity), borderColor: 'transparent', borderWidth: 0, textColor: colors.onPrimary };
     case 'secondary':
       return { backgroundColor: withOpacity(colors.primarySubtle, opacity), borderColor: 'transparent', borderWidth: 0, textColor: colors.primary };
     case 'ghost':
