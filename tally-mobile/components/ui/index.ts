@@ -13,6 +13,7 @@ export { EmptyState } from './EmptyState';
 export { EmptyExpensesArt, EmptyBudgetsArt, EmptyGroupsArt } from './Illustration';
 export { BrandMark, BrandLockup } from './BrandMark';
 export { Reveal } from './Reveal';
+export { SuccessBurst } from './SuccessBurst';
 export { ActionSheet } from './ActionSheet';
 export type { ActionSheetOption } from './ActionSheet';
 export { SectionHeader } from './SectionHeader';

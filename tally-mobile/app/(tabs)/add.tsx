@@ -23,7 +23,7 @@ import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import { useTheme } from '../../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius } from '../../theme';
-import { Button, Input, Chip, CategoryIcon } from '../../components/ui';
+import { Button, Input, Chip, CategoryIcon, SuccessBurst } from '../../components/ui';
 
 const CATEGORIES = ['Food', 'Transport', 'Entertainment', 'Utilities', 'Other'];
 
@@ -73,6 +73,14 @@ export default function AddScreen() {
   const [tagInput, setTagInput] = useState('');
   const [showHint, setShowHint] = useState(true);
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+
+  // Success confirmation — set on a successful save, cleared when the burst
+  // finishes, which is also what hands the user back to the dashboard.
+  const [successInfo, setSuccessInfo] = useState<{
+    category: string;
+    label: string;
+    amountLabel: string;
+  } | null>(null);
 
   // Custom categories
   const [customCategories, setCustomCategories] = useState<{ id: string; name: string; emoji: string }[]>([]);
@@ -299,8 +307,12 @@ export default function AddScreen() {
         data: { screen: 'history' },
       });
 
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      showToast(transactionType === 'income' ? 'Income added successfully!' : 'Expense added successfully!', 'success');
+      // The burst fires its own success haptic — no second one here.
+      setSuccessInfo({
+        category: selectedCategory,
+        label: transactionType === 'income' ? 'Income recorded' : `Added to ${selectedCategory}`,
+        amountLabel: `${transactionType === 'income' ? '+' : '-'}GHS ${parsed.toFixed(2)}`,
+      });
 
       // Update spent values locally for responsive UI feedback
       if (transactionType === 'expense') {
@@ -821,6 +833,19 @@ export default function AddScreen() {
       </Modal>
 
       <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
+
+      <SuccessBurst
+        visible={!!successInfo}
+        category={successInfo?.category}
+        label={successInfo?.label ?? ''}
+        amountLabel={successInfo?.amountLabel ?? ''}
+        onDone={() => {
+          setSuccessInfo(null);
+          // Land back on the dashboard so the expense is visible where it
+          // matters, instead of leaving the user on an emptied form.
+          router.replace('/(tabs)');
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }
