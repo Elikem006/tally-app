@@ -1,5 +1,12 @@
-import { useEffect, useRef } from 'react';
-import { Animated, Text, StyleSheet } from 'react-native';
+import { useEffect } from 'react';
+import { Text, StyleSheet } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSequence, withDelay, runOnJS } from 'react-native-reanimated';
+import Feather from '@expo/vector-icons/Feather';
+import { useTheme } from '../hooks/useTheme';
+import { getExtendedColors } from '../theme';
+import { typography } from '../theme/typography';
+import { spacing, radius } from '../theme/spacing';
+import { duration, easing } from '../theme/motion';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
@@ -10,53 +17,54 @@ interface ToastProps {
   onHide: () => void;
 }
 
-const CONFIGS: Record<ToastType, { bg: string; textColor: string; emoji: string }> = {
-  success: { bg: '#00C896', textColor: '#ffffff', emoji: '✅' },
-  error:   { bg: '#E05C5C', textColor: '#ffffff', emoji: '❌' },
-  warning: { bg: '#F7A84F', textColor: '#1A1F2E', emoji: '⚠️' },
-  info:    { bg: '#1A1F2E', textColor: '#ffffff', emoji: 'ℹ️' },
+const ICONS: Record<ToastType, keyof typeof Feather.glyphMap> = {
+  success: 'check-circle',
+  error: 'alert-circle',
+  warning: 'alert-triangle',
+  info: 'info',
 };
 
+const AUTO_HIDE_MS = 3000;
+
 export default function Toast({ message, type, visible, onHide }: ToastProps) {
-  const translateY = useRef(new Animated.Value(100)).current;
+  const { theme, colors: baseColors } = useTheme();
+  const colors = getExtendedColors(theme, baseColors);
+  const translateY = useSharedValue(100);
+  const opacity = useSharedValue(0);
+
+  const bg = { success: colors.positive, error: colors.negative, warning: colors.warning, info: colors.surfaceHigh }[type];
+  const textColor = type === 'warning' ? '#1A1F2E' : type === 'info' ? colors.text : '#FFFFFF';
 
   useEffect(() => {
     if (visible) {
-      // Slide in
-      Animated.timing(translateY, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
+      translateY.value = withTiming(0, { duration: duration.base, easing: easing.decelerate });
+      opacity.value = withTiming(1, { duration: duration.base, easing: easing.standard });
 
-      // Auto-hide after 3 seconds
-      const timer = setTimeout(() => {
-        Animated.timing(translateY, {
-          toValue: 100,
-          duration: 250,
-          useNativeDriver: true,
-        }).start(() => onHide());
-      }, 3000);
-
-      return () => clearTimeout(timer);
+      translateY.value = withDelay(
+        AUTO_HIDE_MS,
+        withTiming(100, { duration: duration.base, easing: easing.accelerate }, (finished) => {
+          if (finished) runOnJS(onHide)();
+        }),
+      );
+      opacity.value = withDelay(AUTO_HIDE_MS, withTiming(0, { duration: duration.base, easing: easing.accelerate }));
     } else {
-      translateY.setValue(100);
+      translateY.value = 100;
+      opacity.value = 0;
     }
   }, [visible]);
 
-  if (!visible) return null;
-
-  const { bg, textColor, emoji } = CONFIGS[type];
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: translateY.value }],
+  }));
 
   return (
     <Animated.View
-      style={[
-        styles.container,
-        { backgroundColor: bg, transform: [{ translateY }] },
-      ]}
+      style={[styles.container, { backgroundColor: bg }, animatedStyle]}
+      pointerEvents={visible ? 'auto' : 'none'}
     >
-      <Text style={styles.emoji}>{emoji}</Text>
-      <Text style={[styles.message, { color: textColor }]}>{message}</Text>
+      <Feather name={ICONS[type]} size={18} color={textColor} />
+      <Text style={[typography.bodyStrong, styles.message, { color: textColor }]}>{message}</Text>
     </Animated.View>
   );
 }
@@ -65,13 +73,13 @@ const styles = StyleSheet.create({
   container: {
     position: 'absolute',
     bottom: 90,
-    left: 16,
-    right: 16,
-    borderRadius: 12,
-    padding: 16,
+    left: spacing.lg,
+    right: spacing.lg,
+    borderRadius: radius.md,
+    padding: spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: spacing.md,
     elevation: 5,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -79,13 +87,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     zIndex: 9999,
   },
-  emoji: {
-    fontSize: 18,
-  },
   message: {
     flex: 1,
-    fontSize: 14,
-    fontWeight: '500',
-    lineHeight: 20,
   },
 });

@@ -1,8 +1,12 @@
 import { memo } from "react";
 import { View, Text, Image, StyleProp, ViewStyle, ImageStyle } from "react-native";
 
+// Flat hue ramp, deliberately independent of the light/dark theme — avatar
+// background needs to stay legible with a white initial in either mode.
+// Kept clear of red (`colors.negative` — over-budget/owed-money state) and
+// green (`colors.positive`) so an avatar never reads as a balance alarm.
 const AVATAR_COLORS = [
-  "#00C896", "#2563EB", "#7C3AED", "#DB2777",
+  "#4F46E5", "#2563EB", "#7C3AED", "#DB2777",
   "#EA580C", "#65A30D", "#0891B2", "#9333EA",
 ];
 

@@ -1,13 +1,22 @@
 import { Stack, useRouter } from "expo-router";
 import { registerForPushNotifications } from "../services/notifications";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import * as Notifications from "expo-notifications";
+import * as SplashScreen from "expo-splash-screen";
 import NetInfo from "@react-native-community/netinfo";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ThemeProvider, useTheme } from "../hooks/useTheme";
+import { useAppFonts } from "../theme";
 import { StatusBar } from "expo-status-bar";
+
+// Must run at module scope, before the first render — holds the native
+// splash screen up so the app never paints a frame in the OS system font
+// while Inter is still loading async (see useAppFonts / RootLayout below).
+SplashScreen.preventAutoHideAsync().catch(() => {
+  // Already hidden or unsupported on this runtime — nothing to do.
+});
 
 function ThemedStatusBar() {
   const { theme } = useTheme();
@@ -129,9 +138,29 @@ function RootLayoutContent() {
 }
 
 export default function RootLayout() {
+  const [fontsLoaded, fontError] = useAppFonts();
+
+  // Hide the native splash the instant fonts are ready (or have definitively
+  // failed) — not before. onLayout fires once the first real frame is about
+  // to be committed, avoiding the brief blank gap that hiding on a bare
+  // useEffect can leave.
+  const onLayoutRootView = useCallback(async () => {
+    if (fontsLoaded || fontError) {
+      await SplashScreen.hideAsync();
+    }
+  }, [fontsLoaded, fontError]);
+
+  if (!fontsLoaded && !fontError) {
+    // Splash screen is still up (preventAutoHideAsync above) — render
+    // nothing rather than a system-font frame underneath it.
+    return null;
+  }
+
   return (
     <ThemeProvider>
-      <RootLayoutContent />
+      <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+        <RootLayoutContent />
+      </View>
     </ThemeProvider>
   );
 }

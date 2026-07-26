@@ -1,16 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import ExpenseDetailModal from '../../components/ExpenseDetailModal';
-import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  ActivityIndicator,
-  TouchableOpacity,
-  Alert,
-  TextInput,
-  RefreshControl,
-} from 'react-native';
+import { View, Text, ScrollView, StyleSheet, ActivityIndicator, TouchableOpacity, TextInput, RefreshControl, KeyboardAvoidingView, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,22 +10,16 @@ import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 import { expenseAPI, budgetAPI, categoriesAPI } from '../../services/api';
-import SkeletonItem, { SkeletonExpenseItem } from '../../components/SkeletonItem';
 import { getUserId, currentUser } from '../../services/storage';
 import { useConfirmModal } from '../../hooks/useConfirmModal';
+import { useActionSheet } from '../../hooks/useActionSheet';
+import { useToast } from '../../hooks/useToast';
 import { useTheme } from '../../hooks/useTheme';
+import { getExtendedColors, typography, spacing, radius } from '../../theme';
+import { Button, CategoryIcon, EmptyState, Skeleton, SkeletonRow } from '../../components/ui';
+import { TransactionRow } from '../../components/home/TransactionRow';
+import Toast from '../../components/Toast';
 
-const CATEGORY_ICONS: { [key: string]: string } = {
-  Food: '🍔',
-  Transport: '🚗',
-  Entertainment: '🎮',
-  Utilities: '💡',
-  Other: '📦',
-  Shared: '👥',
-  Settlement: '💚',
-};
-
-// Helper for timezone-independent date parsing
 const parseLocalDate = (dateStr: string) => {
   if (!dateStr) return new Date();
   const parts = dateStr.split('-');
@@ -43,7 +27,6 @@ const parseLocalDate = (dateStr: string) => {
   return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
 };
 
-// Helper for three-quarter circle progress gauges (from 135 deg to 405 deg)
 const getGaugePath = (cx: number, cy: number, r: number, progress: number) => {
   if (progress <= 0) return '';
   const startDeg = 135;
@@ -63,40 +46,36 @@ const getGaugePath = (cx: number, cy: number, r: number, progress: number) => {
   return `M ${x1} ${y1} A ${r} ${r} 0 ${largeArcFlag} 1 ${x2} ${y2}`;
 };
 
-function parseTagsFromDescription(description: string | null | undefined): {
-  cleanDescription: string;
-  tags: string[];
-} {
-  if (!description) return { cleanDescription: "", tags: [] };
-  const words = description.split(" ");
-  const tags = words.filter((w) => w.startsWith("#"));
-  const cleanDescription = words.filter((w) => !w.startsWith("#")).join(" ").trim();
+function parseTagsFromDescription(description: string | null | undefined): { cleanDescription: string; tags: string[] } {
+  if (!description) return { cleanDescription: '', tags: [] };
+  const words = description.split(' ');
+  const tags = words.filter((w) => w.startsWith('#'));
+  const cleanDescription = words.filter((w) => !w.startsWith('#')).join(' ').trim();
   return { cleanDescription, tags };
 }
 
 export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
-  const { colors, theme } = useTheme();
+  const { theme, colors: baseColors } = useTheme();
+  const colors = getExtendedColors(theme, baseColors);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [budgets, setBudgets] = useState<any[]>([]);
   const [customCategories, setCustomCategories] = useState<any[]>([]);
 
-  // Emoji for default categories first, then user-created custom categories
-  function getCategoryIcon(categoryName: string): string {
-    if (CATEGORY_ICONS[categoryName]) return CATEGORY_ICONS[categoryName];
-    const custom = customCategories.find((c: any) => c.name === categoryName);
-    if (custom?.emoji) return custom.emoji;
-    return '📦';
+  function getCustomEmoji(categoryName: string): string | undefined {
+    return customCategories.find((c: any) => c.name === categoryName)?.emoji;
   }
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchFocused, setSearchFocused] = useState(false);
 
-  // Redesigned interactive states
   const [activeTimeFilter, setActiveTimeFilter] = useState<'today' | 'week' | 'month' | 'year'>('month');
   const [momoOnly, setMomoOnly] = useState(false);
+
+  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+  const { showConfirm, ConfirmModalComponent } = useConfirmModal();
+  const { showActionSheet, ActionSheetComponent } = useActionSheet();
 
   useFocusEffect(
     useCallback(() => {
@@ -119,7 +98,6 @@ export default function HistoryScreen() {
       const sorted = [...(expensesRes.data || [])].sort((a, b) => {
         const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
         if (dateDiff !== 0) return dateDiff;
-        // Settlements first within the same date
         const aSettle = a.paymentMethod === 'SETTLEMENT' ? 1 : 0;
         const bSettle = b.paymentMethod === 'SETTLEMENT' ? 1 : 0;
         return bSettle - aSettle;
@@ -139,7 +117,6 @@ export default function HistoryScreen() {
     setRefreshing(false);
   }
 
-  // ── Expense detail modal ────────────────────────────────────────────────────
   const [selectedExpense, setSelectedExpense] = useState<any | null>(null);
   const [showExpenseDetail, setShowExpenseDetail] = useState(false);
 
@@ -153,17 +130,17 @@ export default function HistoryScreen() {
     setSelectedExpense(null);
   }
 
-  // ── Export (CSV via backend + expo-sharing, PDF via expo-print) ────────────
-
-  const { showConfirm, ConfirmModalComponent } = useConfirmModal();
   const [exporting, setExporting] = useState(false);
 
   function handleExportPress() {
-    Alert.alert('Export Expenses', 'Choose a format', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Export CSV', onPress: exportCsv },
-      { text: 'Export PDF', onPress: exportPdf },
-    ]);
+    showActionSheet({
+      title: 'Export Expenses',
+      message: 'Choose a format',
+      options: [
+        { label: 'Export CSV', icon: <Feather name="file-text" size={18} color={colors.text} />, onPress: exportCsv },
+        { label: 'Export PDF', icon: <Feather name="file" size={18} color={colors.text} />, onPress: exportPdf },
+      ],
+    });
   }
 
   async function exportCsv() {
@@ -177,10 +154,10 @@ export default function HistoryScreen() {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Export Tally expenses' });
       } else {
-        Alert.alert('Sharing unavailable', 'Sharing is not supported on this device.');
+        showToast('Sharing is not supported on this device.', 'error');
       }
     } catch (e: any) {
-      Alert.alert('Export failed', e?.response?.data?.error || 'Could not export CSV. Please try again.');
+      showToast(e?.response?.data?.error || 'Could not export CSV. Please try again.', 'error');
     } finally {
       setExporting(false);
     }
@@ -239,39 +216,42 @@ export default function HistoryScreen() {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Export Tally expenses' });
       } else {
-        Alert.alert('Sharing unavailable', 'Sharing is not supported on this device.');
+        showToast('Sharing is not supported on this device.', 'error');
       }
     } catch {
-      Alert.alert('Export failed', 'Could not generate the PDF. Please try again.');
+      showToast('Could not generate the PDF. Please try again.', 'error');
     } finally {
       setExporting(false);
     }
   }
 
-  // ── Recurring (long-press menu) ─────────────────────────────────────────────
-
   function handleLongPress(item: any) {
     if (item.isShared || item.type === 'shared') {
-      Alert.alert('Shared Expense', 'Shared expenses can only be managed from the group screen.');
+      showToast('Shared expenses can only be managed from the group screen.', 'info');
       return;
     }
-    const options: any[] = [
-      { text: 'Cancel', style: 'cancel' },
-      item.isRecurring
-        ? { text: 'Remove recurring', onPress: () => setRecurring(item, false) }
-        : { text: 'Mark as recurring', onPress: () => pickRecurrence(item) },
-      { text: 'Delete expense', style: 'destructive', onPress: () => handleDelete(item) },
-    ];
-    Alert.alert('Expense options', item.description || item.category, options);
+    showActionSheet({
+      title: 'Expense Options',
+      message: item.description || item.category,
+      options: [
+        item.isRecurring
+          ? { label: 'Remove recurring', icon: <Feather name="repeat" size={18} color={colors.text} />, onPress: () => setRecurring(item, false) }
+          : { label: 'Mark as recurring', icon: <Feather name="repeat" size={18} color={colors.text} />, onPress: () => pickRecurrence(item) },
+        { label: 'Delete expense', icon: <Feather name="trash-2" size={18} color={colors.negative} />, destructive: true, onPress: () => handleDelete(item) },
+      ],
+    });
   }
 
   function pickRecurrence(item: any) {
-    Alert.alert('Repeat how often?', 'This expense will repeat automatically', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Daily', onPress: () => setRecurring(item, true, 'DAILY') },
-      { text: 'Weekly', onPress: () => setRecurring(item, true, 'WEEKLY') },
-      { text: 'Monthly', onPress: () => setRecurring(item, true, 'MONTHLY') },
-    ]);
+    showActionSheet({
+      title: 'Repeat how often?',
+      message: 'This expense will repeat automatically',
+      options: [
+        { label: 'Daily', onPress: () => setRecurring(item, true, 'DAILY') },
+        { label: 'Weekly', onPress: () => setRecurring(item, true, 'WEEKLY') },
+        { label: 'Monthly', onPress: () => setRecurring(item, true, 'MONTHLY') },
+      ],
+    });
   }
 
   async function setRecurring(item: any, isRecurring: boolean, recurrenceType = '') {
@@ -279,13 +259,13 @@ export default function HistoryScreen() {
       await expenseAPI.updateRecurring(String(item.id), isRecurring, recurrenceType);
       await fetchData(false);
     } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.error || 'Could not update recurring setting.');
+      showToast(e?.response?.data?.error || 'Could not update recurring setting.', 'error');
     }
   }
 
   function handleDelete(item: any) {
     if (item.isShared || item.type === 'shared') {
-      Alert.alert('Shared Expense', 'Shared expenses can only be deleted from the group screen.');
+      showToast('Shared expenses can only be deleted from the group screen.', 'info');
       return;
     }
     showConfirm({
@@ -293,29 +273,23 @@ export default function HistoryScreen() {
       title: 'Delete Expense',
       message: 'Are you sure you want to delete this expense? This cannot be undone.',
       confirmText: 'Delete',
-      confirmColor: '#E05C5C',
+      confirmColor: colors.negative,
       onConfirm: async () => {
         try {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => { });
           await expenseAPI.deleteExpense(String(item.id), getUserId());
-          // Only personal expenses reach here — match on id AND type so a
-          // shared entry with the same numeric id isn't removed too
-          setExpenses((prev) =>
-            prev.filter((e) => !(e.id === item.id && !(e.isShared || e.type === 'shared'))),
-          );
+          setExpenses((prev) => prev.filter((e) => !(e.id === item.id && !(e.isShared || e.type === 'shared'))));
         } catch {
-          Alert.alert('Error', 'Failed to delete expense');
+          showToast('Failed to delete expense', 'error');
         }
       },
     });
   }
 
-  // Filter based on Time, Search Query and MoMo status (Timezone independent local dates)
   const filteredExpenses = useMemo(() => {
     return expenses.filter((e) => {
       if (!e.date) return false;
 
-      // 1. Time filtering
       const expenseDate = parseLocalDate(e.date);
       expenseDate.setHours(0, 0, 0, 0);
 
@@ -351,8 +325,6 @@ export default function HistoryScreen() {
         matchesTime = e.date.startsWith(currentYear);
       }
 
-      // 2. Search query filtering — matches description, category, tags,
-      // amount ("50" finds GHS 50.00) and month name ("june" finds June)
       const { cleanDescription, tags } = parseTagsFromDescription(e.description);
       const desc = (cleanDescription || '').toLowerCase();
       const cat = (e.category || '').toLowerCase();
@@ -369,38 +341,24 @@ export default function HistoryScreen() {
         || amountStr.includes(query)
         || monthName.startsWith(query);
 
-      // 3. MoMo filter
-      const matchesMomo = !momoOnly || e.paymentMethod === "MOMO" || e.paymentMethod === "MOMO_TRANSFER";
+      const matchesMomo = !momoOnly || e.paymentMethod === 'MOMO' || e.paymentMethod === 'MOMO_TRANSFER';
 
       return matchesTime && matchesSearch && matchesMomo;
     });
   }, [expenses, activeTimeFilter, searchQuery, momoOnly]);
 
-  // Sum of limits of all user budgets
   const totalBudget = useMemo(() => {
     return budgets.reduce((sum, b) => sum + parseFloat(b.monthlyLimit || '0'), 0);
   }, [budgets]);
 
-  // Dynamically scale budget based on selected time filter (for Total Spend comparison)
   const scaledBudget = useMemo(() => {
     const baseBudget = totalBudget;
-    if (activeTimeFilter === 'today') {
-      return parseFloat((baseBudget / 30).toFixed(2));
-    }
-    if (activeTimeFilter === 'week') {
-      return parseFloat((baseBudget * 7 / 30).toFixed(2));
-    }
-    if (activeTimeFilter === 'month') {
-      return baseBudget;
-    }
+    if (activeTimeFilter === 'today') return parseFloat((baseBudget / 30).toFixed(2));
+    if (activeTimeFilter === 'week') return parseFloat((baseBudget * 7 / 30).toFixed(2));
+    if (activeTimeFilter === 'month') return baseBudget;
     return baseBudget * 12;
   }, [totalBudget, activeTimeFilter]);
 
-  // Total spent = every non-income transaction (personal AND shared), regardless
-  // of stored sign — expenses are always money going out. Income and
-  // settlements are money coming IN, so they are excluded entirely (not
-  // subtracted) — "Total Spent" only ever reflects money going out and never
-  // goes negative.
   const totalSpent = useMemo(() => {
     return filteredExpenses.reduce((sum, e) => {
       if (e.type === 'income' || e.paymentMethod === 'SETTLEMENT') return sum;
@@ -408,7 +366,6 @@ export default function HistoryScreen() {
     }, 0);
   }, [filteredExpenses]);
 
-  // Progress values for gauges (safe division)
   const spendProgress = useMemo(() => {
     return scaledBudget > 0 ? Math.min(totalSpent / scaledBudget, 1.0) : 0;
   }, [totalSpent, scaledBudget]);
@@ -437,28 +394,22 @@ export default function HistoryScreen() {
         } catch (_) { }
       }
 
-      if (!groups[header]) {
-        groups[header] = [];
-      }
+      if (!groups[header]) groups[header] = [];
       groups[header].push(e);
     });
 
-    return Object.entries(groups).map(([date, items]) => ({
-      date,
-      items,
-    }));
+    return Object.entries(groups).map(([date, items]) => ({ date, items }));
   };
 
   const groupedExpenses = groupExpensesByDate(filteredExpenses);
 
   if (loading && !refreshing) {
-    // Skeleton loading — placeholder cards instead of a bare spinner
     return (
-      <View style={[styles.container, { backgroundColor: colors.background, paddingHorizontal: 20, paddingTop: 60 }]}>
-        <SkeletonItem width="55%" height={28} borderRadius={12} style={{ marginBottom: 20 }} />
-        <SkeletonItem height={48} borderRadius={24} style={{ marginBottom: 16 }} />
+      <View style={[styles.container, { backgroundColor: colors.background, paddingHorizontal: spacing.lg, paddingTop: 60 }]}>
+        <Skeleton width="55%" height={28} borderRadius={radius.sm} style={{ marginBottom: spacing.xl }} />
+        <Skeleton height={48} borderRadius={radius.xl} style={{ marginBottom: spacing.lg }} />
         {[...Array(6)].map((_, i) => (
-          <SkeletonExpenseItem key={i} />
+          <SkeletonRow key={i} />
         ))}
       </View>
     );
@@ -471,38 +422,34 @@ export default function HistoryScreen() {
         contentContainerStyle={[styles.centered, { backgroundColor: colors.background }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
-        <Text style={styles.errorIcon}>⚠️</Text>
-        <Text style={[styles.errorText, { color: colors.textSecondary }]}>{error}</Text>
-        <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={() => fetchData(true)}>
-          <Text style={styles.retryButtonText}>Retry</Text>
-        </TouchableOpacity>
+        <Feather name="alert-triangle" size={40} color={colors.textSecondary} style={{ marginBottom: spacing.lg }} />
+        <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.xl }]}>{error}</Text>
+        <Button title="Retry" onPress={() => fetchData(true)} fullWidth={false} />
       </ScrollView>
     );
   }
 
   return (
     <>
+      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
         style={[styles.container, { backgroundColor: colors.background }]}
-        contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}
+        contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, spacing.xl) }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.headerRow}>
-          <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>Analytics & History</Text>
+          <Text style={[typography.display, { color: colors.text }]} accessibilityRole="header">Analytics & History</Text>
           <TouchableOpacity
-            style={[styles.exportBtn, { backgroundColor: colors.cardBg, borderColor: colors.border }, exporting && { opacity: 0.5 }]}
+            style={[styles.exportBtn, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }, exporting && { opacity: 0.5 }]}
             onPress={handleExportPress}
             disabled={exporting}
             activeOpacity={0.8}
           >
-            {exporting ? (
-              <ActivityIndicator size="small" color={colors.text} />
-            ) : (
-              <Text style={[styles.exportBtnText, { color: colors.text }]}>📤 Export</Text>
-            )}
+            {exporting ? <ActivityIndicator size="small" color={colors.text} /> : <Text style={[typography.bodyStrong, { color: colors.text, fontSize: 13 }]}>📤 Export</Text>}
           </TouchableOpacity>
         </View>
+
         <View style={[styles.timeFilterContainer, { backgroundColor: colors.neutralBg }]}>
           {(['today', 'week', 'month', 'year'] as const).map((filter) => {
             const labelMap = { today: 'Today', week: 'This Week', month: 'This Month', year: 'This Year' };
@@ -510,229 +457,181 @@ export default function HistoryScreen() {
             return (
               <TouchableOpacity
                 key={filter}
-                style={[styles.timeFilterBtn, isActive && { backgroundColor: colors.cardBg }]}
+                style={[styles.timeFilterBtn, isActive && { backgroundColor: colors.surfaceElevated }]}
                 onPress={() => setActiveTimeFilter(filter)}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.timeFilterText, { color: colors.textSecondary }, isActive && { color: colors.text, fontWeight: 'bold' }]}>
-                  {labelMap[filter]}
-                </Text>
+                <Text style={[typography.bodyStrong, { color: isActive ? colors.text : colors.textSecondary, fontSize: 13 }]}>{labelMap[filter]}</Text>
               </TouchableOpacity>
             );
           })}
         </View>
 
-        {/* 2. Side-by-side Gauges: Total Spend and Balance */}
         <View style={styles.gaugesRow}>
-          {/* Total Spending Gauge */}
-          <View style={[styles.gaugeCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+          <View style={[styles.gaugeCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>
             <View style={styles.gaugeWrapper}>
               <Svg width={72} height={72} viewBox="0 0 72 72">
                 <Path d={getGaugePath(36, 36, 28, 1.0)} fill="none" stroke={colors.border} strokeWidth="5.5" strokeLinecap="round" />
                 {totalSpent > 0 && scaledBudget > 0 && (
-                  <Path
-                    d={getGaugePath(36, 36, 28, spendProgress)}
-                    fill="none"
-                    stroke="#FF9500"
-                    strokeWidth="5.5"
-                    strokeLinecap="round"
-                  />
+                  <Path d={getGaugePath(36, 36, 28, spendProgress)} fill="none" stroke={colors.warning} strokeWidth="5.5" strokeLinecap="round" />
                 )}
               </Svg>
-              <View style={styles.gaugeIconContainer}>
-                <Feather name="upload" size={14} color="#FF9500" />
+              <View style={[styles.gaugeIconContainer, { backgroundColor: colors.neutralBg }]}>
+                <Feather name="upload" size={14} color={colors.warning} />
               </View>
             </View>
-            <Text style={[styles.gaugeLabel, { color: colors.textSecondary }]}>Total Spent</Text>
-            <Text style={[styles.gaugeValue, { color: colors.text }]}>GHS {totalSpent.toFixed(0)}</Text>
+            <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.xs }]}>Total Spent</Text>
+            <Text style={[typography.bodyStrong, { color: colors.text }]}>GHS {totalSpent.toFixed(0)}</Text>
           </View>
 
-          {/* Balance Gauge */}
-          <View style={[styles.gaugeCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+          <View style={[styles.gaugeCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>
             <View style={styles.gaugeWrapper}>
               <Svg width={72} height={72} viewBox="0 0 72 72">
                 <Path d={getGaugePath(36, 36, 28, 1.0)} fill="none" stroke={colors.border} strokeWidth="5.5" strokeLinecap="round" />
                 {totalBudget > 0 && (
-                  <Path
-                    d={getGaugePath(36, 36, 28, balanceProgress)}
-                    fill="none"
-                    stroke="#34C759"
-                    strokeWidth="5.5"
-                    strokeLinecap="round"
-                  />
+                  <Path d={getGaugePath(36, 36, 28, balanceProgress)} fill="none" stroke={colors.positive} strokeWidth="5.5" strokeLinecap="round" />
                 )}
               </Svg>
-              <View style={styles.gaugeIconContainer}>
-                <Feather name="pie-chart" size={14} color="#34C759" />
+              <View style={[styles.gaugeIconContainer, { backgroundColor: colors.neutralBg }]}>
+                <Feather name="pie-chart" size={14} color={colors.positive} />
               </View>
             </View>
-            <Text style={[styles.gaugeLabel, { color: colors.textSecondary }]}>Balance</Text>
-            <Text style={[styles.gaugeValue, { color: colors.text }]}>GHS {totalBudget.toFixed(0)}</Text>
+            <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.xs }]}>Balance</Text>
+            <Text style={[typography.bodyStrong, { color: colors.text }]}>GHS {totalBudget.toFixed(0)}</Text>
           </View>
         </View>
 
-        {/* 3. Search Bar */}
-        <View style={[
-          styles.searchContainer,
-          { backgroundColor: colors.inputBg, borderColor: colors.border },
-          searchFocused && { borderColor: colors.primary }
-        ]}>
-          <Feather name="search" size={18} color="#8E9AA6" style={styles.searchIcon} />
+        <View style={[styles.searchContainer, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+          <Feather name="search" size={18} color={colors.textSecondary} style={{ marginRight: spacing.sm + 2 }} />
           <TextInput
-            style={[styles.searchBar, { color: colors.text }]}
+            style={[typography.body, { flex: 1, color: colors.text, height: '100%' }]}
             placeholder="Search filtered list..."
-            placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
+            placeholderTextColor={colors.textTertiary}
             value={searchQuery}
             onChangeText={setSearchQuery}
-            onFocus={() => setSearchFocused(true)}
-            onBlur={() => setSearchFocused(false)}
           />
           {searchQuery !== '' && (
-            <TouchableOpacity onPress={() => setSearchQuery('')} activeOpacity={0.7} style={styles.clearButton}>
-              <Feather name="x" size={16} color="#8E9AA6" />
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              activeOpacity={0.7}
+              style={{ padding: spacing.xs }}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+            >
+              <Feather name="x" size={16} color={colors.textSecondary} />
             </TouchableOpacity>
           )}
         </View>
-        {/* 3.5 Standalone Filters */}
+
         <View style={styles.filterOptionsRow}>
           <TouchableOpacity
             style={[
               styles.momoFilterBtn,
               { backgroundColor: colors.neutralBg, borderColor: colors.border },
-              momoOnly && { backgroundColor: colors.accent + '20', borderColor: colors.accent }
+              momoOnly && { backgroundColor: colors.accentSubtle, borderColor: colors.accent },
             ]}
             onPress={() => setMomoOnly(!momoOnly)}
             activeOpacity={0.8}
           >
-            <Text style={[
-              styles.momoFilterBtnText,
-              { color: colors.textSecondary },
-              momoOnly && { color: colors.accent, fontWeight: 'bold' }
-            ]}>
-              📱 MoMo Only
-            </Text>
+            <Text style={[typography.bodyStrong, { color: momoOnly ? colors.accent : colors.textSecondary, fontSize: 13 }]}>📱 MoMo Only</Text>
           </TouchableOpacity>
         </View>
 
-        {/* 4. List of Transactions */}
         {groupedExpenses.map((group) => (
           <View key={group.date} style={styles.dateGroup}>
-            <Text style={[styles.dateHeader, { color: colors.textSecondary }]}>{group.date}</Text>
-            {group.items.map((item) => {
-              const isShared = item.isShared || item.type === "shared";
-              const isMomo = item.paymentMethod === "MOMO";
-              const isMomoTransfer = item.paymentMethod === "MOMO_TRANSFER";
-              const isSettlement = item.paymentMethod === "SETTLEMENT";
+            <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm + 2 }]}>{group.date}</Text>
+            {group.items.map((item, idx) => {
+              const isShared = item.isShared || item.type === 'shared';
+              const isMomo = item.paymentMethod === 'MOMO';
+              const isMomoTransfer = item.paymentMethod === 'MOMO_TRANSFER';
+              const isSettlement = item.paymentMethod === 'SETTLEMENT';
               const { cleanDescription, tags } = parseTagsFromDescription(item.description);
+
               return (
-                <TouchableOpacity
-                  // type+id — personal and shared entries can share numeric ids
-                  key={`${item.type ?? (isShared ? "shared" : "personal")}-${item.id}`}
-                  style={[
-                    styles.expenseCard,
-                    { backgroundColor: colors.cardBg, borderColor: colors.border },
-                    isShared && { borderColor: colors.primary, borderWidth: 1.5 }
-                  ]}
-                  onPress={() => openDetail(item)}
-                  onLongPress={() => handleLongPress(item)}
-                  activeOpacity={0.9}
-                >
-                  <View style={styles.expenseLeft}>
-                    <View style={[styles.iconBox, { backgroundColor: colors.neutralBg }]}>
-                      <Text style={styles.icon}>{isShared ? '👥' : getCategoryIcon(item.category)}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <View style={styles.descRow}>
-                        <Text style={[styles.expenseDescription, { color: colors.text }]} numberOfLines={1}>
-                          {cleanDescription || item.category}
-                        </Text>
-                      </View>
-                      <Text style={[styles.expenseCategory, { color: colors.textSecondary }]}>{item.category}</Text>
-
-                      <View style={styles.badgeRow}>
-                        {isSettlement && (
-                          <View style={[styles.sharedBadge, { backgroundColor: colors.positive + '15', borderColor: colors.positive + '30' }]}>
-                            <Text style={[styles.sharedBadgeText, { color: colors.positive }]}>💚 Settlement</Text>
-                          </View>
-                        )}
-                        {isShared && (
-                          <View style={[styles.sharedBadge, { backgroundColor: colors.primary + '15' }]}>
-                            <Text style={[styles.sharedBadgeText, { color: colors.primary }]}>👥 Shared</Text>
-                          </View>
-                        )}
-                        {isShared && item.settled && (
-                          <View style={[styles.sharedBadge, { backgroundColor: colors.positive + '15', borderColor: colors.positive + '30' }]}>
-                            <Text style={[styles.sharedBadgeText, { color: colors.positive }]}>Settled ✓</Text>
-                          </View>
-                        )}
-                        {item.status === 'PENDING' && (
-                          <View style={[styles.sharedBadge, { backgroundColor: '#F59E0B20', borderColor: '#F59E0B40' }]}>
-                            <Text style={[styles.sharedBadgeText, { color: '#D97706' }]}>⏳ Pending</Text>
-                          </View>
-                        )}
-                        {item.status === 'FAILED' && (
-                          <View style={[styles.sharedBadge, { backgroundColor: colors.negative + '15', borderColor: colors.negative + '30' }]}>
-                            <Text style={[styles.sharedBadgeText, { color: colors.negative }]}>✕ Failed</Text>
-                          </View>
-                        )}
-                        {!isSettlement && (
-                          <View style={[styles.paymentBadge, { backgroundColor: isMomoTransfer ? colors.accent + '15' : colors.neutralBg }]}>
-                            <Text style={[styles.paymentBadgeText, { color: isMomoTransfer ? colors.accent : colors.textSecondary }]}>
-                              {isMomoTransfer ? "📤 Transfer" : isMomo ? "📱 MoMo" : "💵 Cash"}
-                            </Text>
-                          </View>
-                        )}
-                        {item.isRecurring && (
-                          <View style={[styles.paymentBadge, { backgroundColor: colors.primary + '15' }]}>
-                            <Text style={[styles.paymentBadgeText, { color: colors.primary }]}>
-                              🔄 {item.recurrenceType
-                                ? item.recurrenceType.charAt(0) + item.recurrenceType.slice(1).toLowerCase()
-                                : 'Recurring'}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-
-                      {tags.length > 0 && (
-                        <View style={styles.tagsContainer}>
-                          {tags.map((tag) => (
-                            <View key={tag} style={[styles.tagPill, { backgroundColor: colors.neutralBg }]}>
-                              <Text style={[styles.tagText, { color: colors.textSecondary }]}>{tag}</Text>
-                            </View>
-                          ))}
+                <TransactionRow
+                  key={`${item.type ?? (isShared ? 'shared' : 'personal')}-${item.id}`}
+                  index={idx}
+                  leading={
+                    <CategoryIcon
+                      category={isShared ? 'Shared' : item.category}
+                      customEmoji={isShared ? undefined : getCustomEmoji(item.category)}
+                      size={44}
+                    />
+                  }
+                  title={cleanDescription || item.category}
+                  subtitle={item.category}
+                  accentBorder={isShared}
+                  tags={tags}
+                  badges={
+                    <View style={styles.badgeRow}>
+                      {isSettlement && (
+                        <View style={[styles.badgePill, { backgroundColor: `${colors.positive}15`, borderColor: `${colors.positive}30` }]}>
+                          <Text style={[typography.label, { color: colors.positive }]}>💚 Settlement</Text>
+                        </View>
+                      )}
+                      {isShared && (
+                        <View style={[styles.badgePill, { backgroundColor: colors.primarySubtle }]}>
+                          <Text style={[typography.label, { color: colors.primary }]}>👥 Shared</Text>
+                        </View>
+                      )}
+                      {isShared && item.settled && (
+                        <View style={[styles.badgePill, { backgroundColor: `${colors.positive}15`, borderColor: `${colors.positive}30` }]}>
+                          <Text style={[typography.label, { color: colors.positive }]}>Settled ✓</Text>
+                        </View>
+                      )}
+                      {item.status === 'PENDING' && (
+                        <View style={[styles.badgePill, { backgroundColor: colors.accentSubtle, borderColor: `${colors.accent}40` }]}>
+                          <Text style={[typography.label, { color: colors.accent }]}>⏳ Pending</Text>
+                        </View>
+                      )}
+                      {item.status === 'FAILED' && (
+                        <View style={[styles.badgePill, { backgroundColor: `${colors.negative}15`, borderColor: `${colors.negative}30` }]}>
+                          <Text style={[typography.label, { color: colors.negative }]}>✕ Failed</Text>
+                        </View>
+                      )}
+                      {!isSettlement && (
+                        <View style={[styles.badgePill, { backgroundColor: isMomoTransfer ? colors.accentSubtle : colors.neutralBg }]}>
+                          <Text style={[typography.label, { color: isMomoTransfer ? colors.accent : colors.textSecondary }]}>
+                            {isMomoTransfer ? '📤 Transfer' : isMomo ? '📱 MoMo' : '💵 Cash'}
+                          </Text>
+                        </View>
+                      )}
+                      {item.isRecurring && (
+                        <View style={[styles.badgePill, { backgroundColor: colors.primarySubtle }]}>
+                          <Text style={[typography.label, { color: colors.primary }]}>
+                            🔄 {item.recurrenceType ? item.recurrenceType.charAt(0) + item.recurrenceType.slice(1).toLowerCase() : 'Recurring'}
+                          </Text>
                         </View>
                       )}
                     </View>
-                  </View>
-                  <View style={styles.expenseRight}>
-                    {/* Money going OUT unless explicitly income or a settlement received */}
-                    <Text style={[
-                      styles.expenseAmount,
-                      { color: (item.type === 'income' || isSettlement) ? colors.positive : colors.negative }
-                    ]}>
-                      {(item.type === 'income' || isSettlement)
-                        ? `+GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`
-                        : `-GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`}
-                    </Text>
-                    <Text style={[styles.chevron, { color: colors.textSecondary }]}>›</Text>
-                  </View>
-                </TouchableOpacity>
+                  }
+                  amount={
+                    (item.type === 'income' || isSettlement)
+                      ? `+GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`
+                      : `-GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`
+                  }
+                  amountColor={(item.type === 'income' || isSettlement) ? colors.positive : colors.negative}
+                  onPress={() => openDetail(item)}
+                  onLongPress={() => handleLongPress(item)}
+                />
               );
             })}
           </View>
         ))}
 
         {filteredExpenses.length === 0 && (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>🔍</Text>
-            <Text style={[styles.emptyText, { color: colors.text }]}>No transactions found</Text>
-            <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>Try changing your filter settings or search query</Text>
-          </View>
+          <EmptyState icon="search" title="No transactions found" body="Try changing your filter settings or search query" />
         )}
 
-        <Text style={[styles.hint, { color: colors.textSecondary }]}>Tip: You can also long press a transaction to delete it</Text>
+        <Text style={[typography.label, { color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm, fontStyle: 'italic' }]}>
+          Tip: You can also long press a transaction to delete it
+        </Text>
       </ScrollView>
+      </KeyboardAvoidingView>
       {ConfirmModalComponent}
+      {ActionSheetComponent}
+      <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
       <ExpenseDetailModal
         visible={showExpenseDetail}
         expense={selectedExpense}
@@ -749,96 +648,50 @@ export default function HistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F2F4F7',
-  },
-  centered: {
-    flex: 1,
-    backgroundColor: '#F2F4F7',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  container: { flex: 1 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: {
-    paddingHorizontal: 20,
-    paddingTop: 30,
+    paddingHorizontal: spacing.lg,
     paddingBottom: 40,
-  },
-  cardHeaderTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#111111',
-    marginBottom: 20,
-    paddingLeft: 4,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: spacing.xl,
   },
   exportBtn: {
-    borderRadius: 18,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    marginBottom: 20,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     minWidth: 92,
     alignItems: 'center',
   },
-  exportBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  // Time filters styles (aligned with budget.tsx theme)
   timeFilterContainer: {
     flexDirection: 'row',
-    backgroundColor: '#EAEBEF',
-    borderRadius: 24,
+    borderRadius: radius.xl,
     padding: 4,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#E2E4E8',
+    marginBottom: spacing.xl,
   },
   timeFilterBtn: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: spacing.sm + 2,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 20,
+    borderRadius: radius.lg,
   },
-  timeFilterBtnActive: {
-    backgroundColor: '#ffffff',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  timeFilterText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#8E9AA6',
-  },
-  timeFilterTextActive: {
-    color: '#111111',
-  },
-  // Gauges row styles
   gaugesRow: {
     flexDirection: 'row',
-    gap: 16,
-    marginBottom: 20,
+    gap: spacing.md,
+    marginBottom: spacing.xl,
   },
   gaugeCard: {
     flex: 1,
-    backgroundColor: '#ffffff',
-    borderRadius: 28,
-    padding: 16,
+    borderRadius: radius.xl,
+    padding: spacing.md,
     alignItems: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.04,
-    shadowRadius: 16,
-    elevation: 3,
+    borderWidth: 1,
   },
   gaugeWrapper: {
     position: 'relative',
@@ -846,289 +699,49 @@ const styles = StyleSheet.create({
     height: 72,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: spacing.sm + 2,
   },
   gaugeIconContainer: {
     position: 'absolute',
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#F8F9FA',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  gaugeLabel: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    color: '#8E9AA6',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  gaugeValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#111111',
-  },
-  // Search bar styles
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
+    borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: '#EAEBEF',
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.md,
     height: 48,
-    marginBottom: 12,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.02,
-    shadowRadius: 8,
-    elevation: 1,
+    marginBottom: spacing.sm + 2,
   },
-  searchContainerFocused: {
-    borderColor: '#111111',
-  },
-  searchIcon: {
-    marginRight: 10,
-  },
-  searchBar: {
-    flex: 1,
-    color: '#111111',
-    fontSize: 15,
-    height: '100%',
-  },
-  clearButton: {
-    padding: 4,
-  },
-  // Standalone MoMo filter row
   filterOptionsRow: {
     flexDirection: 'row',
-    marginHorizontal: 4,
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   momoFilterBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#EAEBEF',
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.02,
-    shadowRadius: 4,
-    elevation: 1,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
-  momoFilterBtnActive: {
-    backgroundColor: '#F59E0B0a',
-    borderColor: '#F59E0B',
-  },
-  momoFilterBtnText: {
-    color: '#8E9AA6',
-    fontSize: 13,
-    fontWeight: 'bold',
-  },
-  momoFilterBtnTextActive: {
-    color: '#D97706',
-  },
-  // Date group list styles
   dateGroup: {
-    marginBottom: 20,
-  },
-  dateHeader: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: '#8E9AA6',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 10,
-    paddingLeft: 4,
-  },
-  expenseCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    padding: 16,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#EAEBEF',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.02,
-    shadowRadius: 8,
-    elevation: 1,
-  },
-  sharedCard: {
-    borderColor: '#8B5CF640',
-  },
-  expenseLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: 16,
-  },
-  iconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#F8F9FA',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-    borderWidth: 1,
-    borderColor: '#EAEBEF',
-  },
-  icon: {
-    fontSize: 20,
-  },
-  descRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 2,
-  },
-  expenseDescription: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111111',
-  },
-  expenseCategory: {
-    fontSize: 11,
-    color: '#8E9AA6',
-    marginBottom: 6,
+    marginBottom: spacing.xl,
   },
   badgeRow: {
     flexDirection: 'row',
-    gap: 6,
-    marginBottom: 6,
+    gap: spacing.xs + 2,
     flexWrap: 'wrap',
   },
-  sharedBadge: {
-    backgroundColor: '#8B5CF610',
-    borderWidth: 1,
-    borderColor: '#8B5CF625',
-    borderRadius: 12,
+  badgePill: {
+    borderRadius: radius.sm,
     paddingVertical: 2,
-    paddingHorizontal: 8,
-  },
-  sharedBadgeText: {
-    color: '#8B5CF6',
-    fontSize: 10,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-  },
-  paymentBadge: {
-    backgroundColor: '#F8F9FA',
+    paddingHorizontal: spacing.sm,
     borderWidth: 1,
-    borderColor: '#EAEBEF',
-    borderRadius: 12,
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-  },
-  paymentBadgeText: {
-    color: '#8E9AA6',
-    fontSize: 10,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-  },
-  momoBadge: {
-    backgroundColor: '#F59E0B10',
-    borderColor: '#F59E0B25',
-  },
-  momoBadgeText: {
-    color: '#D97706',
-  },
-  expenseRight: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-  },
-  expenseAmount: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#111111',
-    marginBottom: 6,
-  },
-  deleteBtn: {
-    padding: 4,
-  },
-  chevron: {
-    fontSize: 22,
-    fontWeight: '300',
-    marginTop: 4,
-    opacity: 0.5,
-  },
-  // Tags styles
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-  },
-  tagPill: {
-    backgroundColor: '#F2F4F7',
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderWidth: 1,
-    borderColor: '#EAEBEF',
-  },
-  tagText: {
-    fontSize: 10,
-    color: '#8E9AA6',
-    fontWeight: '500',
-  },
-  // Empty & Hint states
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-  },
-  emptyIcon: {
-    fontSize: 36,
-    marginBottom: 10,
-  },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#111111',
-    marginBottom: 4,
-  },
-  emptySubtext: {
-    fontSize: 13,
-    color: '#8E9AA6',
-  },
-  hint: {
-    fontSize: 11,
-    color: '#8E9AA6',
-    textAlign: 'center',
-    marginTop: 10,
-    fontStyle: 'italic',
-  },
-  errorIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#8E9AA6',
-    textAlign: 'center',
-    marginBottom: 24,
-    paddingHorizontal: 24,
-  },
-  retryButton: {
-    backgroundColor: '#111111',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-  },
-  retryButtonText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: 'bold',
   },
 });

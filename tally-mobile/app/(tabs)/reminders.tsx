@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,23 +11,24 @@ import {
   RefreshControl,
   KeyboardAvoidingView,
   Platform,
-} from "react-native";
-import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { remindersAPI } from "../../services/api";
-import { getUserId } from "../../services/storage";
-import { addHistoryItem } from "../../services/notificationHistory";
-import Toast from "../../components/Toast";
-import { useToast } from "../../hooks/useToast";
-import { useConfirmModal } from "../../hooks/useConfirmModal";
+} from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { remindersAPI } from '../../services/api';
+import { getUserId } from '../../services/storage';
+import { addHistoryItem } from '../../services/notificationHistory';
+import Toast from '../../components/Toast';
+import { useToast } from '../../hooks/useToast';
+import { useConfirmModal } from '../../hooks/useConfirmModal';
 import { useTheme } from '../../hooks/useTheme';
+import { getExtendedColors, typography, spacing, radius } from '../../theme';
+import { Card, Button, Input, EmptyState } from '../../components/ui';
 
-// Helper to check urgency (overdue or due within 2 days)
-const getUrgentStatus = (dueDateStr: string, isPaid: boolean): { urgent: boolean; label: string; color: string } | null => {
+const getUrgentStatus = (dueDateStr: string, isPaid: boolean, colors: ReturnType<typeof getExtendedColors>): { urgent: boolean; label: string; color: string } | null => {
   if (isPaid) return null;
   if (!dueDateStr) return null;
   try {
-    const parts = dueDateStr.split("-");
+    const parts = dueDateStr.split('-');
     if (parts.length < 3) return null;
     const dueYear = parseInt(parts[0]);
     const dueMonth = parseInt(parts[1]) - 1;
@@ -43,11 +44,11 @@ const getUrgentStatus = (dueDateStr: string, isPaid: boolean): { urgent: boolean
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
     if (diffDays < 0) {
-      return { urgent: true, label: "Overdue", color: "#FF3B30" };
+      return { urgent: true, label: 'Overdue', color: colors.negative };
     } else if (diffDays === 0) {
-      return { urgent: true, label: "Due Today", color: "#FF9500" };
+      return { urgent: true, label: 'Due Today', color: colors.warning };
     } else if (diffDays <= 2) {
-      return { urgent: true, label: `Due in ${diffDays}d`, color: "#FF9500" };
+      return { urgent: true, label: `Due in ${diffDays}d`, color: colors.warning };
     }
   } catch (e) {
     // silent catch
@@ -57,44 +58,43 @@ const getUrgentStatus = (dueDateStr: string, isPaid: boolean): { urgent: boolean
 
 export default function RemindersScreen() {
   const insets = useSafeAreaInsets();
-  const { colors, theme } = useTheme();
+  const { theme, colors: baseColors } = useTheme();
+  const colors = getExtendedColors(theme, baseColors);
   const [reminders, setReminders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [title, setTitle] = useState("");
-  const [amount, setAmount] = useState("");
-  const [selectedDay, setSelectedDay] = useState("");
-  const [selectedMonth, setSelectedMonth] = useState("");
+  const [title, setTitle] = useState('');
+  const [amount, setAmount] = useState('');
+  const [selectedDay, setSelectedDay] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState('');
   const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
   const [isRecurring, setIsRecurring] = useState(false);
 
   const MONTHS = [
-    { label: "January",   value: "01", days: 31 },
-    { label: "February",  value: "02", days: 28 },
-    { label: "March",     value: "03", days: 31 },
-    { label: "April",     value: "04", days: 30 },
-    { label: "May",       value: "05", days: 31 },
-    { label: "June",      value: "06", days: 30 },
-    { label: "July",      value: "07", days: 31 },
-    { label: "August",    value: "08", days: 31 },
-    { label: "September", value: "09", days: 30 },
-    { label: "October",   value: "10", days: 31 },
-    { label: "November",  value: "11", days: 30 },
-    { label: "December",  value: "12", days: 31 },
+    { label: 'January', value: '01', days: 31 },
+    { label: 'February', value: '02', days: 28 },
+    { label: 'March', value: '03', days: 31 },
+    { label: 'April', value: '04', days: 30 },
+    { label: 'May', value: '05', days: 31 },
+    { label: 'June', value: '06', days: 30 },
+    { label: 'July', value: '07', days: 31 },
+    { label: 'August', value: '08', days: 31 },
+    { label: 'September', value: '09', days: 30 },
+    { label: 'October', value: '10', days: 31 },
+    { label: 'November', value: '11', days: 30 },
+    { label: 'December', value: '12', days: 31 },
   ];
-  
+
   const currentYear = new Date().getFullYear();
   const YEARS = [String(currentYear), String(currentYear + 1), String(currentYear + 2)];
-  
+
   const daysInMonth = selectedMonth
     ? MONTHS.find((m) => m.value === selectedMonth)?.days || 31
     : 31;
-  const DAYS = Array.from({ length: daysInMonth }, (_, i) =>
-    String(i + 1).padStart(2, "0"),
-  );
-  
+  const DAYS = Array.from({ length: daysInMonth }, (_, i) => String(i + 1).padStart(2, '0'));
+
   const [saving, setSaving] = useState(false);
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
   const { showConfirm, ConfirmModalComponent } = useConfirmModal();
@@ -111,7 +111,7 @@ export default function RemindersScreen() {
       setReminders(response.data || []);
       setError(null);
     } catch (error) {
-      setError("Failed to load reminders. Pull down to refresh.");
+      setError('Failed to load reminders. Pull down to refresh.');
     } finally {
       setLoading(false);
     }
@@ -125,11 +125,11 @@ export default function RemindersScreen() {
 
   async function handleAddReminder() {
     if (!title.trim()) {
-      showToast("Title is required", "error");
+      showToast('Title is required', 'error');
       return;
     }
     if (!selectedDay || !selectedMonth || !selectedYear) {
-      showToast("Please select a due date", "error");
+      showToast('Please select a due date', 'error');
       return;
     }
 
@@ -145,29 +145,28 @@ export default function RemindersScreen() {
         amount.trim(),
         dueDateString,
         isRecurring,
-        isRecurring ? "MONTHLY" : "",
+        isRecurring ? 'MONTHLY' : '',
       );
-      
-      // Reset form
-      setTitle("");
-      setAmount("");
-      setSelectedDay("");
-      setSelectedMonth("");
+
+      setTitle('');
+      setAmount('');
+      setSelectedDay('');
+      setSelectedMonth('');
       setSelectedYear(String(new Date().getFullYear()));
       setIsRecurring(false);
       setShowAddForm(false);
-      
+
       await fetchReminders(false);
-      
+
       await addHistoryItem({
-        type: "reminder_due",
-        title: "Reminder set",
-        body: `"${title.trim()}" due ${friendlyDate}${amount.trim() ? ` — GHS ${amount.trim()}` : ""}.`,
-        data: { screen: "reminders" },
+        type: 'reminder_due',
+        title: 'Reminder set',
+        body: `"${title.trim()}" due ${friendlyDate}${amount.trim() ? ` — GHS ${amount.trim()}` : ''}.`,
+        data: { screen: 'reminders' },
       });
-      showToast("Reminder added!", "success");
+      showToast('Reminder added!', 'success');
     } catch (error) {
-      showToast("Failed to save reminder", "error");
+      showToast('Failed to save reminder', 'error');
     } finally {
       setSaving(false);
     }
@@ -177,9 +176,9 @@ export default function RemindersScreen() {
     try {
       await remindersAPI.markAsPaid(reminderId);
       await fetchReminders(false);
-      showToast("Marked as paid", "success");
+      showToast('Marked as paid', 'success');
     } catch (error) {
-      showToast("Failed to mark as paid", "error");
+      showToast('Failed to mark as paid', 'error');
     }
   }
 
@@ -189,14 +188,14 @@ export default function RemindersScreen() {
       title: 'Delete Reminder',
       message: 'Are you sure you want to delete this reminder?',
       confirmText: 'Delete',
-      confirmColor: '#E05C5C',
+      confirmColor: colors.negative,
       onConfirm: async () => {
         try {
           await remindersAPI.deleteReminder(reminderId);
           await fetchReminders(false);
-          showToast("Reminder deleted", "info");
+          showToast('Reminder deleted', 'info');
         } catch {
-          showToast("Failed to delete reminder", "error");
+          showToast('Failed to delete reminder', 'error');
         }
       },
     });
@@ -217,182 +216,133 @@ export default function RemindersScreen() {
         contentContainerStyle={styles.centered}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
-        <Text style={[styles.errorText, { color: colors.textSecondary }]}>{error}</Text>
+        <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', paddingHorizontal: spacing.xl }]}>{error}</Text>
       </ScrollView>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <View style={[styles.flex, { backgroundColor: colors.background, paddingTop: Math.max(insets.top, 20) }]}>
-        {/* Header */}
+    <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View style={[styles.flex, { paddingTop: Math.max(insets.top, spacing.lg) }]}>
         <View style={styles.header}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Bill Reminders</Text>
+          <Text style={[typography.display, { color: colors.text }]} accessibilityRole="header">Bill Reminders</Text>
           <TouchableOpacity
             style={[styles.addBtn, { backgroundColor: colors.primary }]}
             onPress={() => setShowAddForm(!showAddForm)}
             activeOpacity={0.8}
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel={showAddForm ? 'Close new reminder form' : 'Add reminder'}
           >
-            <Feather name={showAddForm ? "x" : "plus"} size={20} color="#ffffff" />
+            <Feather name={showAddForm ? 'x' : 'plus'} size={20} color="#ffffff" />
           </TouchableOpacity>
         </View>
 
         {showAddForm && (
           <ScrollView
-            style={{ maxHeight: 350, marginHorizontal: 16, marginBottom: 16 }}
-            contentContainerStyle={[styles.formCard, { backgroundColor: colors.cardBg, borderColor: colors.border, marginHorizontal: 0, marginBottom: 0 }]}
+            style={{ maxHeight: 400, marginHorizontal: spacing.md, marginBottom: spacing.md }}
             keyboardShouldPersistTaps="handled"
             automaticallyAdjustKeyboardInsets={true}
           >
-            <Text style={[styles.formTitle, { color: colors.text }]}>New Reminder</Text>
+            <Card>
+              <Text style={[typography.bodyStrong, { color: colors.text, marginBottom: spacing.md }]}>New Reminder</Text>
 
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
-              placeholder="Bill Title (e.g. Rent, Electricity)"
-              placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
-              value={title}
-              onChangeText={setTitle}
-            />
+              <Input
+                label="Bill Title"
+                placeholder="e.g. Rent, Electricity"
+                value={title}
+                onChangeText={setTitle}
+                containerStyle={{ marginBottom: spacing.sm + 2 }}
+              />
 
-            <TextInput
-              style={[styles.input, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
-              placeholder="Amount GHS (optional)"
-              placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
-              keyboardType="numeric"
-              value={amount}
-              onChangeText={setAmount}
-            />
+              <Input
+                label="Amount GHS (optional)"
+                placeholder="0.00"
+                keyboardType="numeric"
+                value={amount}
+                onChangeText={setAmount}
+                containerStyle={{ marginBottom: spacing.sm + 2 }}
+              />
 
-            <Text style={styles.label}>Due Date</Text>
-            <View style={styles.datePickerRow}>
-              {/* Day */}
-              <View style={[styles.datePickerSection, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-                <Text style={[styles.datePickerLabel, { color: colors.textSecondary }]}>Day</Text>
-                <ScrollView
-                  style={styles.datePickerScroll}
-                  showsVerticalScrollIndicator={false}
-                  nestedScrollEnabled={true}
-                >
-                  {DAYS.map((day) => (
-                    <TouchableOpacity
-                      key={day}
-                      style={[styles.datePickerItem, selectedDay === day && { backgroundColor: colors.primary }]}
-                      onPress={() => setSelectedDay(day)}
-                    >
-                      <Text style={[styles.datePickerItemText, { color: colors.text }, selectedDay === day && { color: '#ffffff', fontWeight: 'bold' }]}>
-                        {day}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
+              <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm }]}>Due Date</Text>
+              <View style={styles.datePickerRow}>
+                <View style={[styles.datePickerSection, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                  <Text style={[typography.label, { color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.xs + 2, borderBottomWidth: 1, borderBottomColor: colors.border }]}>Day</Text>
+                  <ScrollView style={styles.datePickerScroll} showsVerticalScrollIndicator={false} nestedScrollEnabled>
+                    {DAYS.map((day) => (
+                      <TouchableOpacity key={day} style={[styles.datePickerItem, selectedDay === day && { backgroundColor: colors.primary }]} onPress={() => setSelectedDay(day)}>
+                        <Text style={[typography.caption, { color: selectedDay === day ? '#FFFFFF' : colors.textSecondary, textAlign: 'center', fontFamily: selectedDay === day ? typography.bodyStrong.fontFamily : typography.caption.fontFamily }]}>{day}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+                <View style={[styles.datePickerSection, { flex: 2, backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                  <Text style={[typography.label, { color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.xs + 2, borderBottomWidth: 1, borderBottomColor: colors.border }]}>Month</Text>
+                  <ScrollView style={styles.datePickerScroll} showsVerticalScrollIndicator={false} nestedScrollEnabled>
+                    {MONTHS.map((month) => (
+                      <TouchableOpacity
+                        key={month.value}
+                        style={[styles.datePickerItem, selectedMonth === month.value && { backgroundColor: colors.primary }]}
+                        onPress={() => {
+                          setSelectedMonth(month.value);
+                          if (parseInt(selectedDay) > month.days) setSelectedDay('01');
+                        }}
+                      >
+                        <Text style={[typography.caption, { color: selectedMonth === month.value ? '#FFFFFF' : colors.textSecondary, textAlign: 'center', fontFamily: selectedMonth === month.value ? typography.bodyStrong.fontFamily : typography.caption.fontFamily }]}>{month.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+                <View style={[styles.datePickerSection, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                  <Text style={[typography.label, { color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.xs + 2, borderBottomWidth: 1, borderBottomColor: colors.border }]}>Year</Text>
+                  <ScrollView style={styles.datePickerScroll} showsVerticalScrollIndicator={false} nestedScrollEnabled>
+                    {YEARS.map((year) => (
+                      <TouchableOpacity key={year} style={[styles.datePickerItem, selectedYear === year && { backgroundColor: colors.primary }]} onPress={() => setSelectedYear(year)}>
+                        <Text style={[typography.caption, { color: selectedYear === year ? '#FFFFFF' : colors.textSecondary, textAlign: 'center', fontFamily: selectedYear === year ? typography.bodyStrong.fontFamily : typography.caption.fontFamily }]}>{year}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
               </View>
-              {/* Month */}
-              <View style={[styles.datePickerSection, { flex: 2, backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-                <Text style={[styles.datePickerLabel, { color: colors.textSecondary }]}>Month</Text>
-                <ScrollView
-                  style={styles.datePickerScroll}
-                  showsVerticalScrollIndicator={false}
-                  nestedScrollEnabled={true}
-                >
-                  {MONTHS.map((month) => (
-                    <TouchableOpacity
-                      key={month.value}
-                      style={[styles.datePickerItem, selectedMonth === month.value && { backgroundColor: colors.primary }]}
-                      onPress={() => {
-                        setSelectedMonth(month.value);
-                        if (parseInt(selectedDay) > month.days) setSelectedDay("01");
-                      }}
-                    >
-                      <Text style={[styles.datePickerItemText, { color: colors.text }, selectedMonth === month.value && { color: '#ffffff', fontWeight: 'bold' }]}>
-                        {month.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-              {/* Year */}
-              <View style={[styles.datePickerSection, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-                <Text style={[styles.datePickerLabel, { color: colors.textSecondary }]}>Year</Text>
-                <ScrollView
-                  style={styles.datePickerScroll}
-                  showsVerticalScrollIndicator={false}
-                  nestedScrollEnabled={true}
-                >
-                  {YEARS.map((year) => (
-                    <TouchableOpacity
-                      key={year}
-                      style={[styles.datePickerItem, selectedYear === year && { backgroundColor: colors.primary }]}
-                      onPress={() => setSelectedYear(year)}
-                    >
-                      <Text style={[styles.datePickerItemText, { color: colors.text }, selectedYear === year && { color: '#ffffff', fontWeight: 'bold' }]}>
-                        {year}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            </View>
-            {selectedDay && selectedMonth && selectedYear && (
-              <Text style={[styles.selectedDateText, { color: colors.textSecondary }]}>
-                📅 Selected: {selectedDay} {MONTHS.find((m) => m.value === selectedMonth)?.label} {selectedYear}
-              </Text>
-            )}
-
-            {/* Recurring toggle */}
-            <View style={styles.toggleRow}>
-              <Text style={[styles.toggleLabel, { color: colors.text }]}>Is this a monthly recurring bill?</Text>
-              <TouchableOpacity
-                style={[styles.toggleBtn, { backgroundColor: colors.neutralBg }, isRecurring && { backgroundColor: colors.primary }]}
-                onPress={() => setIsRecurring(!isRecurring)}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.toggleBtnText, { color: colors.textSecondary }, isRecurring && { color: "#ffffff", fontWeight: "bold" }]}>
-                  {isRecurring ? "Monthly ✓" : "Once"}
+              {selectedDay && selectedMonth && selectedYear && (
+                <Text style={[typography.caption, { color: colors.primary, textAlign: 'center', marginTop: spacing.sm, marginBottom: spacing.sm + 2, fontFamily: typography.bodyStrong.fontFamily }]}>
+                  📅 Selected: {selectedDay} {MONTHS.find((m) => m.value === selectedMonth)?.label} {selectedYear}
                 </Text>
-              </TouchableOpacity>
-            </View>
+              )}
 
-            <TouchableOpacity
-              style={[styles.saveBtn, { backgroundColor: colors.primary }, saving && styles.saveBtnDisabled]}
-              onPress={handleAddReminder}
-              disabled={saving}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.saveBtnText}>
-                {saving ? "Saving…" : "Save Reminder"}
-              </Text>
-            </TouchableOpacity>
+              <View style={styles.toggleRow}>
+                <Text style={[typography.caption, { color: colors.text, fontFamily: typography.bodyStrong.fontFamily, flex: 1, marginRight: spacing.sm }]}>Is this a monthly recurring bill?</Text>
+                <TouchableOpacity
+                  style={[styles.toggleBtn, { backgroundColor: colors.neutralBg }, isRecurring && { backgroundColor: colors.primary }]}
+                  onPress={() => setIsRecurring(!isRecurring)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[typography.label, { color: isRecurring ? '#FFFFFF' : colors.textSecondary }]}>
+                    {isRecurring ? 'Monthly ✓' : 'Once'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
 
-            <TouchableOpacity
-              style={[styles.cancelBtn, { backgroundColor: colors.neutralBg }]}
-              onPress={() => {
-                setShowAddForm(false);
-                setTitle("");
-                setAmount("");
-                setSelectedDay("");
-                setSelectedMonth("");
-                setSelectedYear(String(new Date().getFullYear()));
-                setIsRecurring(false);
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.cancelBtnText, { color: colors.textSecondary }]}>Cancel</Text>
-            </TouchableOpacity>
+              <Button title="Save Reminder" onPress={handleAddReminder} loading={saving} style={{ marginBottom: spacing.sm }} />
+              <Button
+                title="Cancel"
+                onPress={() => {
+                  setShowAddForm(false);
+                  setTitle('');
+                  setAmount('');
+                  setSelectedDay('');
+                  setSelectedMonth('');
+                  setSelectedYear(String(new Date().getFullYear()));
+                  setIsRecurring(false);
+                }}
+                variant="secondary"
+              />
+            </Card>
           </ScrollView>
         )}
 
-        {/* Reminders list */}
         {reminders.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>🔔</Text>
-            <Text style={[styles.emptyText, { color: colors.text }]}>No reminders yet</Text>
-            <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
-              Add bills to get notified when they're due
-            </Text>
-          </View>
+          <EmptyState icon="bell" title="No reminders yet" body="Add bills to get notified when they're due" />
         ) : (
           <FlatList
             data={reminders}
@@ -402,85 +352,66 @@ export default function RemindersScreen() {
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
             renderItem={({ item }) => {
               const isPaid = item.isPaid || item.paid || false;
-              const urgentStatus = getUrgentStatus(item.dueDate, isPaid);
+              const urgentStatus = getUrgentStatus(item.dueDate, isPaid, colors);
 
               return (
-                <View style={[
-                  styles.card,
-                  { backgroundColor: colors.cardBg, borderColor: colors.border },
-                  isPaid && { borderColor: colors.positive + '40', opacity: 0.8 }
-                ]}>
+                <Card
+                  style={[
+                    styles.cardStyle,
+                    isPaid && { borderColor: `${colors.positive}40`, opacity: 0.8 },
+                  ]}
+                >
                   <View style={styles.cardBody}>
-                    {/* Left Icon */}
-                    <View style={[styles.iconBox, { backgroundColor: colors.neutralBg }, isPaid && { backgroundColor: colors.positive + '15' }]}>
-                      <Feather 
-                        name={isPaid ? "check-circle" : "file-text"} 
-                        size={20} 
-                        color={isPaid ? colors.positive : colors.text} 
-                      />
+                    <View style={[styles.iconBox, { backgroundColor: colors.neutralBg }, isPaid && { backgroundColor: `${colors.positive}15` }]}>
+                      <Feather name={isPaid ? 'check-circle' : 'file-text'} size={20} color={isPaid ? colors.positive : colors.text} />
                     </View>
 
-                    {/* Info details */}
                     <View style={styles.cardInfo}>
                       <View style={styles.titleRow}>
-                        <Text style={[styles.reminderTitle, { color: colors.text }]} numberOfLines={1}>
+                        <Text style={[typography.bodyStrong, { color: colors.text, maxWidth: '60%' }]} numberOfLines={1}>
                           {item.title}
                         </Text>
                         {urgentStatus?.urgent && (
-                          <View style={[styles.urgentBadge, { backgroundColor: urgentStatus.color + "12", borderColor: urgentStatus.color + "30" }]}>
-                            <Text style={[styles.urgentBadgeText, { color: urgentStatus.color }]}>
-                              ⚠️ {urgentStatus.label}
-                            </Text>
+                          <View style={[styles.urgentBadge, { backgroundColor: `${urgentStatus.color}12`, borderColor: `${urgentStatus.color}30` }]}>
+                            <Text style={[typography.label, { color: urgentStatus.color }]}>⚠️ {urgentStatus.label}</Text>
                           </View>
                         )}
                       </View>
 
                       <View style={styles.metaRow}>
-                        {item.dueDate && (
-                          <Text style={[styles.reminderDue, { color: colors.textSecondary }]}>
-                            Due: {item.dueDate}
-                          </Text>
-                        )}
-                        {item.isRecurring && (
-                          <Text style={[styles.recurringTag, { color: colors.textSecondary }]}>
-                            • {item.recurrenceType || "Recurring"}
-                          </Text>
-                        )}
+                        {item.dueDate && <Text style={[typography.caption, { color: colors.textSecondary }]}>Due: {item.dueDate}</Text>}
+                        {item.isRecurring && <Text style={[typography.label, { color: colors.textSecondary }]}>• {item.recurrenceType || 'Recurring'}</Text>}
                       </View>
 
-                      {item.amount != null && item.amount !== "" && (
-                        <Text style={[styles.reminderAmount, { color: colors.text }]}>
-                          GHS {parseFloat(item.amount).toFixed(2)}
-                        </Text>
+                      {item.amount != null && item.amount !== '' && (
+                        <Text style={[typography.bodyStrong, { color: colors.text }]}>GHS {parseFloat(item.amount).toFixed(2)}</Text>
                       )}
                     </View>
 
-                    {/* Actions (Paid Badge / Mark Paid button, Delete button) */}
                     <View style={styles.cardActions}>
                       <TouchableOpacity
-                        style={styles.deleteBtn}
+                        style={[styles.deleteBtn, { backgroundColor: `${colors.negative}12`, borderColor: `${colors.negative}30` }]}
                         onPress={() => handleDelete(String(item.id))}
                         activeOpacity={0.7}
+                        hitSlop={6}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Delete reminder: ${item.title}`}
                       >
-                        <Feather name="trash-2" size={16} color="#FF3B30" />
+                        <Feather name="trash-2" size={16} color={colors.negative} />
                       </TouchableOpacity>
 
                       {isPaid ? (
-                        <View style={[styles.paidBadge, { backgroundColor: colors.positive + '15' }]}>
-                          <Text style={[styles.paidBadgeText, { color: colors.positive }]}>✓ Paid</Text>
+                        <View style={[styles.paidBadge, { backgroundColor: `${colors.positive}12`, borderColor: `${colors.positive}30` }]}>
+                          <Text style={[typography.label, { color: colors.positive }]}>✓ Paid</Text>
                         </View>
                       ) : (
-                        <TouchableOpacity
-                          style={[styles.markPaidBtn, { backgroundColor: colors.primary }]}
-                          onPress={() => handleMarkPaid(String(item.id))}
-                          activeOpacity={0.8}
-                        >
-                          <Text style={styles.markPaidText}>Mark Paid</Text>
+                        <TouchableOpacity style={[styles.markPaidBtn, { backgroundColor: colors.primary }]} onPress={() => handleMarkPaid(String(item.id))} activeOpacity={0.8}>
+                          <Text style={[typography.label, { color: '#FFFFFF' }]}>Mark Paid</Text>
                         </TouchableOpacity>
                       )}
                     </View>
                   </View>
-                </View>
+                </Card>
               );
             }}
           />
@@ -493,348 +424,117 @@ export default function RemindersScreen() {
 }
 
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-    backgroundColor: "#F2F4F7",
-  },
-  centered: {
-    flex: 1,
-    backgroundColor: "#F2F4F7",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  errorText: {
-    color: "#E05C5C",
-    fontSize: 14,
-    textAlign: "center",
-    paddingHorizontal: 24,
-  },
+  flex: { flex: 1 },
+  container: { flex: 1 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 16,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#111111",
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
   },
   addBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#111111",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  formCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 24,
-    marginHorizontal: 16,
-    marginBottom: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "#EAEBEF",
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.04,
-    shadowRadius: 12,
-    elevation: 2,
-  },
-  formTitle: {
-    color: "#111111",
-    fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 16,
-  },
-  input: {
-    backgroundColor: "#F8F9FA",
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    color: "#111111",
-    fontSize: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#EAEBEF",
-  },
-  label: {
-    fontSize: 12,
-    color: "#8E9AA6",
-    fontWeight: "600",
-    marginBottom: 8,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   datePickerRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 12,
+    flexDirection: 'row',
+    gap: spacing.xs + 2,
+    marginBottom: spacing.sm + 2,
   },
   datePickerSection: {
     flex: 1,
-    backgroundColor: "#F8F9FA",
-    borderRadius: 12,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: "#EAEBEF",
-    overflow: "hidden",
-  },
-  datePickerLabel: {
-    fontSize: 11,
-    color: "#8E9AA6",
-    textAlign: "center",
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: "#EAEBEF",
-    fontWeight: "600",
+    overflow: 'hidden',
   },
   datePickerScroll: {
     maxHeight: 140,
   },
   datePickerItem: {
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    alignItems: "center",
-  },
-  datePickerItemSelected: {
-    backgroundColor: "#8B5CF612",
-  },
-  datePickerItemText: {
-    fontSize: 13,
-    color: "#8E9AA6",
-    textAlign: "center",
-  },
-  datePickerItemTextSelected: {
-    color: "#8B5CF6",
-    fontWeight: "bold",
-  },
-  selectedDateText: {
-    fontSize: 13,
-    color: "#8B5CF6",
-    marginBottom: 12,
-    textAlign: "center",
-    fontWeight: "600",
+    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.xs,
+    alignItems: 'center',
   },
   toggleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 20,
-  },
-  toggleLabel: {
-    color: "#8E9AA6",
-    fontSize: 13,
-    fontWeight: "600",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.xl,
   },
   toggleBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: "#F2F4F7",
-    borderWidth: 1,
-    borderColor: "#EAEBEF",
-  },
-  toggleBtnActive: {
-    backgroundColor: "#111111",
-    borderColor: "#111111",
-  },
-  toggleBtnText: {
-    color: "#8E9AA6",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  toggleBtnTextActive: {
-    color: "#ffffff",
-  },
-  saveBtn: {
-    backgroundColor: "#111111",
-    borderRadius: 24,
-    paddingVertical: 14,
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  saveBtnDisabled: {
-    opacity: 0.5,
-  },
-  saveBtnText: {
-    color: "#ffffff",
-    fontWeight: "bold",
-    fontSize: 15,
-  },
-  cancelBtn: {
-    borderRadius: 24,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#EAEBEF",
-  },
-  cancelBtnText: {
-    color: "#8E9AA6",
-    fontSize: 14,
-    fontWeight: "600",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radius.pill,
   },
   list: {
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.md,
     paddingBottom: 40,
   },
-  card: {
-    backgroundColor: "#ffffff",
-    borderRadius: 24,
-    padding: 18,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#EAEBEF",
-    shadowColor: "#000000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.03,
-    shadowRadius: 10,
-    elevation: 2,
-  },
-  cardPaid: {
-    opacity: 0.65,
-    backgroundColor: "#F8F9FA",
-    borderColor: "#EAEBEF",
+  cardStyle: {
+    marginBottom: spacing.sm + 2,
   },
   cardBody: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   iconBox: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#F8F9FA",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#EAEBEF",
-    marginRight: 12,
-  },
-  iconBoxPaid: {
-    backgroundColor: "#34C75912",
-    borderColor: "#34C75930",
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
   },
   cardInfo: {
     flex: 1,
-    justifyContent: "center",
+    justifyContent: 'center',
+    gap: 2,
   },
   titleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 2,
-  },
-  reminderTitle: {
-    color: "#111111",
-    fontSize: 15,
-    fontWeight: "bold",
-    maxWidth: "60%",
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
   },
   urgentBadge: {
-    borderRadius: 12,
-    paddingHorizontal: 8,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  urgentBadgeText: {
-    fontSize: 10,
-    fontWeight: "bold",
   },
   metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 4,
-  },
-  reminderDue: {
-    color: "#8E9AA6",
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  recurringTag: {
-    color: "#8E9AA6",
-    fontSize: 11,
-    fontWeight: "500",
-  },
-  reminderAmount: {
-    color: "#111111",
-    fontSize: 15,
-    fontWeight: "bold",
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs + 2,
   },
   cardActions: {
-    alignItems: "flex-end",
-    gap: 8,
-    marginLeft: 12,
+    alignItems: 'flex-end',
+    gap: spacing.sm,
+    marginLeft: spacing.md,
   },
   deleteBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "#FF3B3012",
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
-    borderColor: "#FF3B3030",
   },
   markPaidBtn: {
-    backgroundColor: "#111111",
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  markPaidText: {
-    color: "#ffffff",
-    fontSize: 11,
-    fontWeight: "bold",
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.xs + 3,
   },
   paidBadge: {
-    backgroundColor: "#34C75912",
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.xs + 3,
     borderWidth: 1,
-    borderColor: "#34C75930",
-  },
-  paidBadgeText: {
-    color: "#34C759",
-    fontSize: 11,
-    fontWeight: "bold",
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-    paddingBottom: 80,
-  },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#111111",
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: "#8E9AA6",
-    textAlign: "center",
   },
 });

@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,54 +8,30 @@ import {
   TouchableOpacity,
   Dimensions,
   RefreshControl,
-  Animated,
-  Easing,
 } from "react-native";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  useAnimatedReaction,
+  withTiming,
+  withDelay,
+  runOnJS,
+  Easing,
+} from "react-native-reanimated";
 import { Feather } from "@expo/vector-icons";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, router } from "expo-router";
 import Svg, { Circle } from "react-native-svg";
 import { expenseAPI, categoriesAPI, remindersAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
 import { useTheme } from "../../hooks/useTheme";
+import { getExtendedColors, getCategoryColor } from "../../theme";
+import { CategoryIcon, getCategoryIconName } from "../../components/ui";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
-
-const CATEGORY_ICONS: { [key: string]: string } = {
-  Food: "🍔",
-  Transport: "🚗",
-  Entertainment: "🎮",
-  Utilities: "💡",
-  Other: "📦",
-  Shared: "👥",
-  Settlement: "💚",
-};
-
-// Consistent category colors across the app
-const CATEGORY_COLORS: { [key: string]: string } = {
-  Food: "#FF6B6B",
-  Transport: "#4ECDC4",
-  Entertainment: "#A855F7",
-  Utilities: "#F59E0B",
-  Other: "#6B7280",
-};
-
-// Palette used to derive stable colors for custom categories
-const HASH_PALETTE = [
-  "#EF4444", "#F97316", "#EAB308", "#22C55E", "#14B8A6",
-  "#0EA5E9", "#6366F1", "#8B5CF6", "#EC4899", "#F43F5E",
-];
-
-function categoryColor(name: string): string {
-  if (CATEGORY_COLORS[name]) return CATEGORY_COLORS[name];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-  }
-  return HASH_PALETTE[hash % HASH_PALETTE.length];
-}
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -81,76 +57,67 @@ function spendOf(e: any): number {
 
 /** Number that counts up from 0 to `value` on mount / value change */
 function CountUpText({ value, style }: { value: number; style?: any }) {
-  const anim = useRef(new Animated.Value(0)).current;
+  const progress = useSharedValue(0);
   const [display, setDisplay] = useState("0.00");
 
   useEffect(() => {
-    anim.setValue(0);
-    const id = anim.addListener(({ value: v }) => {
-      const safeVal = (Number(value) || 0) * v;
-      setDisplay(safeVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-    });
-    Animated.timing(anim, {
-      toValue: 1,
-      duration: 900,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-    return () => anim.removeListener(id);
+    progress.value = 0;
+    progress.value = withTiming(1, { duration: 900, easing: Easing.out(Easing.cubic) });
   }, [value]);
+
+  useAnimatedReaction(
+    () => progress.value,
+    (p) => {
+      const safeVal = (Number(value) || 0) * p;
+      runOnJS(setDisplay)(safeVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    },
+    [value],
+  );
 
   return <Text style={style}>GHS {display}</Text>;
 }
 
 /** Progress bar that animates its fill, with an optional stagger delay */
 function AnimatedBar({ pct, color, delay, trackColor }: { pct: number; color: string; delay: number; trackColor: string }) {
-  const anim = useRef(new Animated.Value(0)).current;
+  const progress = useSharedValue(0);
   const safePct = isNaN(pct) || !isFinite(pct) ? 0 : Math.min(Math.max(pct, 0), 100);
 
   useEffect(() => {
-    anim.setValue(0);
-    Animated.timing(anim, {
-      toValue: 1,
-      duration: 600,
-      delay,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
+    progress.value = 0;
+    progress.value = withDelay(delay, withTiming(safePct, { duration: 600, easing: Easing.out(Easing.cubic) }));
   }, [safePct, delay]);
 
-  const width = anim.interpolate({ inputRange: [0, 1], outputRange: ["0%", `${safePct}%`] });
+  const barStyle = useAnimatedStyle(() => ({ width: `${progress.value}%` }));
 
   return (
     <View style={[styles.barTrack, { backgroundColor: trackColor }]}>
-      <Animated.View style={[styles.barFill, { width, backgroundColor: color }]} />
+      <Animated.View style={[styles.barFill, { backgroundColor: color }, barStyle]} />
     </View>
   );
 }
 
 /** Category breakdown row — fades in with stagger, bar animates after */
 function CategoryRow({
-  cat, amount, pct, index, icon, t,
-}: { cat: string; amount: number; pct: number; index: number; icon: string; t: any }) {
-  const fade = useRef(new Animated.Value(0)).current;
-  const color = categoryColor(cat);
+  cat, amount, pct, index, customEmoji, t,
+}: { cat: string; amount: number; pct: number; index: number; customEmoji?: string; t: any }) {
+  const fade = useSharedValue(0);
+  const color = getCategoryColor(cat);
 
   useEffect(() => {
-    fade.setValue(0);
-    Animated.timing(fade, {
-      toValue: 1,
-      duration: 350,
-      delay: index * 100,
-      useNativeDriver: true,
-    }).start();
+    fade.value = 0;
+    fade.value = withDelay(index * 100, withTiming(1, { duration: 350 }));
   }, [cat, index]);
 
+  const rowStyle = useAnimatedStyle(() => ({
+    opacity: fade.value,
+    transform: [{ translateY: (1 - fade.value) * 8 }],
+  }));
+
   return (
-    <Animated.View style={[styles.catRow, { opacity: fade, transform: [{ translateY: fade.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }]}>
+    <Animated.View style={[styles.catRow, rowStyle]}>
       <View style={styles.catHeader}>
         <View style={styles.catLeft}>
-          <View style={[styles.catEmojiCircle, { backgroundColor: color + "22", borderColor: color + "44" }]}>
-            <Text style={styles.catEmoji}>{icon}</Text>
-          </View>
+          <CategoryIcon category={cat} customEmoji={customEmoji} size={36} />
           <Text style={[styles.catName, { color: t.text }]} numberOfLines={1}>{cat}</Text>
         </View>
         <View style={{ alignItems: "flex-end" }}>
@@ -198,49 +165,34 @@ function Donut({ pct, color, size, trackColor, t }: { pct: number; color: string
 
 export default function ReportScreen() {
   const insets = useSafeAreaInsets();
-  const { theme } = useTheme();
+  const { theme, colors: baseColors } = useTheme();
+  const colors = getExtendedColors(theme, baseColors);
   const isDark = theme === "dark";
 
-  // Comprehensive theme object applied to every element
-  const t = useMemo(() => (isDark ? {
-    bg: "#0F1117",
-    card: "#1A1F2E",
-    cardBorder: "#ffffff10",
-    text: "#ffffff",
-    textSecondary: "#8890A0",
-    accent: "#A78BFA",
-    chartBg: "#1A1F2E",
-    segmentBg: "#0F1117",
-    segmentActive: "#A78BFA",
-    segmentActiveText: "#000000",
-    segmentText: "#8890A0",
-    heroBase: "#203A43",
-    heroCircleA: "#0F2027",
-    heroCircleB: "#2C5364",
-    heroText: "#ffffff",
-    gridLine: "#ffffff12",
-    up: "#F87171",
-    down: "#34D399",
-  } : {
-    bg: "#F5F7FA",
-    card: "#FFFFFF",
-    cardBorder: "#E5E7EB",
-    text: "#1A1A2E",
-    textSecondary: "#6B7280",
-    accent: "#8B5CF6",
-    chartBg: "#FFFFFF",
-    segmentBg: "#E5E7EB",
-    segmentActive: "#8B5CF6",
-    segmentActiveText: "#FFFFFF",
-    segmentText: "#6B7280",
-    heroBase: "#E8F8F3",
-    heroCircleA: "#F0FFF8",
-    heroCircleB: "#D2F5E8",
-    heroText: "#1A1A2E",
-    gridLine: "#E5E7EB",
-    up: "#EF4444",
-    down: "#059669",
-  }), [isDark]);
+  // Comprehensive theme object applied to every element — sourced from the
+  // shared token palette so this screen can't drift out of sync with the
+  // rest of the app; only the decorative hero-card gradient (no shared
+  // equivalent) stays as a local literal.
+  const t = useMemo(() => ({
+    bg: colors.background,
+    card: colors.surfaceElevated,
+    cardBorder: colors.borderSubtle,
+    text: colors.text,
+    textSecondary: colors.textSecondary,
+    accent: colors.primary,
+    chartBg: colors.surfaceElevated,
+    segmentBg: colors.neutralBg,
+    segmentActive: colors.primary,
+    segmentActiveText: isDark ? "#000000" : "#FFFFFF",
+    segmentText: colors.textSecondary,
+    heroBase: isDark ? "#203A43" : "#E8F8F3",
+    heroCircleA: isDark ? "#0F2027" : "#F0FFF8",
+    heroCircleB: isDark ? "#2C5364" : "#D2F5E8",
+    heroText: isDark ? "#ffffff" : "#1A1A2E",
+    gridLine: colors.borderSubtle,
+    up: colors.negative,
+    down: colors.positive,
+  }), [colors, isDark]);
 
   const now = new Date();
   const todayMonth = now.getMonth();
@@ -260,15 +212,12 @@ export default function ReportScreen() {
   const [upcomingBills, setUpcomingBills] = useState<any[]>([]);
 
   // Content slide/fade on month change
-  const slideAnim = useRef(new Animated.Value(1)).current;
+  const slideProgress = useSharedValue(1);
   // Chart draw-in reveal
-  const chartAnim = useRef(new Animated.Value(0)).current;
+  const chartProgress = useSharedValue(0);
 
-  const getCategoryIcon = useCallback((categoryName: string): string => {
-    if (CATEGORY_ICONS[categoryName]) return CATEGORY_ICONS[categoryName];
-    const custom = customCategories.find((c: any) => c.name === categoryName);
-    if (custom?.emoji) return custom.emoji;
-    return "📦";
+  const getCustomEmoji = useCallback((categoryName: string): string | undefined => {
+    return customCategories.find((c: any) => c.name === categoryName)?.emoji;
   }, [customCategories]);
 
   const isCurrentMonth = selectedMonth === todayMonth && selectedYear === todayYear;
@@ -286,21 +235,21 @@ export default function ReportScreen() {
   // Animate content in whenever the month changes or loading completes
   useEffect(() => {
     if (!loading) {
-      slideAnim.setValue(0);
-      Animated.timing(slideAnim, {
-        toValue: 1,
-        duration: 320,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
+      slideProgress.value = 0;
+      slideProgress.value = withTiming(1, { duration: 320, easing: Easing.out(Easing.cubic) });
     }
   }, [selectedMonth, selectedYear, loading]);
 
+  const contentStyle = useAnimatedStyle(() => ({
+    opacity: slideProgress.value,
+    transform: [{ translateX: (1 - slideProgress.value) * 24 }],
+  }));
+
   // Chart draw-in on load and whenever data/timeline changes
   useEffect(() => {
-    chartAnim.setValue(0);
+    chartProgress.value = 0;
     setSelectedPoint(null);
-    Animated.timing(chartAnim, { toValue: 1, duration: 800, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
+    chartProgress.value = withTiming(1, { duration: 800, easing: Easing.out(Easing.cubic) });
   }, [chartTimeline, expenses, selectedMonth, selectedYear]);
 
   async function fetchReportAndExpenses(month: number, year: number, showSpinner = true) {
@@ -485,7 +434,9 @@ export default function ReportScreen() {
   }, [chartBars]);
 
   // Reveal mask width: covers the chart from the right, shrinking to 0
-  const maskWidth = chartAnim.interpolate({ inputRange: [0, 1], outputRange: [chartWidth, 0] });
+  const maskStyle = useAnimatedStyle(() => ({
+    width: (1 - chartProgress.value) * chartWidth,
+  }));
 
   // ── Hero card stats (memoized) ────────────────────────────────────────────
   const heroStats = useMemo(() => {
@@ -589,9 +540,9 @@ export default function ReportScreen() {
   }, [expenses, report, budgetPerformance, upcomingBills, selectedMonth, selectedYear]);
 
   function budgetColor(pct: number) {
-    if (pct >= 100) return "#EF4444";
-    if (pct >= 80) return "#F59E0B";
-    return "#34D399";
+    if (pct >= 100) return colors.negative;
+    if (pct >= 80) return colors.warning;
+    return colors.positive;
   }
 
   // ── Error state ───────────────────────────────────────────────────────────
@@ -619,11 +570,14 @@ export default function ReportScreen() {
           onPress={goToPreviousMonth}
           style={[styles.navArrow, { backgroundColor: t.card, borderColor: t.cardBorder }]}
           activeOpacity={0.7}
+          hitSlop={4}
+          accessibilityRole="button"
+          accessibilityLabel="Previous month"
         >
           <Feather name="chevron-left" size={22} color={t.text} />
         </TouchableOpacity>
 
-        <View style={{ alignItems: "center" }}>
+        <View style={{ alignItems: "center" }} accessibilityRole="header">
           <Text style={[styles.monthTitle, { color: t.text }]}>{selectedMonthName}</Text>
           <Text style={[styles.yearSubtitle, { color: t.textSecondary }]}>{selectedYear}</Text>
         </View>
@@ -633,6 +587,10 @@ export default function ReportScreen() {
           style={[styles.navArrow, { backgroundColor: t.card, borderColor: t.cardBorder, opacity: isCurrentMonth ? 0.35 : 1 }]}
           disabled={isCurrentMonth}
           activeOpacity={0.7}
+          hitSlop={4}
+          accessibilityRole="button"
+          accessibilityLabel="Next month"
+          accessibilityState={{ disabled: isCurrentMonth }}
         >
           <Feather name="chevron-right" size={22} color={t.text} />
         </TouchableOpacity>
@@ -663,12 +621,7 @@ export default function ReportScreen() {
           <ActivityIndicator size="large" color={t.accent} />
         </View>
       ) : (
-        <Animated.View
-          style={{
-            opacity: slideAnim,
-            transform: [{ translateX: slideAnim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }],
-          }}
-        >
+        <Animated.View style={contentStyle}>
           {/* ── Section 2: Hero spending card ── */}
           <View style={[styles.heroCard, { backgroundColor: t.heroBase }]}>
             {/* Layered circles simulate a gradient (expo-linear-gradient not installed) */}
@@ -815,14 +768,10 @@ export default function ReportScreen() {
 
               {/* Draw-in reveal mask (shrinks from the right) */}
               <Animated.View
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  bottom: 0,
-                  right: 0,
-                  width: maskWidth,
-                  backgroundColor: t.chartBg,
-                }}
+                style={[
+                  { position: "absolute", top: 0, bottom: 0, right: 0, backgroundColor: t.chartBg },
+                  maskStyle,
+                ]}
                 pointerEvents="none"
               />
             </View>
@@ -864,7 +813,7 @@ export default function ReportScreen() {
                   amount={entry.amount}
                   pct={breakdown.total > 0 ? (entry.amount / breakdown.total) * 100 : 0}
                   index={index}
-                  icon={getCategoryIcon(entry.cat)}
+                  customEmoji={getCustomEmoji(entry.cat)}
                   t={t}
                 />
               ))}
@@ -902,15 +851,18 @@ export default function ReportScreen() {
                   const pct = parseFloat(item.percentage) || 0;
                   const color = budgetColor(pct);
                   const status = pct >= 100
-                    ? { label: "Over Budget 🚨", color: "#EF4444" }
+                    ? { label: "Over Budget 🚨", color: colors.negative }
                     : pct >= 80
-                    ? { label: "Near Limit ⚠️", color: "#F59E0B" }
-                    : { label: "On Track ✓", color: "#34D399" };
+                    ? { label: "Near Limit ⚠️", color: colors.warning }
+                    : { label: "On Track ✓", color: colors.positive };
                   return (
                     <View key={item.category} style={[styles.budgetCard, { backgroundColor: t.segmentBg, borderColor: t.cardBorder }]}>
-                      <Text style={[styles.budgetCardTitle, { color: t.text }]} numberOfLines={1}>
-                        {getCategoryIcon(item.category)} {item.category}
-                      </Text>
+                      <View style={styles.budgetCardTitleRow}>
+                        <MaterialCommunityIcons name={getCategoryIconName(item.category)} size={13} color={t.text} />
+                        <Text style={[styles.budgetCardTitle, { color: t.text }]} numberOfLines={1}>
+                          {item.category}
+                        </Text>
+                      </View>
                       <Donut pct={pct} color={color} size={78} trackColor={isDark ? "#ffffff14" : "#00000010"} t={t} />
                       <Text style={[styles.budgetAmounts, { color: t.textSecondary }]}>
                         GHS {(parseFloat(item.spent) || 0).toFixed(0)} of GHS {(parseFloat(item.limit) || 0).toFixed(0)}
@@ -1082,15 +1034,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   catLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1, marginRight: 10 },
-  catEmojiCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  catEmoji: { fontSize: 16 },
   catName: { fontSize: 14, fontWeight: "700", flexShrink: 1 },
   catAmount: { fontSize: 14, fontWeight: "bold" },
   catPct: { fontSize: 10, fontWeight: "600", marginTop: 1 },
@@ -1114,7 +1057,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
-  budgetCardTitle: { fontSize: 13, fontWeight: "700" },
+  budgetCardTitleRow: { flexDirection: "row", alignItems: "center", gap: 4, maxWidth: "100%" },
+  budgetCardTitle: { fontSize: 13, fontWeight: "700", flexShrink: 1 },
   donutPct: { fontSize: 13, fontWeight: "bold" },
   budgetAmounts: { fontSize: 11, fontWeight: "600" },
   budgetStatusBadge: {
