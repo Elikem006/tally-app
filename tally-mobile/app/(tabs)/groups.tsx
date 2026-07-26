@@ -1,24 +1,18 @@
 import { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  RefreshControl,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import Feather from '@expo/vector-icons/Feather';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { groupAPI } from '../../services/api';
 import { getUserId } from '../../services/storage';
 import { useTheme } from '../../hooks/useTheme';
-import SkeletonItem from '../../components/SkeletonItem';
+import { getExtendedColors, typography, spacing, radius } from '../../theme';
+import { Button, EmptyState, ListRow, Skeleton } from '../../components/ui';
 
 export default function GroupsScreen() {
   const insets = useSafeAreaInsets();
-  const { colors, theme } = useTheme();
+  const { theme, colors: baseColors } = useTheme();
+  const colors = getExtendedColors(theme, baseColors);
   const [groups, setGroups] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -39,7 +33,7 @@ export default function GroupsScreen() {
       const response = await groupAPI.getUserGroups(userId);
       const groupsData = response.data || [];
       setGroups(groupsData);
-      
+
       // Fetch details for each group to get totals and member counts
       for (const group of groupsData) {
         try {
@@ -72,12 +66,11 @@ export default function GroupsScreen() {
   }
 
   if (loading && !refreshing) {
-    // Skeleton loading — placeholder group cards instead of a bare spinner
     return (
-      <View style={[styles.container, { backgroundColor: colors.background, paddingHorizontal: 20, paddingTop: Math.max(insets.top, 30) }]}>
-        <SkeletonItem width="45%" height={26} borderRadius={12} style={{ marginBottom: 20 }} />
+      <View style={[styles.container, { backgroundColor: colors.background, paddingHorizontal: spacing.lg, paddingTop: Math.max(insets.top, spacing.xl) }]}>
+        <Skeleton width="45%" height={26} borderRadius={radius.sm} style={{ marginBottom: spacing.xl }} />
         {[...Array(4)].map((_, i) => (
-          <SkeletonItem key={i} height={92} borderRadius={24} style={{ marginBottom: 10 }} />
+          <Skeleton key={i} height={92} borderRadius={radius.xl} style={{ marginBottom: spacing.sm }} />
         ))}
       </View>
     );
@@ -90,11 +83,9 @@ export default function GroupsScreen() {
         contentContainerStyle={styles.centered}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
-        <Text style={styles.errorIcon}>⚠️</Text>
-        <Text style={[styles.errorText, { color: colors.textSecondary }]}>{error}</Text>
-        <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={() => fetchGroups(true)}>
-          <Text style={styles.retryButtonText}>Retry</Text>
-        </TouchableOpacity>
+        <Feather name="alert-triangle" size={40} color={colors.textSecondary} style={{ marginBottom: spacing.lg }} />
+        <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.xl }]}>{error}</Text>
+        <Button title="Retry" onPress={() => fetchGroups(true)} fullWidth={false} />
       </ScrollView>
     );
   }
@@ -102,234 +93,87 @@ export default function GroupsScreen() {
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}
+      contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, spacing.xl) }]}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
     >
-      {/* Card container */}
-      <View style={[styles.mainCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-        <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>My Groups</Text>
+      <View style={[styles.mainCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>
+        <Text style={[typography.display, { color: colors.text, marginBottom: spacing.lg }]}>My Groups</Text>
 
         {groups.length === 0 ? (
-          <View style={styles.emptyState}>
-            <View style={[styles.emptyIconCircle, { backgroundColor: colors.neutralBg }]}>
-              <Text style={styles.emptyIcon}>👥</Text>
-            </View>
-            <Text style={[styles.emptyText, { color: colors.text }]}>No groups yet</Text>
-            <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
-              Create a group to start splitting and tracking shared expenses with friends
-            </Text>
-          </View>
+          <EmptyState
+            icon="users"
+            title="No groups yet"
+            body="Create a group to start splitting and tracking shared expenses with friends"
+          />
         ) : (
-          <View style={styles.groupList}>
-            {groups.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={[styles.groupCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
-                onPress={() =>
-                  router.push({
-                    pathname: "/group-detail",
-                    params: { groupId: String(item.id), groupName: item.name },
-                  })
-                }
-                activeOpacity={0.8}
-              >
-                <View style={styles.groupLeft}>
-                  <View style={[styles.groupAvatar, { backgroundColor: colors.neutralBg }]}>
-                    <Text style={[styles.groupAvatarText, { color: colors.textSecondary }]}>
-                      {item.name.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={styles.groupInfo}>
-                    <Text style={[styles.groupName, { color: colors.text }]}>{item.name}</Text>
-                    {groupSummaries[String(item.id)] ? (
-                      <Text style={[styles.groupSub, { color: colors.textSecondary }]}>
-                        👥 {groupSummaries[String(item.id)].memberCount} members • GHS {groupSummaries[String(item.id)].total.toFixed(2)} total
-                      </Text>
-                    ) : (
-                      <Text style={[styles.groupSub, { color: colors.textSecondary }]}>Loading details...</Text>
-                    )}
-                  </View>
+          <View style={{ marginBottom: spacing.md }}>
+            {groups.map((item) => {
+              const summary = groupSummaries[String(item.id)];
+              return (
+                <View key={item.id} style={[styles.groupCardWrap, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+                  <ListRow
+                    leading={
+                      <View style={[styles.groupAvatar, { backgroundColor: colors.neutralBg, borderColor: colors.borderSubtle }]}>
+                        <Text style={[typography.bodyStrong, { color: colors.textSecondary }]}>
+                          {item.name.charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                    }
+                    title={item.name}
+                    subtitle={
+                      summary
+                        ? `👥 ${summary.memberCount} members • GHS ${summary.total.toFixed(2)} total`
+                        : 'Loading details...'
+                    }
+                    trailing={<Feather name="chevron-right" size={18} color={colors.textSecondary} />}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/group-detail',
+                        params: { groupId: String(item.id), groupName: item.name },
+                      })
+                    }
+                    style={{ paddingHorizontal: spacing.sm }}
+                  />
                 </View>
-                <Feather name="chevron-right" size={18} color={colors.textSecondary} style={styles.arrow} />
-              </TouchableOpacity>
-            ))}
+              );
+            })}
           </View>
         )}
 
-        <TouchableOpacity
-          style={[styles.createButton, { backgroundColor: colors.primary }]}
-          onPress={() => router.push('/create-group')}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.createButtonText}>+ Create Group</Text>
-        </TouchableOpacity>
+        <Button title="+ Create Group" onPress={() => router.push('/create-group')} />
       </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F2F4F7', // Soft light gray backdrop
-  },
+  container: { flex: 1 },
   centered: {
     flex: 1,
-    backgroundColor: '#F2F4F7',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    padding: spacing.xl,
   },
   content: {
-    paddingHorizontal: 20,
-    paddingTop: 30,
+    paddingHorizontal: spacing.lg,
     paddingBottom: 40,
   },
   mainCard: {
-    backgroundColor: '#ffffff', // Main card container
-    borderRadius: 28,
-    padding: 20,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.05,
-    shadowRadius: 16,
-    elevation: 3,
-  },
-  cardHeaderTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#111111',
-    marginBottom: 20,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#F8F9FA',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-  },
-  emptyIcon: {
-    fontSize: 36,
-  },
-  emptyText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111111',
-    marginBottom: 8,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#8E9AA6',
-    textAlign: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 12,
-  },
-  groupList: {
-    marginBottom: 16,
-  },
-  groupCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    padding: 14,
-    marginBottom: 10,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
     borderWidth: 1,
-    borderColor: '#EAEBEF',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.02,
-    shadowRadius: 4,
-    elevation: 1,
   },
-  groupLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: 16,
+  groupCardWrap: {
+    borderRadius: radius.xl,
+    marginBottom: spacing.sm + 2,
+    borderWidth: 1,
   },
   groupAvatar: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#F8F9FA',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14,
     borderWidth: 1,
-    borderColor: '#EAEBEF',
-  },
-  groupAvatarText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111111',
-  },
-  groupInfo: {
-    flex: 1,
-  },
-  groupName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111111',
-    marginBottom: 3,
-  },
-  groupSub: {
-    fontSize: 12,
-    color: '#8E9AA6',
-  },
-  arrow: {
-    marginLeft: 8,
-  },
-  createButton: {
-    backgroundColor: '#111111', // Black rounded button
-    borderRadius: 28,
-    padding: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    marginTop: 8,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  createButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  errorIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#8E9AA6',
-    textAlign: 'center',
-    marginBottom: 24,
-    paddingHorizontal: 24,
-  },
-  retryButton: {
-    backgroundColor: '#111111',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-  },
-  retryButtonText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: 'bold',
   },
 });

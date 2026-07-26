@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import ExpenseDetailModal from '../../components/ExpenseDetailModal';
 import {
   View,
@@ -8,21 +8,23 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Image,
-  Dimensions,
-  Modal,
-  TextInput,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
   RefreshControl,
 } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { expenseAPI, remindersAPI, budgetAPI, momoAPI, categoriesAPI, groupAPI } from '../../services/api';
 import { getUserId, getUserName, safeStorage } from '../../services/storage';
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
-import { Svg, Path } from 'react-native-svg';
+import { getExtendedColors, typography, spacing, radius } from '../../theme';
+import { Button } from '../../components/ui';
+import { ExpensesHeroCard } from '../../components/home/ExpensesHeroCard';
+import { MomoWalletCard } from '../../components/home/MomoWalletCard';
+import { SpendingChart, ChartTimeline } from '../../components/home/SpendingChart';
+import { TransactionRow } from '../../components/home/TransactionRow';
+import { QuickAddModal } from '../../components/home/QuickAddModal';
+import Toast from '../../components/Toast';
+import { useToast } from '../../hooks/useToast';
 import {
   addHistoryItem,
   shouldFireBudgetAlert,
@@ -44,75 +46,25 @@ const CATEGORY_ICONS: { [key: string]: string } = {
   Shared: '👥',
 };
 
-const CATEGORIES = ["Food", "Transport", "Entertainment", "Utilities", "Other"];
-
-const getLineStyle = (x1: number, y1: number, x2: number, y2: number, lineColor: string = '#8B5CF6') => {
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const distance = Math.sqrt(dx * dx + dy * dy);
-  const angle = Math.atan2(dy, dx);
-
-  return {
-    position: 'absolute' as const,
-    left: x1,
-    top: y1,
-    width: distance + 0.6,
-    height: 3,
-    backgroundColor: lineColor,
-    transform: [{ rotate: `${angle}rad` }] as any,
-    transformOrigin: ['0%', '50%', 0] as any,
-  };
-};
+const CATEGORIES = ['Food', 'Transport', 'Entertainment', 'Utilities', 'Other'];
 
 function parseTagsFromDescription(description: string | null | undefined): {
   cleanDescription: string;
   tags: string[];
 } {
-  if (!description) return { cleanDescription: "", tags: [] };
-  const words = description.split(" ");
-  const tags = words.filter((w) => w.startsWith("#"));
-  const cleanDescription = words.filter((w) => !w.startsWith("#")).join(" ").trim();
+  if (!description) return { cleanDescription: '', tags: [] };
+  const words = description.split(' ');
+  const tags = words.filter((w) => w.startsWith('#'));
+  const cleanDescription = words.filter((w) => !w.startsWith('#')).join(' ').trim();
   return { cleanDescription, tags };
 }
 
-const EyelashClosedIcon = ({ size = 20, color = "#D97706" }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Path
-      d="M2 10C6 15 18 15 22 10"
-      stroke={color}
-      strokeWidth={2.2}
-      strokeLinecap="round"
-    />
-    <Path d="M4 12L2 14.5" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
-    <Path d="M8 13.5L7 16.5" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
-    <Path d="M12 14L12 17.5" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
-    <Path d="M16 13.5L17 16.5" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
-    <Path d="M20 12L22 14.5" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
-  </Svg>
-);
-
-const EyelashOpenIcon = ({ size = 20, color = "#D97706" }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Path
-      d="M2 12C6 6 18 6 22 12C18 18 6 18 2 12Z"
-      stroke={color}
-      strokeWidth={2.2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <Path
-      d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z"
-      stroke={color}
-      strokeWidth={2.2}
-      fill={color}
-    />
-  </Svg>
-);
-
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const { colors, theme } = useTheme();
-  const isDark = theme === 'dark';
+  const { theme, colors: baseColors } = useTheme();
+  const colors = getExtendedColors(theme, baseColors);
+  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+
   const [expenses, setExpenses] = useState<any[]>([]);
   const [budgets, setBudgets] = useState<any[]>([]);
   const [upcomingReminders, setUpcomingReminders] = useState<any[]>([]);
@@ -122,7 +74,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [profileImage, setProfileImage] = useState<string | null>(null);
-  const [userName, setUserName] = useState("User");
+  const [userName, setUserName] = useState('User');
   const [customCategories, setCustomCategories] = useState<any[]>([]);
 
   // Splitwise-style net position across all groups
@@ -137,16 +89,16 @@ export default function HomeScreen() {
   }
 
   // Chart timeline switcher state
-  const [chartTimeline, setChartTimeline] = useState<'day' | 'week' | 'month' | 'year'>('week');
+  const [chartTimeline, setChartTimeline] = useState<ChartTimeline>('week');
 
   // Notification badge
   const [unreadCount, setUnreadCount] = useState(0);
 
   // MoMo wallet states
-  const [momoBalance, setMomoBalance] = useState("0.00");
-  const [momoStatus, setMomoStatus] = useState<"loading" | "available" | "unavailable">("loading");
+  const [momoBalance, setMomoBalance] = useState('0.00');
+  const [momoStatus, setMomoStatus] = useState<'loading' | 'available' | 'unavailable'>('loading');
   const [momoBalanceLoading, setMomoBalanceLoading] = useState(false);
-  const [momoMonthlySpent, setMomoMonthlySpent] = useState("0.00");
+  const [momoMonthlySpent, setMomoMonthlySpent] = useState('0.00');
   const [hideMomoBalance, setHideMomoBalance] = useState(false);
 
   // Expense detail modal state
@@ -155,9 +107,9 @@ export default function HomeScreen() {
 
   // Quick add state
   const [showQuickAdd, setShowQuickAdd] = useState(false);
-  const [quickAmount, setQuickAmount] = useState("");
-  const [quickCategory, setQuickCategory] = useState("Food");
-  const [quickDescription, setQuickDescription] = useState("");
+  const [quickAmount, setQuickAmount] = useState('');
+  const [quickCategory, setQuickCategory] = useState('Food');
+  const [quickDescription, setQuickDescription] = useState('');
   const [savingExpense, setSavingExpense] = useState(false);
 
   useFocusEffect(
@@ -212,7 +164,7 @@ export default function HomeScreen() {
         budgetAPI.getUserBudgets(userId),
         remindersAPI.getUpcomingReminders(userId).catch(() => ({ data: [] })),
         expenseAPI.getRecurringExpenses(userId).catch(() => ({ data: [] })),
-        categoriesAPI.getUserCategories(userId).catch(() => ({ data: [] }))
+        categoriesAPI.getUserCategories(userId).catch(() => ({ data: [] })),
       ]);
 
       const expenseList = expensesRes.data || [];
@@ -233,14 +185,14 @@ export default function HomeScreen() {
       // Calculate MoMo spending for this month
       const now = new Date();
       const momoTotal = expenseList
-        .filter((e: any) => e.paymentMethod === "MOMO")
+        .filter((e: any) => e.paymentMethod === 'MOMO')
         .filter((e: any) => {
           if (!e.date) return false;
           const d = new Date(e.date);
           return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
         })
-        .filter((e: any) => e.type !== "income")
-        .reduce((sum: number, e: any) => sum + Math.abs(parseFloat(e.amount || "0")), 0);
+        .filter((e: any) => e.type !== 'income')
+        .reduce((sum: number, e: any) => sum + Math.abs(parseFloat(e.amount || '0')), 0);
       setMomoMonthlySpent(momoTotal.toFixed(2));
     } catch (err: any) {
       setError('Failed to load dashboard data. Please check your connection.');
@@ -273,25 +225,25 @@ export default function HomeScreen() {
     }
 
     setMomoBalanceLoading(true);
-    setMomoStatus("loading");
+    setMomoStatus('loading');
     try {
       const res = await momoAPI.getBalance();
       const data = res.data;
-      if (data.status === "unavailable") {
-        cachedMomoStatus = "unavailable";
-        setMomoStatus("unavailable");
+      if (data.status === 'unavailable') {
+        cachedMomoStatus = 'unavailable';
+        setMomoStatus('unavailable');
       } else {
         const bal = data.availableBalance != null
           ? String(Math.max(0, parseFloat(data.availableBalance)).toFixed(2))
-          : "0.00";
+          : '0.00';
         cachedMomoBalance = bal;
-        cachedMomoStatus = "available";
+        cachedMomoStatus = 'available';
         lastMomoFetch = now;
         setMomoBalance(bal);
-        setMomoStatus("available");
+        setMomoStatus('available');
       }
     } catch {
-      setMomoStatus("unavailable");
+      setMomoStatus('unavailable');
     } finally {
       setMomoBalanceLoading(false);
     }
@@ -314,23 +266,23 @@ export default function HomeScreen() {
       // Record alerts in history
       for (const alert of alerts) {
         if (alert.isOverBudget) {
-          const fire = await shouldFireBudgetAlert(alert.category, "over");
+          const fire = await shouldFireBudgetAlert(alert.category, 'over');
           if (fire) {
             await addHistoryItem({
-              type: "budget_over",
+              type: 'budget_over',
               title: `Over budget — ${alert.category}`,
               body: `You've used ${alert.percentage.toFixed(0)}% of your ${alert.category} budget this month.`,
-              data: { screen: "budget" },
+              data: { screen: 'budget' },
             });
           }
         } else if (alert.isNearLimit) {
-          const fire = await shouldFireBudgetAlert(alert.category, "near");
+          const fire = await shouldFireBudgetAlert(alert.category, 'near');
           if (fire) {
             await addHistoryItem({
-              type: "budget_near",
+              type: 'budget_near',
               title: `Near limit — ${alert.category}`,
               body: `${alert.percentage.toFixed(0)}% of your ${alert.category} budget used. Slow down!`,
-              data: { screen: "budget" },
+              data: { screen: 'budget' },
             });
           }
         }
@@ -349,18 +301,18 @@ export default function HomeScreen() {
 
   async function handleQuickAdd() {
     if (!quickAmount.trim()) {
-      Alert.alert("Missing amount", "Please enter an amount.");
+      showToast('Please enter an amount', 'error');
       return;
     }
     const parsed = parseFloat(quickAmount);
     if (isNaN(parsed) || parsed <= 0) {
-      Alert.alert("Invalid amount", "Please enter a valid amount greater than 0.");
+      showToast('Please enter a valid amount greater than 0', 'error');
       return;
     }
 
     setSavingExpense(true);
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const today = new Date().toISOString().split('T')[0];
       // Quick Add is always an expense — send as negative so history displays correctly
       const negativeAmt = String(-Math.abs(parsed));
       await expenseAPI.createExpense(
@@ -369,28 +321,28 @@ export default function HomeScreen() {
         quickCategory,
         quickDescription.trim(),
         today,
-        "CASH"
+        'CASH'
       );
       // Reset form
-      setQuickAmount("");
-      setQuickCategory("Food");
-      setQuickDescription("");
+      setQuickAmount('');
+      setQuickCategory('Food');
+      setQuickDescription('');
       setShowQuickAdd(false);
-      
+
       // Record in notification history
       await addHistoryItem({
-        type: "expense_added",
-        title: "Expense recorded",
-        body: `GHS ${parsed.toFixed(2)} added to ${quickCategory}${quickDescription ? ` — ${quickDescription}` : ""}.`,
-        data: { screen: "history" },
+        type: 'expense_added',
+        title: 'Expense recorded',
+        body: `GHS ${parsed.toFixed(2)} added to ${quickCategory}${quickDescription ? ` — ${quickDescription}` : ''}.`,
+        data: { screen: 'history' },
       });
       getUnreadCount().then(setUnreadCount);
-      
+
       // Refresh data
       await fetchData(false);
-      Alert.alert("✅ Added", `GHS ${parsed.toFixed(2)} in ${quickCategory} recorded.`);
+      showToast(`GHS ${parsed.toFixed(2)} in ${quickCategory} recorded`, 'success');
     } catch {
-      Alert.alert("Error", "Could not save expense. Please try again.");
+      showToast('Could not save expense. Please try again.', 'error');
     } finally {
       setSavingExpense(false);
     }
@@ -412,8 +364,8 @@ export default function HomeScreen() {
   // Daily average this month → projected end-of-month total, colored vs budget.
   const paceNow = new Date();
   const dayOfMonth = paceNow.getDate();
-  const daysInMonth = new Date(paceNow.getFullYear(), paceNow.getMonth() + 1, 0).getDate();
   const monthPrefix = `${paceNow.getFullYear()}-${String(paceNow.getMonth() + 1).padStart(2, '0')}`;
+  const daysInMonth = new Date(paceNow.getFullYear(), paceNow.getMonth() + 1, 0).getDate();
   const monthSpent = expenses
     .filter(e => e.date && e.date.startsWith(monthPrefix)
       && e.type !== 'income' && e.paymentMethod !== 'SETTLEMENT')
@@ -421,12 +373,6 @@ export default function HomeScreen() {
   const dailyAvg = dayOfMonth > 0 ? monthSpent / dayOfMonth : 0;
   const projected = dailyAvg * daysInMonth;
   const paceOverBudget = totalBudget > 0 && projected > totalBudget;
-
-  // Split formatted total spent for premium large-integer / small-decimal layout
-  const formattedTotal = totalSpent.toFixed(2);
-  const parts = formattedTotal.split('.');
-  const integerPart = parseFloat(parts[0]).toLocaleString();
-  const decimalPart = parts[1];
 
   // Group expenses dynamically by Category (spending only)
   const categoryTotals = expenses.reduce((acc: { [key: string]: number }, e) => {
@@ -450,9 +396,9 @@ export default function HomeScreen() {
     .slice(0, 3);
 
   // Dynamic chart data calculation based on selected timeline
-  const getChartData = () => {
+  function getChartData() {
     const now = new Date();
-    
+
     const parseLocalDate = (dateStr: string) => {
       if (!dateStr) return new Date();
       const parts = dateStr.split('-');
@@ -460,8 +406,8 @@ export default function HomeScreen() {
       return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
     };
 
-    const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const SHORT_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const SHORT_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
     if (chartTimeline === 'day') {
       // Last 7 days
@@ -475,11 +421,11 @@ export default function HomeScreen() {
         const month = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
         const dateKey = `${year}-${month}-${day}`;
-        
+
         const daySpend = expenses
           .filter(e => e.date === dateKey && e.type !== 'income')
           .reduce((s, e) => s + Math.abs(parseFloat(e.amount) || 0), 0);
-        
+
         sum += daySpend;
         chartBars.push({ day: dayLabel, spend: daySpend });
       }
@@ -494,7 +440,7 @@ export default function HomeScreen() {
         const start = new Date(now);
         start.setDate(now.getDate() - (i + 1) * 7 + 1);
         start.setHours(0, 0, 0, 0);
-        
+
         const end = new Date(now);
         end.setDate(now.getDate() - i * 7);
         end.setHours(23, 59, 59, 999);
@@ -548,49 +494,9 @@ export default function HomeScreen() {
       chartBars.push({ day: String(yr), spend: yearSpend });
     }
     return { chartBars, chartSum: sum };
-  };
+  }
 
   const { chartBars, chartSum } = getChartData();
-
-  const { width: screenWidth } = Dimensions.get('window');
-  const chartWidth = screenWidth - 88; // 20*2 screen horizontal padding + 24*2 card padding
-  const chartHeight = 140;
-  const paddingVertical = 25;
-  const chartInset = 16;
-  const plotWidth = chartWidth - 2 * chartInset;
-  const plotHeight = chartHeight - 2 * paddingVertical;
-  const maxSpendVal = Math.max(...chartBars.map(b => b.spend), 0);
-
-  const points = chartBars.map((bar, idx) => {
-    const x = chartBars.length > 1
-      ? chartInset + (plotWidth / (chartBars.length - 1)) * idx
-      : chartInset + plotWidth / 2;
-    const y = maxSpendVal > 0 
-      ? chartHeight - (paddingVertical + (bar.spend / maxSpendVal) * plotHeight)
-      : chartHeight / 2;
-    return { x, y, ...bar };
-  });
-
-  const curveSegments: { x1: number; y1: number; x2: number; y2: number }[] = [];
-  const steps = 12;
-  for (let i = 0; i < points.length - 1; i++) {
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    for (let j = 0; j < steps; j++) {
-      const t1 = j / steps;
-      const t2 = (j + 1) / steps;
-      
-      const mu1 = (1 - Math.cos(t1 * Math.PI)) / 2;
-      const mu2 = (1 - Math.cos(t2 * Math.PI)) / 2;
-      
-      const x1 = p1.x + t1 * (p2.x - p1.x);
-      const x2 = p1.x + t2 * (p2.x - p1.x);
-      const y1 = p1.y + mu1 * (p2.y - p1.y);
-      const y2 = p1.y + mu2 * (p2.y - p1.y);
-      
-      curveSegments.push({ x1, y1, x2, y2 });
-    }
-  }
 
   if (loading) {
     return (
@@ -607,11 +513,9 @@ export default function HomeScreen() {
         contentContainerStyle={[styles.centered, { backgroundColor: colors.background }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
-        <Text style={styles.errorIcon}>⚠️</Text>
-        <Text style={[styles.errorText, { color: colors.textSecondary }]}>{error}</Text>
-        <TouchableOpacity style={[styles.retryButton, { backgroundColor: colors.primary }]} onPress={() => fetchData(true)}>
-          <Text style={styles.retryButtonText}>Retry</Text>
-        </TouchableOpacity>
+        <Feather name="alert-triangle" size={40} color={colors.textSecondary} style={{ marginBottom: spacing.lg }} />
+        <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.xl }]}>{error}</Text>
+        <Button title="Retry" onPress={() => fetchData(true)} fullWidth={false} />
       </ScrollView>
     );
   }
@@ -620,53 +524,54 @@ export default function HomeScreen() {
     <View style={[styles.wrapper, { backgroundColor: colors.background }]}>
       <ScrollView
         style={[styles.container, { backgroundColor: colors.background }]}
-        contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 24) }]}
+        contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, spacing.xl) }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
         keyboardShouldPersistTaps="handled"
       >
         {/* Header Row */}
         <View style={styles.headerRow}>
           <View>
-            <Text style={[styles.welcomeText, { color: colors.textSecondary }]}>Welcome back 👋</Text>
-            <Text style={[styles.greetingText, { color: colors.text }]}>Good day, {userName}</Text>
+            <Text style={[typography.label, { color: colors.textSecondary }]}>Welcome back 👋</Text>
+            <Text style={[typography.headline, { color: colors.text, marginTop: 2 }]}>Good day, {userName}</Text>
           </View>
           <View style={styles.headerRightActions}>
-            {/* Notification bell */}
             <TouchableOpacity
-              style={[styles.headerActionButton, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
+              style={[styles.headerActionButton, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}
               onPress={() => router.push('/notification-history')}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Notifications"
             >
               <Feather name="bell" size={20} color={colors.text} />
               {unreadCount > 0 && (
-                <View style={styles.bellBadge}>
-                  <Text style={styles.bellBadgeText}>
-                    {unreadCount > 9 ? "9+" : String(unreadCount)}
-                  </Text>
+                <View style={[styles.bellBadge, { backgroundColor: colors.negative }]}>
+                  <Text style={styles.bellBadgeText}>{unreadCount > 9 ? '9+' : String(unreadCount)}</Text>
                 </View>
               )}
             </TouchableOpacity>
 
-            {/* Reminders icon */}
             <TouchableOpacity
-              style={[styles.headerActionButton, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
+              style={[styles.headerActionButton, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}
               onPress={() => router.push('/(tabs)/reminders')}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Reminders"
             >
               <Feather name="calendar" size={20} color={colors.text} />
             </TouchableOpacity>
 
-            {/* Profile Avatar */}
             <TouchableOpacity
-              style={[styles.avatarButton, { borderColor: colors.border }]}
+              style={[styles.avatarButton, { borderColor: colors.borderSubtle }]}
               onPress={() => router.push('/(tabs)/profile')}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Profile"
             >
               {profileImage ? (
                 <Image source={{ uri: profileImage }} style={styles.avatarImage} />
               ) : (
                 <View style={[styles.avatarPlaceholder, { backgroundColor: colors.neutralBg }]}>
-                  <Text style={[styles.avatarText, { color: colors.textSecondary }]}>
+                  <Text style={[typography.bodyStrong, { color: colors.textSecondary }]}>
                     {userName.charAt(0).toUpperCase()}
                   </Text>
                 </View>
@@ -683,98 +588,56 @@ export default function HomeScreen() {
                 key={alert.category}
                 style={[
                   styles.alertCard,
-                  alert.isOverBudget ? styles.alertCardOver : styles.alertCardNear,
+                  {
+                    backgroundColor: `${alert.isOverBudget ? colors.negative : colors.warning}12`,
+                    borderColor: `${alert.isOverBudget ? colors.negative : colors.warning}35`,
+                  },
                 ]}
                 onPress={() => router.push('/(tabs)/budget')}
                 activeOpacity={0.75}
               >
-                <Text style={styles.alertIcon}>{alert.isOverBudget ? "🚨" : "⚠️"}</Text>
+                <Feather
+                  name={alert.isOverBudget ? 'alert-octagon' : 'alert-triangle'}
+                  size={22}
+                  color={alert.isOverBudget ? colors.negative : colors.warning}
+                  style={{ marginRight: spacing.md }}
+                />
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.alertTitle, alert.isOverBudget ? styles.alertTitleOver : styles.alertTitleNear]}>
-                    {alert.isOverBudget ? "Over budget" : "Near limit"} — {alert.category}
+                  <Text style={[typography.bodyStrong, { color: alert.isOverBudget ? colors.negative : colors.warning }]}>
+                    {alert.isOverBudget ? 'Over budget' : 'Near limit'} — {alert.category}
                   </Text>
-                  <Text style={styles.alertSub}>
+                  <Text style={[typography.caption, { color: colors.textSecondary }]}>
                     {alert.percentage.toFixed(0)}% of your {alert.category} budget used
                   </Text>
                 </View>
-                <Text style={styles.cardChevron}>›</Text>
+                <Feather name="chevron-right" size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             ))}
           </View>
         )}
 
-        {/* Expenses Overview Card */}
-        <View style={[styles.expensesCard, isDark && { backgroundColor: colors.cardBg, borderWidth: 1, borderColor: colors.border }]}>
-          <View style={styles.radialCircle1} />
-          <View style={styles.radialCircle2} />
-          <View style={styles.radialCircle3} />
-
-          <View style={styles.expensesCardHeader}>
-            <Text style={styles.expensesCardLabel}>your Expenses</Text>
-          </View>
-
-          <View style={styles.amountRow}>
-            <Text style={styles.currencySymbol}>GHS </Text>
-            <Text style={styles.amountInteger}>{integerPart}</Text>
-            <Text style={styles.amountFraction}>.{decimalPart}</Text>
-          </View>
-
-          <View style={[styles.trendRow, { gap: 8 }]}>
-            <View style={styles.trendBadge}>
-              <Text style={styles.trendText}>
-                {expenses.length} transaction{expenses.length !== 1 ? 's' : ''}
-              </Text>
-            </View>
-            {totalIncome > 0 && (
-              <View style={[styles.trendBadge, { backgroundColor: colors.positive + '20' }]}>
-                <Text style={[styles.trendText, { color: colors.positive, fontWeight: 'bold' }]}>
-                  +GHS {totalIncome.toFixed(2)}
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {totalBudget > 0 && (
-            <>
-              <View style={styles.progressContainer}>
-                <View style={styles.progressBg}>
-                  <View
-                    style={[
-                      styles.progressBar,
-                      {
-                        width: `${Math.min((totalSpent / totalBudget) * 100, 100)}%` as any,
-                      },
-                    ]}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.budgetStatsRow}>
-                <Text style={styles.budgetValue}>Budget: GHS {totalBudget.toLocaleString()}</Text>
-                <Text style={styles.remainingValue}>
-                  {remaining >= 0
-                    ? `Remaining: GHS ${remaining.toLocaleString()}`
-                    : `Overspent: GHS ${Math.abs(remaining).toLocaleString()}`}
-                </Text>
-              </View>
-            </>
-          )}
-        </View>
+        <ExpensesHeroCard
+          totalSpent={totalSpent}
+          totalIncome={totalIncome}
+          totalBudget={totalBudget}
+          remaining={remaining}
+          transactionCount={expenses.length}
+        />
 
         {/* Spending pace indicator — needs at least 3 days of data to project */}
         {monthSpent > 0 && dayOfMonth > 3 && (
           <View style={[
             styles.paceCard,
             {
-              backgroundColor: (paceOverBudget ? colors.negative : colors.positive) + '12',
-              borderColor: (paceOverBudget ? colors.negative : colors.positive) + '35',
+              backgroundColor: `${paceOverBudget ? colors.negative : colors.positive}12`,
+              borderColor: `${paceOverBudget ? colors.negative : colors.positive}35`,
             },
           ]}>
-            <Text style={[styles.paceText, { color: paceOverBudget ? colors.negative : colors.positive }]}>
+            <Text style={[typography.bodyStrong, { color: paceOverBudget ? colors.negative : colors.positive }]}>
               📈 Spending pace: GHS {dailyAvg.toFixed(2)}/day — projected GHS {projected.toFixed(0)} this month
             </Text>
             {totalBudget > 0 && (
-              <Text style={[styles.paceSubText, { color: colors.textSecondary }]}>
+              <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
                 {paceOverBudget
                   ? `Heads up — that's GHS ${(projected - totalBudget).toFixed(0)} over your GHS ${totalBudget.toFixed(0)} budget`
                   : `On track to stay within your GHS ${totalBudget.toFixed(0)} budget`}
@@ -786,155 +649,59 @@ export default function HomeScreen() {
         {/* Net group position — you owe / you are owed across ALL groups */}
         {groupNet && (groupNet.youOwe > 0 || groupNet.youAreOwed > 0) && (
           <TouchableOpacity
-            style={[styles.netCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
+            style={[styles.netCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}
             onPress={() => router.push('/(tabs)/groups')}
             activeOpacity={0.8}
           >
             <View style={styles.netCol}>
-              <Text style={[styles.netLabel, { color: colors.textSecondary }]}>YOU OWE</Text>
-              <Text style={[styles.netValue, { color: groupNet.youOwe > 0 ? colors.negative : colors.textSecondary }]}>
+              <Text style={[typography.label, { color: colors.textSecondary }]}>YOU OWE</Text>
+              <Text style={[typography.bodyStrong, { color: groupNet.youOwe > 0 ? colors.negative : colors.textSecondary, fontSize: 17, marginTop: 3 }]}>
                 GHS {groupNet.youOwe.toFixed(2)}
               </Text>
             </View>
             <View style={[styles.netDivider, { backgroundColor: colors.border }]} />
             <View style={styles.netCol}>
-              <Text style={[styles.netLabel, { color: colors.textSecondary }]}>YOU ARE OWED</Text>
-              <Text style={[styles.netValue, { color: groupNet.youAreOwed > 0 ? colors.positive : colors.textSecondary }]}>
+              <Text style={[typography.label, { color: colors.textSecondary }]}>YOU ARE OWED</Text>
+              <Text style={[typography.bodyStrong, { color: groupNet.youAreOwed > 0 ? colors.positive : colors.textSecondary, fontSize: 17, marginTop: 3 }]}>
                 GHS {groupNet.youAreOwed.toFixed(2)}
               </Text>
             </View>
           </TouchableOpacity>
         )}
 
-        {/* MTN MoMo Wallet Balance Card */}
-        <View style={[
-          styles.momoCard,
-          { backgroundColor: colors.cardBg },
-          momoStatus === "unavailable" && styles.momoCardUnavailable,
-        ]}>
-          <View style={styles.momoCardHeader}>
-            <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
-              <Text style={styles.momoCardIcon}>📱</Text>
-              <Text style={styles.momoCardTitle}>MTN MoMo Sandbox Wallet</Text>
-            </View>
-            {!momoBalanceLoading && momoStatus === "available" && (
-              <TouchableOpacity
-                onPress={toggleHideMomoBalance}
-                style={styles.hideMomoBtn}
-                activeOpacity={0.7}
-              >
-                {hideMomoBalance ? (
-                  <EyelashClosedIcon size={18} color="#D97706" />
-                ) : (
-                  <EyelashOpenIcon size={18} color="#D97706" />
-                )}
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Skeleton/placeholder while the balance loads in the background */}
-          {(momoBalanceLoading || momoStatus === "loading") && (
-            <View style={styles.momoStateRow}>
-              <ActivityIndicator color="#D97706" size="small" />
-              <Text style={styles.momoLoadingText}>Fetching sandbox balance...</Text>
-            </View>
-          )}
-
-          {!momoBalanceLoading && momoStatus === "available" && (
-            <View>
-              <Text style={styles.momoBalance}>
-                {hideMomoBalance ? "GHS ••••••" : `GHS ${momoBalance}`}
-              </Text>
-              <Text style={styles.momoSpentSub}>
-                GHS {momoMonthlySpent} spent via MoMo this month
-              </Text>
-              <View style={styles.momoActionRow}>
-                <TouchableOpacity
-                  onPress={() => fetchMomoBalance(true)}
-                  style={styles.momoRefreshBtn}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.momoRefreshText}>Refresh ↻</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => router.push('/pay-vendor')}
-                  style={styles.momoPayVendorBtn}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.momoPayVendorText}>Pay Vendor →</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-
-          {!momoBalanceLoading && momoStatus === "unavailable" && (
-            <View>
-              <View style={styles.momoStateRow}>
-                <Text style={styles.momoUnavailableIcon}>📡</Text>
-                <Text style={styles.momoUnavailableTitle}>
-                  Sandbox balance temporarily unavailable
-                </Text>
-              </View>
-              <Text style={styles.momoUnavailableSub}>
-                This is normal in sandbox mode. Payments still work.
-              </Text>
-              <Text style={styles.momoSpentSubYellow}>
-                GHS {momoMonthlySpent} spent via MoMo this month
-              </Text>
-              <View style={styles.momoActionRow}>
-                <TouchableOpacity
-                  onPress={() => fetchMomoBalance(true)}
-                  style={styles.momoRetryBtn}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.momoRetryText}>Retry ↻</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => router.push('/pay-vendor')}
-                  style={styles.momoPayVendorBtn}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.momoPayVendorText}>Pay Vendor →</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        </View>
+        <MomoWalletCard
+          status={momoStatus}
+          balanceLoading={momoBalanceLoading}
+          balance={momoBalance}
+          hideBalance={hideMomoBalance}
+          monthlySpent={momoMonthlySpent}
+          onToggleHide={toggleHideMomoBalance}
+          onRefresh={() => fetchMomoBalance(true)}
+          onPayVendor={() => router.push('/pay-vendor')}
+        />
 
         {/* Upcoming Bills / Reminders */}
         {upcomingReminders.length > 0 && (
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Upcoming Bills</Text>
+            <Text style={[typography.headline, { color: colors.text, marginBottom: spacing.md }]}>Upcoming Bills</Text>
             {upcomingReminders.slice(0, 3).map((reminder: any) => (
-              <TouchableOpacity
+              <TransactionRow
                 key={reminder.id}
-                style={[styles.expenseCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
+                leading={
+                  <View style={[styles.iconBox, { backgroundColor: colors.neutralBg, borderColor: colors.borderSubtle }]}>
+                    <Feather name="calendar" size={18} color={colors.textSecondary} />
+                  </View>
+                }
+                title={reminder.title || reminder.description || 'Upcoming bill'}
+                subtitle={`Due: ${reminder.dueDate || reminder.date || 'Soon'}`}
+                amount={reminder.amount ? `GHS ${parseFloat(reminder.amount || '0').toFixed(2)}` : ''}
+                amountColor={colors.negative}
                 onPress={() => router.push('/(tabs)/reminders')}
-                activeOpacity={0.8}
-              >
-                <View style={styles.expenseLeft}>
-                  <View style={[styles.iconBox, { backgroundColor: colors.neutralBg, borderColor: colors.border }]}>
-                    <Text style={styles.icon}>📅</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.expenseDescription, { color: colors.text }]} numberOfLines={1}>
-                      {reminder.title || reminder.description || 'Upcoming bill'}
-                    </Text>
-                    <Text style={[styles.expenseCategory, { color: colors.textSecondary }]}>
-                      Due: {reminder.dueDate || reminder.date || 'Soon'}
-                    </Text>
-                  </View>
-                </View>
-                {reminder.amount && (
-                  <Text style={[styles.expenseAmount, { color: colors.negative }]}>
-                    GHS {parseFloat(reminder.amount || '0').toFixed(2)}
-                  </Text>
-                )}
-              </TouchableOpacity>
+              />
             ))}
             {upcomingReminders.length > 3 && (
               <TouchableOpacity onPress={() => router.push('/(tabs)/reminders')} activeOpacity={0.7}>
-                <Text style={[styles.seeAllText, { textAlign: 'center', paddingVertical: 8 }]}>
+                <Text style={[typography.bodyStrong, { color: colors.primary, textAlign: 'center', paddingVertical: spacing.sm }]}>
                   +{upcomingReminders.length - 3} more →
                 </Text>
               </TouchableOpacity>
@@ -945,151 +712,59 @@ export default function HomeScreen() {
         {/* Recurring Expenses */}
         {recurringExpenses.length > 0 && (
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Recurring Expenses</Text>
+            <Text style={[typography.headline, { color: colors.text, marginBottom: spacing.md }]}>Recurring Expenses</Text>
             {recurringExpenses.map((item: any) => (
-              <TouchableOpacity
+              <TransactionRow
                 key={`recurring-${item.id}`}
-                style={[styles.expenseCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
-                onPress={() => router.push('/(tabs)/history')}
-                activeOpacity={0.8}
-              >
-                <View style={styles.expenseLeft}>
-                  <View style={[styles.iconBox, { backgroundColor: colors.neutralBg, borderColor: colors.border }]}>
-                    <Text style={styles.icon}>🔄</Text>
+                leading={
+                  <View style={[styles.iconBox, { backgroundColor: colors.neutralBg, borderColor: colors.borderSubtle }]}>
+                    <Feather name="repeat" size={18} color={colors.textSecondary} />
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.expenseDescription, { color: colors.text }]} numberOfLines={1}>
-                      {item.description || item.category}
-                    </Text>
-                    <Text style={[styles.expenseCategory, { color: colors.textSecondary }]}>
-                      {item.nextDueDate ? `Next: ${item.nextDueDate}` : 'Repeats automatically'}
-                    </Text>
-                  </View>
-                </View>
-                <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                  <Text style={[styles.expenseAmount, { color: colors.negative }]}>
-                    GHS {Math.abs(parseFloat(item.amount || '0')).toFixed(2)}
-                  </Text>
-                  <View style={[styles.recurrenceBadge, { backgroundColor: colors.primary + '15' }]}>
-                    <Text style={[styles.recurrenceBadgeText, { color: colors.primary }]}>
+                }
+                title={item.description || item.category}
+                subtitle={item.nextDueDate ? `Next: ${item.nextDueDate}` : 'Repeats automatically'}
+                amount={`GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`}
+                amountColor={colors.negative}
+                badges={
+                  <View
+                    style={[
+                      styles.recurrenceBadge,
+                      { backgroundColor: colors.primarySubtle, alignSelf: 'flex-start' },
+                    ]}
+                  >
+                    <Text style={[typography.label, { color: colors.primary }]}>
                       {item.recurrenceType
                         ? item.recurrenceType.charAt(0) + item.recurrenceType.slice(1).toLowerCase()
                         : 'Recurring'}
                     </Text>
                   </View>
-                </View>
-              </TouchableOpacity>
+                }
+                onPress={() => router.push('/(tabs)/history')}
+              />
             ))}
           </View>
         )}
 
-        {/* Spending Activity Chart Card */}
-        <View style={[styles.chartCard, { backgroundColor: colors.cardBg }]}>
-          <View style={styles.chartHeader}>
-            <View>
-              <Text style={[styles.chartTitle, { color: colors.textSecondary }]}>Spending Activity</Text>
-              <Text style={[styles.chartTotal, { color: colors.text }]}>
-                GHS {chartSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </Text>
-            </View>
-
-            {/* Timeline Filter Segmented Control */}
-            <View style={[styles.timelineFilterMini, { backgroundColor: colors.neutralBg, borderColor: colors.border }]}>
-              {(['day', 'week', 'month', 'year'] as const).map((filter) => {
-                const labelMap = { day: 'D', week: 'W', month: 'M', year: 'Y' };
-                const isActive = chartTimeline === filter;
-                return (
-                  <TouchableOpacity
-                    key={filter}
-                    style={[styles.timelineMiniBtn, isActive && [styles.timelineMiniBtnActive, { backgroundColor: colors.cardBg }]]}
-                    onPress={() => setChartTimeline(filter)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.timelineMiniText, { color: colors.textSecondary }, isActive && { color: colors.text }]}>
-                      {labelMap[filter]}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-
-          <View style={styles.chartContainer}>
-            {/* Horizontal Grid Lines */}
-            <View style={[styles.gridLineHorizontal, { top: paddingVertical, backgroundColor: colors.border }]} />
-            <View style={[styles.gridLineHorizontal, { top: chartHeight / 2, backgroundColor: colors.border }]} />
-            <View style={[styles.gridLineHorizontal, { top: chartHeight - paddingVertical, backgroundColor: colors.border }]} />
-
-            {/* Connection Line Segments (Smooth Cosine Wave Curve) */}
-            {curveSegments.map((seg, idx) => {
-              const lineStyle = getLineStyle(seg.x1, seg.y1, seg.x2, seg.y2, colors.primary);
-              return (
-                <View
-                  key={`line-${idx}`}
-                  style={lineStyle}
-                />
-              );
-            })}
-
-            {/* Data Points (Dots) */}
-            {points.map((point, idx) => (
-              <View
-                key={`dot-${idx}`}
-                style={[
-                  styles.chartDot,
-                  {
-                    left: point.x - 6,
-                    top: point.y - 6,
-                    backgroundColor: colors.primary,
-                    borderColor: colors.cardBg,
-                    shadowColor: colors.primary,
-                  }
-                ]}
-              />
-            ))}
-          </View>
-
-          {/* Separated Timeline Labels */}
-          <View style={styles.chartDaysContainer}>
-            {points.map((point, idx) => (
-              <View
-                key={`timeline-label-${idx}`}
-                style={[
-                  styles.chartDayCol,
-                  {
-                    left: point.x - 20,
-                  }
-                ]}
-              >
-                <Text style={[styles.chartDayText, { color: colors.textSecondary }]}>{point.day}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
+        <SpendingChart bars={chartBars} sum={chartSum} timeline={chartTimeline} onTimelineChange={setChartTimeline} />
 
         {/* By Category Section */}
         {Object.keys(categoryTotals).length > 0 && (
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>By Category</Text>
+            <Text style={[typography.headline, { color: colors.text, marginBottom: spacing.md }]}>By Category</Text>
             {Object.entries(categoryTotals).map(([category, total]: any) => {
               const percentage = totalSpent > 0 ? (total / totalSpent) * 100 : 0;
               return (
-                <View key={category} style={[styles.categoryRow, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-                  <View style={styles.categoryInfoLeft}>
-                    <View style={[styles.categoryIconCircle, { backgroundColor: colors.neutralBg, borderColor: colors.border }]}>
-                      <Text style={styles.categoryIcon}>{getCategoryIcon(category)}</Text>
+                <TransactionRow
+                  key={category}
+                  leading={
+                    <View style={[styles.iconBox, { backgroundColor: colors.neutralBg, borderColor: colors.borderSubtle }]}>
+                      <Text style={{ fontSize: 18 }}>{getCategoryIcon(category)}</Text>
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.categoryName, { color: colors.text }]}>{category}</Text>
-                      <Text style={[styles.categoryDetails, { color: colors.textSecondary }]}>
-                        GHS {total.toFixed(2)} spent • {percentage.toFixed(0)}%
-                      </Text>
-                    </View>
-                  </View>
-                  <Text style={[styles.categoryPercentage, { color: colors.text }]}>
-                    {percentage.toFixed(0)}%
-                  </Text>
-                </View>
+                  }
+                  title={category}
+                  subtitle={`GHS ${total.toFixed(2)} spent • ${percentage.toFixed(0)}%`}
+                  amount={`${percentage.toFixed(0)}%`}
+                />
               );
             })}
           </View>
@@ -1098,77 +773,63 @@ export default function HomeScreen() {
         {/* Recent Expenses List */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Transactions</Text>
+            <Text style={[typography.headline, { color: colors.text }]}>Recent Transactions</Text>
             <TouchableOpacity onPress={() => router.push('/(tabs)/history')} activeOpacity={0.7}>
-              <Text style={styles.seeAllText}>See All</Text>
+              <Text style={[typography.bodyStrong, { color: colors.primary }]}>See All</Text>
             </TouchableOpacity>
           </View>
 
           {recentExpenses.length === 0 ? (
-            <Text style={[styles.emptyText, { color: colors.textSecondary }]}>No expenses yet</Text>
+            <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.xl }]}>
+              No expenses yet
+            </Text>
           ) : (
             recentExpenses.map((item) => {
-              const isShared = item.isShared || item.type === "shared";
-              const isMomo = item.paymentMethod === "MOMO";
+              const isShared = item.isShared || item.type === 'shared';
+              const isMomo = item.paymentMethod === 'MOMO';
               const { cleanDescription, tags } = parseTagsFromDescription(item.description);
-              
+              const isIncome = item.type === 'income';
+
               return (
-                // type+id — personal and shared entries can share numeric ids
-                <TouchableOpacity
-                  key={`${item.type ?? (isShared ? "shared" : "personal")}-${item.id}`}
-                  style={[styles.expenseCard, { backgroundColor: colors.cardBg, borderColor: colors.border }, isShared && styles.sharedCard]}
-                  onPress={() => { setSelectedExpense(item); setShowExpenseDetail(true); }}
-                  activeOpacity={0.85}
-                >
-                  <View style={styles.expenseLeft}>
-                    <View style={[styles.iconBox, { backgroundColor: colors.neutralBg, borderColor: colors.border }]}>
-                      <Text style={styles.icon}>{isShared ? '👥' : getCategoryIcon(item.category)}</Text>
+                <TransactionRow
+                  // type+id — personal and shared entries can share numeric ids
+                  key={`${item.type ?? (isShared ? 'shared' : 'personal')}-${item.id}`}
+                  leading={
+                    <View style={[styles.iconBox, { backgroundColor: colors.neutralBg, borderColor: colors.borderSubtle }]}>
+                      <Text style={{ fontSize: 18 }}>{isShared ? '👥' : getCategoryIcon(item.category)}</Text>
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <View style={styles.descRow}>
-                        <Text style={[styles.expenseDescription, { color: colors.text }]} numberOfLines={1}>
-                          {cleanDescription || item.category}
-                        </Text>
-                      </View>
-                      <Text style={[styles.expenseCategory, { color: colors.textSecondary }]}>{item.category} • {item.date}</Text>
-
-                      <View style={styles.badgeRow}>
-                        {isShared && (
-                          <View style={styles.sharedBadge}>
-                            <Text style={styles.sharedBadgeText}>👥 Shared</Text>
-                          </View>
-                        )}
-                        <View style={[styles.paymentBadge, { backgroundColor: colors.neutralBg, borderColor: colors.border }, isMomo && styles.momoBadge]}>
-                          <Text style={[styles.paymentBadgeText, { color: colors.textSecondary }, isMomo && styles.momoBadgeText]}>
-                            {isMomo ? "📱 MoMo" : "💵 Cash"}
-                          </Text>
-                        </View>
-                      </View>
-
-                      {tags.length > 0 && (
-                        <View style={styles.tagsContainer}>
-                          {tags.map((tag: string) => (
-                            <View key={tag} style={[styles.tagPill, { backgroundColor: colors.neutralBg, borderColor: colors.border }]}>
-                              <Text style={[styles.tagText, { color: colors.textSecondary }]}>{tag}</Text>
-                            </View>
-                          ))}
+                  }
+                  title={cleanDescription || item.category}
+                  subtitle={`${item.category} • ${item.date}`}
+                  accentBorder={isShared}
+                  badges={
+                    <View style={styles.badgeRow}>
+                      {isShared && (
+                        <View style={[styles.pillBadge, { backgroundColor: colors.primarySubtle }]}>
+                          <Text style={[typography.label, { color: colors.primary }]}>👥 Shared</Text>
                         </View>
                       )}
+                      <View
+                        style={[
+                          styles.pillBadge,
+                          { backgroundColor: isMomo ? colors.accentSubtle : colors.neutralBg },
+                        ]}
+                      >
+                        <Text style={[typography.label, { color: isMomo ? colors.accent : colors.textSecondary }]}>
+                          {isMomo ? '📱 MoMo' : '💵 Cash'}
+                        </Text>
+                      </View>
                     </View>
-                  </View>
-                  {/* Expenses (personal + shared) always show as money going out */}
-                  <View style={styles.expenseRight}>
-                    <Text style={[
-                      styles.expenseAmount,
-                      { color: item.type === 'income' ? colors.positive : colors.negative }
-                    ]}>
-                      {item.type === 'income'
-                        ? `+GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`
-                        : `-GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`}
-                    </Text>
-                    <Text style={[styles.chevron, { color: colors.textSecondary }]}>›</Text>
-                  </View>
-                </TouchableOpacity>
+                  }
+                  tags={tags}
+                  amount={
+                    isIncome
+                      ? `+GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`
+                      : `-GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`
+                  }
+                  amountColor={isIncome ? colors.positive : colors.negative}
+                  onPress={() => { setSelectedExpense(item); setShowExpenseDetail(true); }}
+                />
               );
             })
           )}
@@ -1180,111 +841,34 @@ export default function HomeScreen() {
 
       {/* Floating Action Button (FAB) */}
       <TouchableOpacity
-        style={styles.fab}
+        style={[styles.fab, { backgroundColor: colors.text }]}
         onPress={() => setShowQuickAdd(true)}
         activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel="Quick add expense"
       >
-        <Text style={styles.fabText}>+</Text>
+        <Feather name="plus" size={26} color={colors.background} />
       </TouchableOpacity>
 
-      {/* Quick Add Modal */}
-      <Modal
+      <QuickAddModal
         visible={showQuickAdd}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowQuickAdd(false)}
-      >
-        <KeyboardAvoidingView
-          style={styles.modalOverlay}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-        >
-          <TouchableOpacity
-            style={styles.modalBackdrop}
-            activeOpacity={1}
-            onPress={() => setShowQuickAdd(false)}
-          />
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Quick Add Expense</Text>
-
-            {/* Amount input */}
-            <TextInput
-              style={styles.quickAmountInput}
-              value={quickAmount}
-              onChangeText={setQuickAmount}
-              placeholder="0.00"
-              placeholderTextColor="#8E9AA640"
-              keyboardType="decimal-pad"
-              autoFocus
-            />
-
-            {/* Category selector */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.categoryScroll}
-              contentContainerStyle={styles.categoryScrollContent}
-            >
-              {CATEGORIES.map((cat) => (
-                <TouchableOpacity
-                  key={cat}
-                  style={[
-                    styles.categoryChip,
-                    quickCategory === cat && styles.categoryChipActive,
-                  ]}
-                  onPress={() => setQuickCategory(cat)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.categoryChipIcon}>{getCategoryIcon(cat)}</Text>
-                  <Text style={[
-                    styles.categoryChipText,
-                    quickCategory === cat && styles.categoryChipTextActive,
-                  ]}>
-                    {cat}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            {/* Description */}
-            <TextInput
-              style={styles.descriptionInput}
-              value={quickDescription}
-              onChangeText={setQuickDescription}
-              placeholder="Description (optional)"
-              placeholderTextColor="#8E9AA680"
-            />
-
-            {/* Buttons */}
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.cancelBtn}
-                onPress={() => {
-                  setShowQuickAdd(false);
-                  setQuickAmount("");
-                  setQuickCategory("Food");
-                  setQuickDescription("");
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.cancelBtnText}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.addBtn, savingExpense && { opacity: 0.7 }]}
-                onPress={handleQuickAdd}
-                disabled={savingExpense}
-                activeOpacity={0.85}
-              >
-                {savingExpense ? (
-                  <ActivityIndicator color="#ffffff" size="small" />
-                ) : (
-                  <Text style={styles.addBtnText}>Add Expense</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        amount={quickAmount}
+        category={quickCategory}
+        description={quickDescription}
+        categories={CATEGORIES}
+        getCategoryIcon={getCategoryIcon}
+        saving={savingExpense}
+        onAmountChange={setQuickAmount}
+        onCategoryChange={setQuickCategory}
+        onDescriptionChange={setQuickDescription}
+        onClose={() => {
+          setShowQuickAdd(false);
+          setQuickAmount('');
+          setQuickCategory('Food');
+          setQuickDescription('');
+        }}
+        onSubmit={handleQuickAdd}
+      />
 
       <ExpenseDetailModal
         visible={showExpenseDetail}
@@ -1293,6 +877,8 @@ export default function HomeScreen() {
         onDelete={() => { setShowExpenseDetail(false); setSelectedExpense(null); }}
         customCategories={customCategories}
       />
+
+      <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
     </View>
   );
 }
@@ -1300,67 +886,45 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
-    backgroundColor: '#F2F4F7',
-    position: 'relative'
+    position: 'relative',
   },
   container: {
     flex: 1,
-    backgroundColor: '#F2F4F7',
   },
   centered: {
     flex: 1,
-    backgroundColor: '#F2F4F7',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    padding: spacing.xl,
   },
   content: {
-    paddingHorizontal: 20,
+    paddingHorizontal: spacing.lg,
     paddingBottom: 40,
   },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
-  },
-  welcomeText: {
-    fontSize: 13,
-    color: '#8E9AA6',
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  greetingText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111111',
-    marginTop: 2,
+    marginBottom: spacing.xl,
   },
   headerRightActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: spacing.md,
   },
   headerActionButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 2,
+    borderWidth: 1,
   },
   bellBadge: {
     position: 'absolute',
     top: -4,
     right: -4,
-    backgroundColor: '#FF3B30',
     borderRadius: 9,
     minWidth: 18,
     height: 18,
@@ -1378,11 +942,7 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 2,
+    borderWidth: 1,
   },
   avatarImage: {
     width: '100%',
@@ -1391,691 +951,89 @@ const styles = StyleSheet.create({
   avatarPlaceholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#111111',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  
+
   // Budget Alerts
   alertsSection: {
-    marginBottom: 20,
-    gap: 8,
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
   },
   alertCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 20,
-    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radius.lg,
+    padding: spacing.md,
     borderWidth: 1,
   },
-  alertCardOver: {
-    backgroundColor: "#FF3B300a",
-    borderColor: "#FF3B3020",
-  },
-  alertCardNear: {
-    backgroundColor: "#FF95000a",
-    borderColor: "#FF950020",
-  },
-  alertIcon: {
-    fontSize: 24,
-    marginRight: 12,
-  },
-  alertTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    marginBottom: 2,
-  },
-  alertTitleOver: {
-    color: "#FF3B30",
-  },
-  alertTitleNear: {
-    color: "#FF9500",
-  },
-  alertSub: {
-    fontSize: 12,
-    color: "#8E9AA6",
-  },
-  cardChevron: {
-    fontSize: 20,
-    color: "#8E9AA6",
-    marginLeft: 8,
-  },
 
-  // Expenses Overview Card
-  expensesCard: {
-    backgroundColor: '#111111', // Black card backdrop
-    borderRadius: 32,
-    padding: 24,
-    marginBottom: 20,
-    position: 'relative',
-    overflow: 'hidden',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    elevation: 8,
-  },
-  radialCircle1: {
-    position: 'absolute',
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    backgroundColor: '#8B5CF6',
-    opacity: 0.15,
-    top: -120,
-    right: -80,
-  },
-  radialCircle2: {
-    position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: '#D97706',
-    opacity: 0.1,
-    bottom: -90,
-    left: -40,
-  },
-  radialCircle3: {
-    position: 'absolute',
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: '#FF3B30',
-    opacity: 0.05,
-    top: 40,
-    left: 80,
-  },
-  expensesCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  expensesCardLabel: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    color: '#8E9AA6',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  amountRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginBottom: 12,
-  },
-  currencySymbol: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#8E9AA6',
-  },
-  amountInteger: {
-    fontSize: 38,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    letterSpacing: -0.5,
-  },
-  amountFraction: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#8E9AA6',
-  },
-  trendRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  trendBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-  },
-  trendText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#ffffff',
-  },
-  progressContainer: {
-    marginBottom: 10,
-  },
-  progressBg: {
-    height: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  progressBar: {
-    height: '100%',
-    backgroundColor: '#8B5CF6', // Purple progress bar
-    borderRadius: 3,
-  },
-  budgetStatsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  budgetValue: {
-    fontSize: 12,
-    color: '#8E9AA6',
-    fontWeight: '600',
-  },
-  remainingValue: {
-    fontSize: 12,
-    color: '#ffffff',
-    fontWeight: '700',
+  // Spending pace indicator
+  paceCard: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    marginBottom: spacing.lg,
   },
 
   // Net group position card
   netCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 20,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    marginBottom: 20,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
   },
   netCol: {
     flex: 1,
     alignItems: 'center',
-    gap: 3,
-  },
-  netLabel: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    letterSpacing: 0.5,
-  },
-  netValue: {
-    fontSize: 17,
-    fontWeight: 'bold',
   },
   netDivider: {
     width: 1,
     height: 32,
   },
 
-  // Spending pace indicator
-  paceCard: {
-    borderRadius: 18,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginBottom: 20,
-    gap: 3,
-  },
-  paceText: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  paceSubText: {
-    fontSize: 11,
-    fontWeight: '500',
-  },
-
-  // MoMo Card (Light Premium Redesign)
-  momoCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 28,
-    padding: 20,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "#F59E0B",
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.04,
-    shadowRadius: 16,
-    elevation: 3,
-  },
-  momoCardUnavailable: {
-    borderColor: "#F59E0B40",
-  },
-  momoCardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  hideMomoBtn: {
-    padding: 6,
-    borderRadius: 8,
-    backgroundColor: '#F59E0B10',
-    borderWidth: 1,
-    borderColor: '#F59E0B20',
-  },
-  momoCardIcon: {
-    fontSize: 20,
-    marginRight: 8,
-  },
-  momoCardTitle: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#D97706",
-  },
-  momoStateRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 4,
-  },
-  momoLoadingText: {
-    fontSize: 13,
-    color: "#8E9AA6",
-  },
-  momoBalance: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#D97706",
-    marginBottom: 6,
-  },
-  momoSpentSub: {
-    fontSize: 12,
-    color: "#8E9AA6",
-    marginBottom: 12,
-  },
-  momoSpentSubYellow: {
-    fontSize: 12,
-    color: "#D97706",
-    marginBottom: 12,
-  },
-  momoRefreshBtn: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "#F59E0B10",
-    borderWidth: 1,
-    borderColor: "#F59E0B30",
-  },
-  momoRefreshText: {
-    fontSize: 12,
-    color: "#D97706",
-    fontWeight: "600",
-  },
-  momoUnavailableIcon: {
-    fontSize: 14,
-    marginRight: 6,
-  },
-  momoUnavailableTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#D97706",
-  },
-  momoUnavailableSub: {
-    fontSize: 12,
-    color: "#8E9AA6",
-    marginBottom: 8,
-  },
-  momoRetryBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "#F59E0B10",
-    borderWidth: 1,
-    borderColor: "#F59E0B30",
-  },
-  momoRetryText: {
-    fontSize: 12,
-    color: "#D97706",
-    fontWeight: "600",
-  },
-  momoActionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  momoPayVendorBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: "#111111",
-  },
-  momoPayVendorText: {
-    fontSize: 12,
-    color: "#ffffff",
-    fontWeight: "700",
-  },
-
-  // Spending Activity Chart Card
-  chartCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 28,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.04,
-    shadowRadius: 16,
-    elevation: 3,
-  },
-  chartHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  chartTitle: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: '#8E9AA6',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  chartTotal: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#111111',
-    marginTop: 2,
-  },
-  timelineFilterMini: {
-    flexDirection: 'row',
-    backgroundColor: '#F2F4F7',
-    borderRadius: 14,
-    padding: 3,
-    borderWidth: 1,
-    borderColor: '#EAEBEF',
-  },
-  timelineMiniBtn: {
-    width: 28,
-    height: 24,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  timelineMiniBtnActive: {
-    backgroundColor: '#ffffff',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  timelineMiniText: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    color: '#8E9AA6',
-  },
-  timelineMiniTextActive: {
-    color: '#111111',
-  },
-  chartContainer: {
-    height: 140,
-    position: 'relative',
-    marginTop: 4,
-  },
-  gridLineHorizontal: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: '#F2F4F7',
-  },
-  chartDot: {
-    position: 'absolute',
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#8B5CF6',
-    borderWidth: 2.5,
-    borderColor: '#ffffff',
-    shadowColor: '#8B5CF6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 2,
-    zIndex: 3,
-  },
-  chartDaysContainer: {
-    position: 'relative',
-    height: 20,
-    marginTop: 10,
-  },
-  chartDayCol: {
-    position: 'absolute',
-    width: 40,
-    alignItems: 'center',
-  },
-  chartDayText: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    color: '#8E9AA6',
-  },
-
-  // Category & Recent Sections
   section: {
-    marginBottom: 24,
+    marginBottom: spacing.xl,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-    paddingHorizontal: 4,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#111111',
-  },
-  seeAllText: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: '#8B5CF6', // Purple see all link
-  },
-  categoryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    padding: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#EAEBEF',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.02,
-    shadowRadius: 8,
-    elevation: 1,
-  },
-  categoryInfoLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: 16,
-  },
-  categoryIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F8F9FA',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-    borderWidth: 1,
-    borderColor: '#EAEBEF',
-  },
-  categoryIcon: {
-    fontSize: 18,
-  },
-  categoryName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111111',
-  },
-  categoryDetails: {
-    fontSize: 11,
-    color: '#8E9AA6',
-    marginTop: 2,
-  },
-  categoryPercentage: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#111111',
-    marginRight: 4,
-  },
-
-  // Expenses & Cards
-  expenseCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    padding: 16,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#EAEBEF',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.02,
-    shadowRadius: 8,
-    elevation: 1,
-  },
-  sharedCard: {
-    borderColor: '#8B5CF640',
-  },
-  expenseLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: 16,
+    marginBottom: spacing.md,
   },
   iconBox: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#F8F9FA',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14,
     borderWidth: 1,
-    borderColor: '#EAEBEF',
-  },
-  icon: {
-    fontSize: 20,
-  },
-  descRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 2,
-  },
-  expenseDescription: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111111',
-  },
-  expenseCategory: {
-    fontSize: 11,
-    color: '#8E9AA6',
-    marginBottom: 6,
   },
   badgeRow: {
     flexDirection: 'row',
-    gap: 6,
-    marginBottom: 6,
+    gap: spacing.xs,
     flexWrap: 'wrap',
   },
-  sharedBadge: {
-    backgroundColor: '#8B5CF610',
-    borderWidth: 1,
-    borderColor: '#8B5CF625',
-    borderRadius: 12,
+  pillBadge: {
+    borderRadius: radius.sm,
     paddingVertical: 2,
-    paddingHorizontal: 8,
-  },
-  sharedBadgeText: {
-    color: '#8B5CF6',
-    fontSize: 10,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-  },
-  paymentBadge: {
-    backgroundColor: '#F8F9FA',
-    borderWidth: 1,
-    borderColor: '#EAEBEF',
-    borderRadius: 12,
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-  },
-  paymentBadgeText: {
-    color: '#8E9AA6',
-    fontSize: 10,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-  },
-  momoBadge: {
-    backgroundColor: '#F59E0B10',
-    borderColor: '#F59E0B25',
-  },
-  momoBadgeText: {
-    color: '#D97706',
-  },
-  expenseRight: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    gap: 4,
-  },
-  expenseAmount: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: '#111111',
-  },
-  chevron: {
-    fontSize: 22,
-    fontWeight: '300',
-    opacity: 0.5,
+    paddingHorizontal: spacing.xs + 2,
   },
   recurrenceBadge: {
-    borderRadius: 10,
-    paddingHorizontal: 8,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.xs + 2,
     paddingVertical: 2,
-  },
-  recurrenceBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  emptyText: {
-    fontSize: 14,
-    color: '#8E9AA6',
-    textAlign: 'center',
-    paddingVertical: 20,
-    fontStyle: 'italic',
-  },
-  errorIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#8E9AA6',
-    textAlign: 'center',
-    marginBottom: 24,
-    paddingHorizontal: 24,
-  },
-  retryButton: {
-    backgroundColor: '#111111',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-  },
-  retryButtonText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: 'bold',
   },
 
   // FAB
   fab: {
     position: 'absolute',
-    right: 20,
-    bottom: 20,
-    backgroundColor: '#111111',
+    right: spacing.lg,
+    bottom: spacing.lg,
     width: 56,
     height: 56,
     borderRadius: 28,
@@ -2087,147 +1045,5 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 6,
     zIndex: 999,
-  },
-  fabText: {
-    color: '#ffffff',
-    fontSize: 28,
-    fontWeight: '300',
-    lineHeight: 32,
-    textAlign: 'center',
-  },
-
-  // Tags styles
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-  },
-  tagPill: {
-    backgroundColor: '#F2F4F7',
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderWidth: 1,
-    borderColor: '#EAEBEF',
-  },
-  tagText: {
-    fontSize: 10,
-    color: '#8E9AA6',
-    fontWeight: '500',
-  },
-
-  // Quick Add Modal (Premium Light Capsule Theme)
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.4)",
-  },
-  modalCard: {
-    backgroundColor: "#ffffff",
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    padding: 24,
-    paddingBottom: 40,
-    borderTopWidth: 1,
-    borderColor: "#EAEBEF",
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 10,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#111111",
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  quickAmountInput: {
-    fontSize: 40,
-    fontWeight: "bold",
-    color: "#111111",
-    textAlign: "center",
-    marginVertical: 12,
-    paddingHorizontal: 16,
-    height: 60,
-  },
-  categoryScroll: {
-    marginVertical: 12,
-  },
-  categoryScrollContent: {
-    gap: 10,
-    paddingHorizontal: 4,
-  },
-  categoryChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F8F9FA",
-    borderWidth: 1,
-    borderColor: "#EAEBEF",
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    gap: 6,
-  },
-  categoryChipActive: {
-    borderColor: "#111111",
-    backgroundColor: "#11111105",
-  },
-  categoryChipIcon: {
-    fontSize: 16,
-  },
-  categoryChipText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#8E9AA6",
-  },
-  categoryChipTextActive: {
-    color: "#111111",
-  },
-  descriptionInput: {
-    backgroundColor: "#F8F9FA",
-    borderRadius: 16,
-    padding: 16,
-    color: "#111111",
-    fontSize: 15,
-    borderWidth: 1,
-    borderColor: "#EAEBEF",
-    marginTop: 8,
-    marginBottom: 20,
-  },
-  modalButtons: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  cancelBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#EAEBEF",
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-  },
-  cancelBtnText: {
-    fontSize: 15,
-    color: "#8E9AA6",
-    fontWeight: "600",
-  },
-  addBtn: {
-    flex: 2,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: "#111111",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  addBtnText: {
-    color: "#ffffff",
-    fontWeight: "bold",
-    fontSize: 16,
   },
 });

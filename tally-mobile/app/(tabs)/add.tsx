@@ -7,7 +7,6 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Modal,
@@ -15,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import Feather from '@expo/vector-icons/Feather';
 import { expenseAPI, budgetAPI, categoriesAPI, momoAPI } from '../../services/api';
 import { getUserId, currentUser, safeStorage } from '../../services/storage';
 import { addHistoryItem } from '../../services/notificationHistory';
@@ -22,6 +22,8 @@ import { signalMomoRefresh } from '../../services/momoRefresh';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import { useTheme } from '../../hooks/useTheme';
+import { getExtendedColors, typography, spacing, radius } from '../../theme';
+import { Button, Input, Chip } from '../../components/ui';
 
 const CATEGORIES = ['Food', 'Transport', 'Entertainment', 'Utilities', 'Other'];
 
@@ -52,35 +54,31 @@ function suggestCategory(description: string): string | null {
   return null;
 }
 
-type MomoStatus = "idle" | "sending" | "confirming" | "done";
+type MomoStatus = 'idle' | 'sending' | 'confirming' | 'done';
 
 // Session-scoped "last used" defaults live on currentUser (see services/storage.ts)
 
 export default function AddScreen() {
   const insets = useSafeAreaInsets();
-  const { colors, theme } = useTheme();
+  const { theme, colors: baseColors } = useTheme();
+  const colors = getExtendedColors(theme, baseColors);
   const [transactionType, setTransactionType] = useState<'expense' | 'income'>('expense');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState(currentUser.lastCategory || "Food");
+  const [selectedCategory, setSelectedCategory] = useState(currentUser.lastCategory || 'Food');
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
-  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "MOMO">(
-    currentUser.lastPaymentMethod === "MOMO" ? "MOMO" : "CASH",
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'MOMO'>(
+    currentUser.lastPaymentMethod === 'MOMO' ? 'MOMO' : 'CASH',
   );
 
   // Dynamic monthly totals and budget limits
   const [spent, setSpent] = useState<{ [key: string]: number }>({});
   const [limits, setLimits] = useState<{ [key: string]: number }>({});
 
-  // Input focus status for outline treatments
-  const [amountFocused, setAmountFocused] = useState(false);
-  const [descFocused, setDescFocused] = useState(false);
-  const [tagFocused, setTagFocused] = useState(false);
-
   // Tag list state
   const [tags, setTags] = useState<string[]>([]);
-  const [tagInput, setTagInput] = useState("");
+  const [tagInput, setTagInput] = useState('');
   const [showHint, setShowHint] = useState(true);
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
 
@@ -176,8 +174,8 @@ export default function AddScreen() {
 
   // MoMo payment modal (kept for potential income receive flow)
   const [showMomoModal, setShowMomoModal] = useState(false);
-  const [momoPhone, setMomoPhone] = useState(currentUser.phoneNumber || "");
-  const [momoStatus, setMomoStatus] = useState<MomoStatus>("idle");
+  const [momoPhone, setMomoPhone] = useState(currentUser.phoneNumber || '');
+  const [momoStatus, setMomoStatus] = useState<MomoStatus>('idle');
   const [momoLoading, setMomoLoading] = useState(false);
 
   // Auto-hide the "remembered" hint after 3 seconds
@@ -215,7 +213,7 @@ export default function AddScreen() {
         expenseAPI.getUserExpenses(userId),
         budgetAPI.getUserBudgets(userId)
       ]);
-      
+
       const totals: { [key: string]: number } = {};
       expensesRes.data.forEach((expense: any) => {
         const cat = expense.category || 'Other';
@@ -242,7 +240,7 @@ export default function AddScreen() {
     currentUser.lastCategory = cat;
   }
 
-  function handlePaymentMethodSelect(method: "CASH" | "MOMO") {
+  function handlePaymentMethodSelect(method: 'CASH' | 'MOMO') {
     setPaymentMethod(method);
     currentUser.lastPaymentMethod = method;
   }
@@ -251,14 +249,14 @@ export default function AddScreen() {
     const raw = tagInput.trim();
     if (!raw) return;
     if (tags.length >= 5) {
-      showToast("You can add up to 5 tags.", "warning");
+      showToast('You can add up to 5 tags.', 'warning');
       return;
     }
-    const tag = raw.startsWith("#") ? raw : `#${raw}`;
+    const tag = raw.startsWith('#') ? raw : `#${raw}`;
     if (!tags.includes(tag)) {
       setTags([...tags, tag]);
     }
-    setTagInput("");
+    setTagInput('');
   }
 
   function handleRemoveTag(tag: string) {
@@ -267,16 +265,16 @@ export default function AddScreen() {
 
   async function handleAddExpense() {
     if (!amount) {
-      showToast("Please enter an amount", "error");
+      showToast('Please enter an amount', 'error');
       return;
     }
     if (isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
-      showToast("Please enter a valid amount greater than zero", "error");
+      showToast('Please enter a valid amount greater than zero', 'error');
       return;
     }
 
     // MoMo → navigate to Pay Vendor screen to handle the MoMo payment flow
-    if (paymentMethod === "MOMO") {
+    if (paymentMethod === 'MOMO') {
       router.push({
         pathname: '/pay-vendor',
         params: {
@@ -295,23 +293,23 @@ export default function AddScreen() {
     try {
       const today = new Date().toISOString().split('T')[0];
       const userId = getUserId();
-      const fullDescription = [description.trim(), ...tags].filter(Boolean).join(" ");
+      const fullDescription = [description.trim(), ...tags].filter(Boolean).join(' ');
       // Normalize to exactly 2 decimal places before sending
       const finalAmtStr = (transactionType === 'income'
         ? Math.abs(parseFloat(amount))
         : -Math.abs(parseFloat(amount))).toFixed(2);
-      await expenseAPI.createExpense(userId, finalAmtStr, selectedCategory, fullDescription, today, "CASH");
-      
+      await expenseAPI.createExpense(userId, finalAmtStr, selectedCategory, fullDescription, today, 'CASH');
+
       const parsed = parseFloat(amount);
       await addHistoryItem({
-        type: transactionType === 'income' ? "income_added" : "expense_added",
-        title: transactionType === 'income' ? "Income recorded" : "Expense recorded",
-        body: `${transactionType === 'income' ? '+' : '-'}GHS ${parsed.toFixed(2)} added to ${selectedCategory}${description ? ` — ${description}` : ""}.`,
-        data: { screen: "history" },
+        type: transactionType === 'income' ? 'income_added' : 'expense_added',
+        title: transactionType === 'income' ? 'Income recorded' : 'Expense recorded',
+        body: `${transactionType === 'income' ? '+' : '-'}GHS ${parsed.toFixed(2)} added to ${selectedCategory}${description ? ` — ${description}` : ''}.`,
+        data: { screen: 'history' },
       });
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      showToast(transactionType === 'income' ? "Income added successfully!" : "Expense added successfully!", "success");
+      showToast(transactionType === 'income' ? 'Income added successfully!' : 'Expense added successfully!', 'success');
 
       // Update spent values locally for responsive UI feedback
       if (transactionType === 'expense') {
@@ -327,10 +325,10 @@ export default function AddScreen() {
       setAmount('');
       setDescription('');
       setTags([]);
-      setTagInput("");
+      setTagInput('');
     } catch (error: any) {
       const message = error.response?.data?.error || (transactionType === 'income' ? 'Failed to add income.' : 'Failed to add expense.');
-      showToast(message, "error");
+      showToast(message, 'error');
     } finally {
       setLoading(false);
     }
@@ -338,22 +336,22 @@ export default function AddScreen() {
 
   async function handleMomoPayment() {
     // Strip ALL non-numeric characters (spaces, dashes, etc.)
-    const phone = momoPhone.replace(/\D/g, "");
+    const phone = momoPhone.replace(/\D/g, '');
     if (phone.length < 10) {
-      showToast("Enter a valid 10-digit MoMo number", "error");
+      showToast('Enter a valid 10-digit MoMo number', 'error');
       return;
     }
 
     setMomoLoading(true);
-    setMomoStatus("sending");
+    setMomoStatus('sending');
 
     try {
       const userId = getUserId();
-      const fullDescription = [description.trim(), ...tags].filter(Boolean).join(" ");
+      const fullDescription = [description.trim(), ...tags].filter(Boolean).join(' ');
 
       // Request payment from MTN MoMo sandbox
       const payRes = await momoAPI.requestPayment(
-        "",       // no groupId for personal expenses
+        '',       // no groupId for personal expenses
         userId,
         phone,
         amount,
@@ -361,32 +359,32 @@ export default function AddScreen() {
       );
 
       const referenceId: string =
-        payRes.data?.referenceId ?? payRes.data?.externalId ?? "";
+        payRes.data?.referenceId ?? payRes.data?.externalId ?? '';
 
       // Wait 3s, then check payment status
-      setMomoStatus("confirming");
+      setMomoStatus('confirming');
       await new Promise((r) => setTimeout(r, 3000));
 
-      let paymentStatus = "PENDING";
+      let paymentStatus = 'PENDING';
       if (referenceId) {
         try {
           const statusRes = await momoAPI.checkStatus(referenceId);
-          paymentStatus = statusRes.data?.status ?? "PENDING";
+          paymentStatus = statusRes.data?.status ?? 'PENDING';
         } catch {
           // If status check fails, treat as PENDING and record the expense
-          paymentStatus = "PENDING";
+          paymentStatus = 'PENDING';
         }
       }
 
-      if (paymentStatus === "FAILED") {
-        showToast("Payment failed. Please try again.", "error");
-        setMomoStatus("idle");
+      if (paymentStatus === 'FAILED') {
+        showToast('Payment failed. Please try again.', 'error');
+        setMomoStatus('idle');
         setMomoLoading(false);
         return;
       }
 
       // SUCCESSFUL or PENDING — record the transaction
-      const today = new Date().toISOString().split("T")[0];
+      const today = new Date().toISOString().split('T')[0];
       const parsed = parseFloat(amount);
       const finalAmtStr = (transactionType === 'income' ? Math.abs(parsed) : -Math.abs(parsed)).toFixed(2);
       await expenseAPI.createExpense(
@@ -395,14 +393,14 @@ export default function AddScreen() {
         selectedCategory,
         fullDescription,
         today,
-        "MOMO",
+        'MOMO',
       );
 
       await addHistoryItem({
-        type: transactionType === 'income' ? "income_added" : "expense_added",
-        title: transactionType === 'income' ? "MoMo deposit recorded" : "MoMo payment recorded",
-        body: `${transactionType === 'income' ? '+' : '-'}GHS ${parsed.toFixed(2)} via MoMo for ${selectedCategory}${description ? ` — ${description}` : ""}.`,
-        data: { screen: "history" },
+        type: transactionType === 'income' ? 'income_added' : 'expense_added',
+        title: transactionType === 'income' ? 'MoMo deposit recorded' : 'MoMo payment recorded',
+        body: `${transactionType === 'income' ? '+' : '-'}GHS ${parsed.toFixed(2)} via MoMo for ${selectedCategory}${description ? ` — ${description}` : ''}.`,
+        data: { screen: 'history' },
       });
 
       // Update spent values locally for responsive UI feedback
@@ -416,27 +414,27 @@ export default function AddScreen() {
         }));
       }
 
-      setMomoStatus("done");
+      setMomoStatus('done');
       // Tell Home screen to re-fetch wallet balance on next focus
       signalMomoRefresh();
 
       // Brief pause so user sees "confirmed" state, then close
       setTimeout(() => {
         setShowMomoModal(false);
-        setMomoStatus("idle");
+        setMomoStatus('idle');
         setMomoLoading(false);
-        showToast("Payment successful! Expense recorded.", "success");
-        setAmount("");
-        setDescription("");
+        showToast('Payment successful! Expense recorded.', 'success');
+        setAmount('');
+        setDescription('');
         setTags([]);
-        setTagInput("");
-        setMomoPhone("");
+        setTagInput('');
+        setMomoPhone('');
       }, 1200);
     } catch (err: any) {
       const msg =
-        err.response?.data?.error || "Payment request failed. Please try again.";
-      showToast(msg, "error");
-      setMomoStatus("idle");
+        err.response?.data?.error || 'Payment request failed. Please try again.';
+      showToast(msg, 'error');
+      setMomoStatus('idle');
       setMomoLoading(false);
     }
   }
@@ -444,10 +442,8 @@ export default function AddScreen() {
   function closeMomoModal() {
     if (momoLoading) return; // block dismissal while in-flight
     setShowMomoModal(false);
-    setMomoStatus("idle");
+    setMomoStatus('idle');
   }
-
-
 
   if (fetching) {
     return (
@@ -460,58 +456,48 @@ export default function AddScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.flex, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={true}>
-        {/* Card container */}
-        <View style={[styles.mainCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-          <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, spacing.xl) }]}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets={true}
+      >
+        <View style={[styles.mainCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>
+          <Text style={[typography.display, { color: colors.text, marginBottom: spacing.lg }]}>
             {transactionType === 'income' ? 'Add Income' : 'Add Expense'}
           </Text>
 
           {/* Segmented Control for Expense vs Income */}
           <View style={[styles.typeSelectorRow, { backgroundColor: colors.neutralBg }]}>
             <TouchableOpacity
-              style={[
-                styles.typeBtn,
-                transactionType === 'expense' && { backgroundColor: colors.negative },
-              ]}
+              style={[styles.typeBtn, transactionType === 'expense' && { backgroundColor: colors.negative }]}
               onPress={() => setTransactionType('expense')}
               activeOpacity={0.7}
             >
-              <Text style={[
-                styles.typeBtnText,
-                { color: colors.textSecondary },
-                transactionType === 'expense' && { color: '#ffffff' },
-              ]}>
+              <Text style={[typography.bodyStrong, { color: transactionType === 'expense' ? '#FFFFFF' : colors.textSecondary }]}>
                 💸 Expense
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[
-                styles.typeBtn,
-                transactionType === 'income' && { backgroundColor: colors.positive },
-              ]}
+              style={[styles.typeBtn, transactionType === 'income' && { backgroundColor: colors.positive }]}
               onPress={() => setTransactionType('income')}
               activeOpacity={0.7}
             >
-              <Text style={[
-                styles.typeBtnText,
-                { color: colors.textSecondary },
-                transactionType === 'income' && { color: '#ffffff' },
-              ]}>
+              <Text style={[typography.bodyStrong, { color: transactionType === 'income' ? '#FFFFFF' : colors.textSecondary }]}>
                 💰 Income
               </Text>
             </TouchableOpacity>
           </View>
 
           {/* Quick Add — one-tap expense templates */}
-          <Text style={[styles.label, { color: colors.textSecondary }]}>Quick Add</Text>
+          <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm }]}>Quick Add</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            style={styles.templateScroll}
-            contentContainerStyle={styles.templateRow}
+            style={{ marginBottom: spacing.lg }}
+            contentContainerStyle={{ gap: spacing.sm, paddingRight: spacing.sm }}
           >
             {templates.map((template) => (
               <TouchableOpacity
@@ -521,15 +507,15 @@ export default function AddScreen() {
                 onLongPress={() => removeTemplate(template.name)}
                 activeOpacity={0.75}
               >
-                <Text style={styles.templateEmoji}>{template.emoji}</Text>
+                <Text style={{ fontSize: 20 }}>{template.emoji}</Text>
                 <View>
-                  <Text style={[styles.templateName, { color: colors.text }]} numberOfLines={1}>{template.name}</Text>
-                  <Text style={[styles.templateAmount, { color: colors.textSecondary }]}>GHS {template.amount}</Text>
+                  <Text style={[typography.bodyStrong, { color: colors.text, fontSize: 13 }]} numberOfLines={1}>{template.name}</Text>
+                  <Text style={[typography.label, { color: colors.textSecondary }]}>GHS {template.amount}</Text>
                 </View>
               </TouchableOpacity>
             ))}
             <TouchableOpacity
-              style={[styles.addTemplateChip, { borderColor: colors.primary + '50' }]}
+              style={[styles.addTemplateChip, { borderColor: colors.primarySubtle }]}
               onPress={() => {
                 if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
                   showToast('Fill in amount, category and description first', 'info');
@@ -539,33 +525,29 @@ export default function AddScreen() {
               }}
               activeOpacity={0.75}
             >
-              <Text style={[styles.addTemplateText, { color: colors.primary }]}>+ Save Template</Text>
+              <Text style={[typography.bodyStrong, { color: colors.primary, fontSize: 13 }]}>+ Save Template</Text>
             </TouchableOpacity>
           </ScrollView>
 
-          {/* Enter Amount box styled for the theme */}
-          <Text style={[styles.label, { color: colors.textSecondary }]}>Amount (GHS)</Text>
-          <View style={[
-            styles.amountBox,
-            { backgroundColor: colors.inputBg, borderColor: colors.border },
-            amountFocused && { borderColor: colors.primary }
-          ]}>
-            <Text style={[styles.amountPrefix, { color: colors.text }]}>GHS</Text>
+          {/* Amount */}
+          <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm }]}>Amount (GHS)</Text>
+          <View style={[styles.amountBox, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+            <Text style={[typography.bodyStrong, { color: colors.text, marginRight: spacing.sm }]}>GHS</Text>
             <TextInput
-              style={[styles.amountInput, { color: colors.text }]}
+              style={[typography.display, { flex: 1, color: colors.text, padding: 0 }]}
               placeholder="0.00"
-              placeholderTextColor={theme === 'dark' ? '#4B5563' : '#C8D2DC'}
+              placeholderTextColor={colors.textTertiary}
               value={amount}
               onChangeText={setAmount}
               keyboardType="decimal-pad"
-              onFocus={() => setAmountFocused(true)}
-              onBlur={() => setAmountFocused(false)}
             />
           </View>
 
-          {/* Categories capsule selection list */}
-          <Text style={[styles.label, { color: colors.textSecondary }]}>Select Category</Text>
-          <View style={styles.categoryList}>
+          {/* Categories */}
+          <Text style={[typography.label, { color: colors.textSecondary, marginTop: spacing.md, marginBottom: spacing.sm }]}>
+            Select Category
+          </Text>
+          <View style={{ marginBottom: spacing.md }}>
             {CATEGORIES.map((cat) => (
               <TouchableOpacity
                 key={cat}
@@ -578,18 +560,15 @@ export default function AddScreen() {
                 activeOpacity={0.8}
               >
                 <View style={styles.categoryLeft}>
-                  <Text style={styles.categoryEmoji}>{CATEGORY_ICONS[cat]}</Text>
-                  <Text style={[styles.categoryNameText, { color: colors.text }]}>{cat}</Text>
+                  <Text style={{ fontSize: 20 }}>{CATEGORY_ICONS[cat]}</Text>
+                  <Text style={[typography.bodyStrong, { color: colors.text }]}>{cat}</Text>
                 </View>
-                <View style={styles.categoryRight}>
-                  <Text style={[styles.categoryAmountText, { color: colors.textSecondary }]}>
-                    GHS {Math.abs(spent[cat] || 0).toFixed(2)}
-                  </Text>
-                </View>
+                <Text style={[typography.bodyStrong, { color: colors.textSecondary, fontSize: 13 }]}>
+                  GHS {Math.abs(spent[cat] || 0).toFixed(2)}
+                </Text>
               </TouchableOpacity>
             ))}
 
-            {/* Custom categories */}
             {customCategories.map((cat) => (
               <TouchableOpacity
                 key={cat.id}
@@ -602,30 +581,26 @@ export default function AddScreen() {
                 activeOpacity={0.8}
               >
                 <View style={styles.categoryLeft}>
-                  <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
-                  <Text style={[styles.categoryNameText, { color: colors.text }]}>{cat.name}</Text>
+                  <Text style={{ fontSize: 20 }}>{cat.emoji}</Text>
+                  <Text style={[typography.bodyStrong, { color: colors.text }]}>{cat.name}</Text>
                 </View>
-                <View style={styles.categoryRight}>
-                  <Text style={[styles.categoryAmountText, { color: colors.textSecondary }]}>
-                    GHS {Math.abs(spent[cat.name] || 0).toFixed(2)}
-                  </Text>
-                </View>
+                <Text style={[typography.bodyStrong, { color: colors.textSecondary, fontSize: 13 }]}>
+                  GHS {Math.abs(spent[cat.name] || 0).toFixed(2)}
+                </Text>
               </TouchableOpacity>
             ))}
 
-            {/* Add New Category button */}
             <TouchableOpacity
               style={[styles.addCategoryBtn, { borderColor: colors.border }]}
               onPress={() => router.push('/manage-categories')}
               activeOpacity={0.7}
             >
-              <Text style={[styles.addCategoryBtnText, { color: colors.textSecondary }]}>
-                + New Category
-              </Text>
+              <Text style={[typography.bodyStrong, { color: colors.textSecondary, fontSize: 14 }]}>+ New Category</Text>
             </TouchableOpacity>
           </View>
+
           {showHint && (
-            <Text style={[styles.lastUsedHint, { color: colors.textSecondary }]}>
+            <Text style={[typography.caption, { color: colors.textSecondary, textAlign: 'center', marginTop: -4, marginBottom: spacing.md }]}>
               ↩ Remembered from last {transactionType === 'income' ? 'income' : 'expense'}
             </Text>
           )}
@@ -638,8 +613,8 @@ export default function AddScreen() {
             const pending = parseFloat(amount) || 0;
             if (left <= 0) {
               return (
-                <View style={[styles.budgetWarn, { backgroundColor: colors.negative + '12', borderColor: colors.negative + '35' }]}>
-                  <Text style={[styles.budgetWarnText, { color: colors.negative }]}>
+                <View style={[styles.warnBanner, { backgroundColor: `${colors.negative}12`, borderColor: `${colors.negative}35` }]}>
+                  <Text style={[typography.caption, { color: colors.negative, fontFamily: typography.bodyStrong.fontFamily }]}>
                     🚨 You've already used your entire {selectedCategory} budget (GHS {limit.toFixed(0)}) this month.
                   </Text>
                 </View>
@@ -647,8 +622,8 @@ export default function AddScreen() {
             }
             if (pending > left || left <= limit * 0.2) {
               return (
-                <View style={[styles.budgetWarn, { backgroundColor: '#F59E0B18', borderColor: '#F59E0B40' }]}>
-                  <Text style={[styles.budgetWarnText, { color: '#D97706' }]}>
+                <View style={[styles.warnBanner, { backgroundColor: colors.warningSubtle, borderColor: `${colors.warning}40` }]}>
+                  <Text style={[typography.caption, { color: colors.warning, fontFamily: typography.bodyStrong.fontFamily }]}>
                     ⚠️ You have only GHS {left.toFixed(2)} left in your {selectedCategory} budget this month{pending > left ? ' — this expense will exceed it' : ''}.
                   </Text>
                 </View>
@@ -658,101 +633,68 @@ export default function AddScreen() {
           })()}
 
           {/* Payment Method Selector */}
-          <Text style={[styles.label, { color: colors.textSecondary }]}>Payment Method</Text>
-          <View style={styles.paymentMethodRow}>
-            <TouchableOpacity
-              style={[
-                styles.paymentChip,
-                { backgroundColor: colors.inputBg, borderColor: colors.border },
-                paymentMethod === "CASH" && { backgroundColor: colors.primary + '15', borderColor: colors.primary, borderWidth: 1.5 }
-              ]}
-              onPress={() => handlePaymentMethodSelect("CASH")}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.paymentChipIcon}>💵</Text>
-              <Text style={[
-                styles.paymentChipText,
-                { color: colors.textSecondary },
-                paymentMethod === "CASH" && { color: colors.primary, fontWeight: 'bold' }
-              ]}>
-                Cash
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.paymentChip,
-                { backgroundColor: colors.inputBg, borderColor: colors.border },
-                paymentMethod === "MOMO" && { backgroundColor: colors.accent + '15', borderColor: colors.accent, borderWidth: 1.5 }
-              ]}
-              onPress={() => handlePaymentMethodSelect("MOMO")}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.paymentChipIcon}>📱</Text>
-              <Text style={[
-                styles.paymentChipText,
-                { color: colors.textSecondary },
-                paymentMethod === "MOMO" && { color: colors.accent, fontWeight: 'bold' }
-              ]}>
-                MoMo
-              </Text>
-            </TouchableOpacity>
+          <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm }]}>Payment Method</Text>
+          <View style={{ flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg }}>
+            <Chip
+              label="Cash"
+              icon={<Text style={{ fontSize: 16 }}>💵</Text>}
+              selected={paymentMethod === 'CASH'}
+              onPress={() => handlePaymentMethodSelect('CASH')}
+              style={{ flex: 1, justifyContent: 'center' }}
+            />
+            <Chip
+              label="MoMo"
+              icon={<Text style={{ fontSize: 16 }}>📱</Text>}
+              selected={paymentMethod === 'MOMO'}
+              onPress={() => handlePaymentMethodSelect('MOMO')}
+              style={[{ flex: 1, justifyContent: 'center' }, paymentMethod === 'MOMO' && { backgroundColor: colors.accent }]}
+            />
           </View>
 
-          {/* Description box */}
-          <Text style={[styles.label, { color: colors.textSecondary }]}>Description (optional)</Text>
-          <TextInput
-            style={[
-              styles.descriptionBox,
-              styles.textArea,
-              { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text },
-              descFocused && { borderColor: colors.primary }
-            ]}
+          {/* Description */}
+          <Input
+            label="Description (optional)"
             placeholder="What was this for?"
-            placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
             value={description}
             onChangeText={setDescription}
-            onFocus={() => setDescFocused(true)}
-            onBlur={() => setDescFocused(false)}
             multiline
             numberOfLines={3}
+            style={{ height: 70, textAlignVertical: 'top' }}
+            containerStyle={{ marginBottom: spacing.sm }}
           />
 
           {/* Smart category suggestion chip */}
           {suggestedCategory && (
             <TouchableOpacity
-              style={[styles.suggestionChip, { backgroundColor: colors.primary + '15', borderColor: colors.primary + '40' }]}
+              style={[styles.suggestionChip, { backgroundColor: colors.primarySubtle, borderColor: `${colors.primary}40` }]}
               onPress={() => {
                 setSelectedCategory(suggestedCategory);
                 setSuggestedCategory(null);
               }}
               activeOpacity={0.75}
             >
-              <Text style={[styles.suggestionChipText, { color: colors.primary }]}>
+              <Text style={[typography.caption, { color: colors.primary, fontFamily: typography.bodyStrong.fontFamily }]}>
                 💡 Suggested: {suggestedCategory} — tap to apply
               </Text>
             </TouchableOpacity>
           )}
 
-          {/* Tags Section */}
-          <Text style={[styles.label, { color: colors.textSecondary }]}>Tags (optional)</Text>
+          {/* Tags */}
+          <Text style={[typography.label, { color: colors.textSecondary, marginTop: spacing.sm, marginBottom: spacing.sm }]}>
+            Tags (optional)
+          </Text>
           <View style={styles.tagInputRow}>
             <TextInput
-              style={[
-                styles.tagInputField,
-                { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text },
-                tagFocused && { borderColor: colors.primary }
-              ]}
+              style={[typography.body, styles.tagInputField, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
               placeholder="Add a tag e.g. #work #food"
-              placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
+              placeholderTextColor={colors.textTertiary}
               value={tagInput}
               onChangeText={setTagInput}
-              onFocus={() => setTagFocused(true)}
-              onBlur={() => setTagFocused(false)}
               onSubmitEditing={handleAddTag}
               returnKeyType="done"
             />
-            <TouchableOpacity style={[styles.tagAddButton, { backgroundColor: colors.neutralBg }]} onPress={handleAddTag}>
-              <Text style={[styles.tagAddText, { color: colors.text }]}>Add</Text>
+            <TouchableOpacity style={[styles.tagAddButton, { backgroundColor: colors.text }]} onPress={handleAddTag}>
+              <Text style={[typography.bodyStrong, { color: colors.background, fontSize: 14 }]}>Add</Text>
             </TouchableOpacity>
           </View>
 
@@ -760,739 +702,298 @@ export default function AddScreen() {
             <View style={styles.tagsContainer}>
               {tags.map((tag) => (
                 <View key={tag} style={[styles.tagPill, { backgroundColor: colors.neutralBg }]}>
-                  <Text style={[styles.tagText, { color: colors.textSecondary }]}>{tag}</Text>
-                  <TouchableOpacity onPress={() => handleRemoveTag(tag)}>
-                    <Text style={[styles.tagRemove, { color: colors.textSecondary }]}>✕</Text>
+                  <Text style={[typography.caption, { color: colors.textSecondary }]}>{tag}</Text>
+                  <TouchableOpacity onPress={() => handleRemoveTag(tag)} hitSlop={6}>
+                    <Feather name="x" size={12} color={colors.textSecondary} />
                   </TouchableOpacity>
                 </View>
               ))}
             </View>
           )}
 
-          {/* Black capsule action button */}
-          <TouchableOpacity
-            style={[
-              styles.button,
-              { backgroundColor: paymentMethod === "MOMO" ? "#D97706" : colors.primary },
-              loading && styles.buttonDisabled,
-            ]}
+          <Button
+            title={
+              paymentMethod === 'MOMO'
+                ? (transactionType === 'income' ? 'Receive via MoMo →' : 'Pay with MoMo →')
+                : (transactionType === 'income' ? '⊕ Add Income' : '⊕ Add Expense')
+            }
             onPress={handleAddExpense}
-            disabled={loading}
-            activeOpacity={0.85}
-          >
-            {loading ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text style={styles.buttonText}>
-                {paymentMethod === "MOMO" 
-                  ? (transactionType === 'income' ? "Receive via MoMo →" : "Pay with MoMo →") 
-                  : (transactionType === 'income' ? "⊕ Add Income" : "⊕ Add Expense")}
-              </Text>
-            )}
-          </TouchableOpacity>
+            loading={loading}
+            style={paymentMethod === 'MOMO' ? { backgroundColor: colors.accent } : undefined}
+          />
         </View>
       </ScrollView>
 
       {/* ── Save as Template Modal ── */}
-      <Modal
-        visible={showSaveTemplate}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowSaveTemplate(false)}
-      >
+      <Modal visible={showSaveTemplate} transparent animationType="fade" onRequestClose={() => setShowSaveTemplate(false)}>
         <View style={styles.templateModalOverlay}>
-          <View style={[styles.templateModalCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-            <Text style={[styles.templateModalTitle, { color: colors.text }]}>Save as Template</Text>
-            <Text style={[styles.templateModalSub, { color: colors.textSecondary }]}>
+          <View style={[styles.templateModalCard, { backgroundColor: colors.surfaceHigh, borderColor: colors.borderSubtle }]}>
+            <Text style={[typography.headline, { color: colors.text, textAlign: 'center', marginBottom: spacing.xs }]}>
+              Save as Template
+            </Text>
+            <Text style={[typography.caption, { color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.lg }]}>
               {CATEGORY_ICONS[selectedCategory] || customCategories.find((c) => c.name === selectedCategory)?.emoji || '📦'}
               {'  '}{selectedCategory} • GHS {parseFloat(amount || '0').toFixed(2)}
               {description.trim() ? ` • ${description.trim()}` : ''}
             </Text>
-            <TextInput
-              style={[styles.templateModalInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
-              placeholder='Template name (e.g. "Morning Coffee")'
-              placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
+            <Input
+              label="Template name"
+              placeholder='e.g. "Morning Coffee"'
               value={templateName}
               onChangeText={setTemplateName}
               maxLength={24}
               autoFocus
+              containerStyle={{ marginBottom: spacing.lg }}
             />
-            <TouchableOpacity
-              style={[styles.templateModalSave, { backgroundColor: colors.primary }]}
-              onPress={saveTemplate}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.templateModalSaveText}>Save Template</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.templateModalCancel}
-              onPress={() => setShowSaveTemplate(false)}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.templateModalCancelText, { color: colors.textSecondary }]}>Cancel</Text>
+            <Button title="Save Template" onPress={saveTemplate} />
+            <TouchableOpacity style={styles.templateModalCancel} onPress={() => setShowSaveTemplate(false)} activeOpacity={0.7}>
+              <Text style={[typography.caption, { color: colors.textSecondary, fontFamily: typography.bodyStrong.fontFamily }]}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* ── MoMo Payment Modal (Redesigned for Premium Light Capsule Theme) ── */}
-      <Modal
-        visible={showMomoModal}
-        transparent
-        animationType="slide"
-        onRequestClose={closeMomoModal}
-      >
-        <KeyboardAvoidingView
-          style={styles.modalOverlay}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
-          <TouchableOpacity
-            style={styles.modalBackdrop}
-            activeOpacity={1}
-            onPress={closeMomoModal}
-          />
-          <View style={[styles.modalCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-            {/* Header */}
+      {/* ── MoMo Payment Modal ── */}
+      <Modal visible={showMomoModal} transparent animationType="slide" onRequestClose={closeMomoModal}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={closeMomoModal} />
+          <View style={[styles.modalCard, { backgroundColor: colors.surfaceHigh, borderColor: colors.borderSubtle }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>
+              <Text style={[typography.headline, { color: colors.text }]}>
                 {transactionType === 'income' ? 'Receive with MoMo 📱' : 'Pay with MoMo 📱'}
               </Text>
               {!momoLoading && (
-                <TouchableOpacity onPress={closeMomoModal} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                  <Text style={[styles.modalClose, { color: colors.textSecondary }]}>✕</Text>
+                <TouchableOpacity onPress={closeMomoModal} hitSlop={12}>
+                  <Feather name="x" size={20} color={colors.textSecondary} />
                 </TouchableOpacity>
               )}
             </View>
 
-            {/* Amount box */}
-            <View style={[styles.momoAmountBox, { backgroundColor: colors.neutralBg }]}>
-              <Text style={[styles.momoAmountLabel, { color: colors.textSecondary }]}>
+            <View style={[styles.momoAmountBox, { backgroundColor: colors.neutralBg, borderColor: `${colors.accent}1a` }]}>
+              <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.xs }]}>
                 {transactionType === 'income' ? 'You are receiving' : 'You are paying'}
               </Text>
-              <Text style={[styles.momoAmountValue, { color: colors.text }]}>
-                GHS {parseFloat(amount || "0").toFixed(2)}
+              <Text style={[typography.displayLarge, { color: colors.accent, marginBottom: spacing.xs }]}>
+                GHS {parseFloat(amount || '0').toFixed(2)}
               </Text>
               {(description || selectedCategory) && (
-                <Text style={[styles.momoAmountDesc, { color: colors.textSecondary }]}>
-                  {description || selectedCategory}
-                </Text>
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>{description || selectedCategory}</Text>
               )}
             </View>
 
-            {/* Phone input — only shown while idle */}
-            {momoStatus === "idle" && (
-              <>
-                <Text style={[styles.momoPhoneLabel, { color: colors.textSecondary }]}>MoMo Number</Text>
-                <TextInput
-                  style={[styles.momoPhoneInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
-                  placeholder="e.g. 0241234567"
-                  placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
-                  value={momoPhone}
-                  onChangeText={setMomoPhone}
-                  keyboardType="phone-pad"
-                  maxLength={10}
-                  autoFocus
-                />
-              </>
+            {momoStatus === 'idle' && (
+              <Input
+                label="MoMo Number"
+                placeholder="e.g. 0241234567"
+                value={momoPhone}
+                onChangeText={setMomoPhone}
+                keyboardType="phone-pad"
+                maxLength={10}
+                autoFocus
+                containerStyle={{ marginBottom: spacing.lg }}
+              />
             )}
 
-            {/* Status feedback while processing */}
-            {momoStatus !== "idle" && (
+            {momoStatus !== 'idle' && (
               <View style={styles.momoStatusBox}>
-                {momoStatus !== "done" && (
-                  <ActivityIndicator
-                    color="#D97706"
-                    size="large"
-                    style={{ marginBottom: 12 }}
-                  />
-                )}
-                {momoStatus === "done" && (
-                  <Text style={styles.momoStatusIcon}>✅</Text>
-                )}
-                <Text style={[styles.momoStatusText, { color: colors.text }]}>
-                  {momoStatus === "sending" && (transactionType === 'income' ? "Sending request to your MoMo number..." : "Sending payment request to your MoMo number...")}
-                  {momoStatus === "confirming" && "Confirming transaction..."}
-                  {momoStatus === "done" && (transactionType === 'income' ? "Funds received confirmed!" : "Payment confirmed!")}
+                {momoStatus !== 'done' && <ActivityIndicator color={colors.accent} size="large" style={{ marginBottom: spacing.md }} />}
+                {momoStatus === 'done' && <Text style={{ fontSize: 48, marginBottom: spacing.md }}>✅</Text>}
+                <Text style={[typography.bodyStrong, { color: colors.accent, textAlign: 'center' }]}>
+                  {momoStatus === 'sending' && (transactionType === 'income' ? 'Sending request to your MoMo number...' : 'Sending payment request to your MoMo number...')}
+                  {momoStatus === 'confirming' && 'Confirming transaction...'}
+                  {momoStatus === 'done' && (transactionType === 'income' ? 'Funds received confirmed!' : 'Payment confirmed!')}
                 </Text>
               </View>
             )}
 
-            {/* Buttons — hidden while processing */}
-            {momoStatus === "idle" && (
+            {momoStatus === 'idle' && (
               <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={[styles.modalCancelBtn, { backgroundColor: colors.neutralBg }]}
-                  onPress={closeMomoModal}
-                >
-                  <Text style={[styles.modalCancelText, { color: colors.textSecondary }]}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalPayBtn, { backgroundColor: '#D97706' }]}
+                <Button title="Cancel" onPress={closeMomoModal} variant="secondary" style={{ flex: 1 }} />
+                <Button
+                  title={transactionType === 'income' ? 'Request Money' : 'Pay Now'}
                   onPress={handleMomoPayment}
-                >
-                  <Text style={styles.modalPayText}>
-                    {transactionType === 'income' ? "Request Money" : "Pay Now"}
-                  </Text>
-                </TouchableOpacity>
+                  style={{ flex: 2, backgroundColor: colors.accent }}
+                />
               </View>
             )}
           </View>
         </KeyboardAvoidingView>
       </Modal>
 
-      <Toast
-        message={toastMessage}
-        type={toastType}
-        visible={toastVisible}
-        onHide={hideToast}
-      />
+      <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#F2F4F7', // Soft light gray backdrop
-  },
-  centered: {
-    flex: 1,
-    backgroundColor: '#F2F4F7',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  flex: { flex: 1 },
+  container: { flex: 1 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: {
-    paddingHorizontal: 20,
-    paddingTop: 30,
+    paddingHorizontal: spacing.lg,
     paddingBottom: 40,
   },
   mainCard: {
-    backgroundColor: '#ffffff', // Card wrapper
-    borderRadius: 28,
-    padding: 24,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.05,
-    shadowRadius: 16,
-    elevation: 3,
-  },
-  cardHeaderTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#111111',
-    marginBottom: 20,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    borderWidth: 1,
   },
   typeSelectorRow: {
     flexDirection: 'row',
-    borderRadius: 12,
+    borderRadius: radius.md,
     padding: 4,
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   typeBtn: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: spacing.sm + 2,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 10,
+    borderRadius: radius.sm,
   },
-  typeBtnText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  label: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    color: '#8E9AA6',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 8,
-    marginTop: 8,
-  },
-  amountBox: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  templateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: '#EAEBEF',
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    maxWidth: 190,
   },
-  amountBoxFocused: {
-    borderColor: '#111111', // Black border on focus
-  },
-  amountPrefix: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111111',
-    marginRight: 8,
-  },
-  amountInput: {
-    flex: 1,
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#111111',
-    padding: 0,
-  },
-  categoryList: {
-    marginBottom: 16,
-  },
-  addCategoryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    marginBottom: 8,
+  addTemplateChip: {
+    borderRadius: radius.md,
     borderWidth: 1.5,
     borderStyle: 'dashed',
+    paddingHorizontal: spacing.md,
+    justifyContent: 'center',
   },
-  addCategoryBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
+  amountBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    borderWidth: 1,
+    marginBottom: spacing.sm,
   },
   categoryCapsule: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    marginBottom: 8,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.sm,
     borderWidth: 1,
-    borderColor: '#EAEBEF',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.02,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  categoryCapsuleActive: {
-    borderColor: '#111111', // Rounded black outline on selection
-    borderWidth: 1.5,
   },
   categoryLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: spacing.md,
   },
-  categoryEmoji: {
-    fontSize: 20,
-  },
-  categoryNameText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#111111',
-    marginLeft: 4,
-  },
-  categoryRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  categoryAmountText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111111',
-    marginRight: 6,
-  },
-
-  descriptionBox: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#EAEBEF',
-    color: '#111111',
-    fontSize: 15,
-    marginBottom: 16,
-  },
-  descriptionBoxFocused: {
-    borderColor: '#111111',
-  },
-  textArea: {
-    height: 80,
-    textAlignVertical: 'top',
-  },
-  lastUsedHint: {
-    fontSize: 11,
-    color: "#8890A0",
-    textAlign: "center",
-    marginTop: -8,
-    marginBottom: 12,
-  },
-  paymentMethodRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 20,
-  },
-  paymentChip: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 16,
-    backgroundColor: "#F8F9FA",
-    borderWidth: 1,
-    borderColor: "#EAEBEF",
-  },
-  paymentChipActive: {
-    borderColor: "#111111",
-    backgroundColor: "#11111105",
-  },
-  paymentChipActiveMomo: {
-    borderColor: "#F59E0B",
-    backgroundColor: "#F59E0B0a",
-  },
-  paymentChipIcon: {
-    fontSize: 18,
-  },
-  paymentChipText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#8E9AA6",
-  },
-  paymentChipTextActive: {
-    color: "#111111",
-  },
-  paymentChipTextMomo: {
-    color: "#D97706",
-  },
-  button: {
-    backgroundColor: '#111111', // Black background button
-    borderRadius: 28,
-    padding: 18,
+  addCategoryBtn: {
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'row',
-    marginTop: 8,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 2,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
   },
-  buttonMomo: {
-    backgroundColor: "#D97706",
+  warnBanner: {
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    marginBottom: spacing.md,
   },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: 'bold',
+  suggestionChip: {
+    alignSelf: 'flex-start',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 3,
+    marginBottom: spacing.md,
   },
   tagInputRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: spacing.sm,
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   tagInputField: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: radius.md,
+    padding: spacing.md,
     borderWidth: 1,
-    borderColor: '#EAEBEF',
-    color: '#111111',
-    fontSize: 15,
-  },
-  tagInputFieldFocused: {
-    borderColor: '#111111',
   },
   tagAddButton: {
-    backgroundColor: '#111111',
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    height: 56,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    height: 52,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  tagAddText: {
-    color: '#ffffff',
-    fontWeight: 'bold',
-    fontSize: 14,
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginBottom: spacing.xl,
   },
-  // Quick-add templates
-  templateScroll: {
-    marginBottom: 16,
-  },
-  templateRow: {
-    gap: 10,
-    paddingRight: 8,
-  },
-  templateChip: {
+  tagPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    maxWidth: 190,
-  },
-  templateEmoji: {
-    fontSize: 20,
-  },
-  templateName: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  templateAmount: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  addTemplateChip: {
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    paddingHorizontal: 14,
-    justifyContent: 'center',
-  },
-  addTemplateText: {
-    fontSize: 13,
-    fontWeight: '700',
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: spacing.xs + 2,
+    gap: spacing.xs,
   },
   templateModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    padding: spacing.xl,
   },
   templateModalCard: {
     width: '100%',
     maxWidth: 340,
-    borderRadius: 24,
+    borderRadius: radius.xl,
     borderWidth: 1,
-    padding: 24,
-  },
-  templateModalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  templateModalSub: {
-    fontSize: 13,
-    textAlign: 'center',
-    marginBottom: 16,
-    lineHeight: 19,
-  },
-  templateModalInput: {
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    marginBottom: 16,
-  },
-  templateModalSave: {
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  templateModalSaveText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: 'bold',
+    padding: spacing.xl,
   },
   templateModalCancel: {
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     alignItems: 'center',
   },
-  templateModalCancelText: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-
-  budgetWarn: {
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginBottom: 14,
-  },
-  budgetWarnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 17,
-  },
-  suggestionChip: {
-    alignSelf: 'flex-start',
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    marginTop: -6,
-    marginBottom: 14,
-  },
-  suggestionChipText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  tagsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 20,
-  },
-  tagPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F2F4F7',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: '#EAEBEF',
-    gap: 6,
-  },
-  tagText: {
-    fontSize: 13,
-    color: '#111111',
-    fontWeight: '500',
-  },
-  tagRemove: {
-    fontSize: 12,
-    color: '#8E9AA6',
-    fontWeight: 'bold',
-  },
-  // MoMo modal (Light Redesign)
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.4)",
-  },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
   modalCard: {
-    backgroundColor: "#ffffff",
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    padding: 24,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    padding: spacing.xl,
     paddingBottom: 40,
     borderTopWidth: 1,
-    borderColor: "#EAEBEF",
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 10,
   },
   modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#111111",
-  },
-  modalClose: {
-    fontSize: 18,
-    color: "#8E9AA6",
-    padding: 4,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xl,
   },
   momoAmountBox: {
-    backgroundColor: "#F8F9FA",
-    borderRadius: 16,
-    padding: 20,
-    alignItems: "center",
-    marginBottom: 20,
+    borderRadius: radius.md,
+    padding: spacing.xl,
+    alignItems: 'center',
+    marginBottom: spacing.xl,
     borderWidth: 1,
-    borderColor: "#F59E0B1a",
-  },
-  momoAmountLabel: {
-    fontSize: 12,
-    color: "#8E9AA6",
-    marginBottom: 6,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-  momoAmountValue: {
-    fontSize: 40,
-    fontWeight: "bold",
-    color: "#D97706",
-    marginBottom: 4,
-  },
-  momoAmountDesc: {
-    fontSize: 13,
-    color: "#8E9AA6",
-  },
-  momoPhoneLabel: {
-    fontSize: 13,
-    color: "#1E293B",
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  momoPhoneInput: {
-    backgroundColor: "#F8F9FA",
-    borderRadius: 12,
-    padding: 16,
-    color: "#111111",
-    fontSize: 18,
-    fontWeight: "600",
-    borderWidth: 1,
-    borderColor: "#EAEBEF",
-    marginBottom: 20,
-    letterSpacing: 1,
   },
   momoStatusBox: {
-    alignItems: "center",
-    paddingVertical: 24,
-  },
-  momoStatusIcon: {
-    fontSize: 48,
-    marginBottom: 12,
-  },
-  momoStatusText: {
-    fontSize: 15,
-    color: "#D97706",
-    fontWeight: "600",
-    textAlign: "center",
+    alignItems: 'center',
+    paddingVertical: spacing.xl,
   },
   modalButtons: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  modalCancelBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#EAEBEF",
-    alignItems: "center",
-    backgroundColor: "#ffffff",
-  },
-  modalCancelText: {
-    fontSize: 15,
-    color: "#8E9AA6",
-    fontWeight: "600",
-  },
-  modalPayBtn: {
-    flex: 2,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: "#F59E0B",
-    alignItems: "center",
-  },
-  modalPayText: {
-    color: "#ffffff",
-    fontWeight: "bold",
-    fontSize: 16,
+    flexDirection: 'row',
+    gap: spacing.md,
   },
 });

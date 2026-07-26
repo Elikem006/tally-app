@@ -1,0 +1,63 @@
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import Feather from '@expo/vector-icons/Feather';
+import Avatar from '../Avatar';
+import { useTheme } from '../../hooks/useTheme';
+import { getExtendedColors, typography, spacing, radius } from '../../theme';
+
+interface MemberRowProps {
+  userId: number | string;
+  name: string;
+  avatarData?: string;
+  isCreator?: boolean;
+  onRemove?: () => void;
+}
+
+/** One group member row — avatar, name (+ crown if creator), user id, optional remove action. */
+export function MemberRow({ userId, name, avatarData, isCreator, onRemove }: MemberRowProps) {
+  const { theme, colors: baseColors } = useTheme();
+  const colors = getExtendedColors(theme, baseColors);
+
+  return (
+    <View style={[styles.row, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>
+      <Avatar userId={userId} name={name} size={40} avatarData={avatarData} style={{ marginRight: spacing.md }} />
+      <View style={{ flex: 1 }}>
+        <Text style={[typography.bodyStrong, { color: colors.text }]} numberOfLines={1}>
+          {name}{isCreator ? '  👑' : ''}
+        </Text>
+        <Text style={[typography.label, { color: colors.textSecondary, marginTop: 2 }]}>ID: #{userId}</Text>
+      </View>
+      {onRemove && (
+        <TouchableOpacity
+          style={[styles.removeBtn, { backgroundColor: `${colors.negative}12`, borderColor: `${colors.negative}30` }]}
+          onPress={onRemove}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={`Remove ${name}`}
+        >
+          <Feather name="x" size={14} color={colors.negative} />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radius.xl,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+  },
+  removeBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: spacing.sm,
+  },
+});

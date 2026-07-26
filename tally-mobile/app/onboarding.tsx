@@ -1,80 +1,90 @@
-import { useState, useRef, useEffect } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Animated,
-  Easing,
-  Dimensions,
-} from "react-native";
-import { router } from "expo-router";
-import { safeStorage } from "../services/storage";
+import { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withRepeat,
+  withSequence,
+  Easing as ReanimatedEasing,
+} from 'react-native-reanimated';
+import { router } from 'expo-router';
+import { safeStorage } from '../services/storage';
+import { useTheme } from '../hooks/useTheme';
+import { getExtendedColors, typography, spacing, radius, duration, easing } from '../theme';
+import { Button } from '../components/ui';
 
-const ONBOARDING_KEY = "tallyOnboardingComplete";
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const ONBOARDING_KEY = 'tallyOnboardingComplete';
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const STEPS = [
   {
-    emoji: "💰",
-    title: "Welcome to Tally! 👋",
-    body: "Your personal finance companion for tracking expenses and splitting costs with friends",
+    emoji: '💰',
+    title: 'Welcome to Tally! 👋',
+    body: 'Your personal finance companion for tracking expenses and splitting costs with friends',
   },
   {
-    emoji: "📊",
-    title: "Track Every Cedi",
-    body: "Add expenses instantly, set budgets and see where your money goes with beautiful charts",
+    emoji: '📊',
+    title: 'Track Every Cedi',
+    body: 'Add expenses instantly, set budgets and see where your money goes with beautiful charts',
   },
   {
-    emoji: "👥",
-    title: "Split Fairly with Friends",
-    body: "Create groups, add shared expenses and settle up — even with MTN MoMo payments",
+    emoji: '👥',
+    title: 'Split Fairly with Friends',
+    body: 'Create groups, add shared expenses and settle up — even with MTN MoMo payments',
   },
 ];
 
-// Mini previews per step
-const CATEGORY_PREVIEW = ["🍔 Food", "🚗 Transport", "🎮 Fun", "💡 Utilities"];
-const GROUP_PREVIEW = [
-  { name: "Elikem", label: "is owed", amount: "+GHS 60", color: "#00C896" },
-  { name: "Joseph", label: "owes", amount: "-GHS 30", color: "#E05C5C" },
-  { name: "Ishmael", label: "owes", amount: "-GHS 30", color: "#E05C5C" },
-];
+const CATEGORY_PREVIEW = ['🍔 Food', '🚗 Transport', '🎮 Fun', '💡 Utilities'];
 
 export default function OnboardingScreen() {
+  const { theme, colors: baseColors } = useTheme();
+  const colors = getExtendedColors(theme, baseColors);
   const [currentStep, setCurrentStep] = useState(1); // 1-3
-  const slideAnim = useRef(new Animated.Value(0)).current;
-  const floatAnim = useRef(new Animated.Value(0)).current;
+
+  const slideProgress = useSharedValue(0);
+  const floatY = useSharedValue(0);
+
+  const GROUP_PREVIEW = [
+    { name: 'Elikem', label: 'is owed', amount: '+GHS 60', color: colors.positive },
+    { name: 'Joseph', label: 'owes', amount: '-GHS 30', color: colors.negative },
+    { name: 'Ishmael', label: 'owes', amount: '-GHS 30', color: colors.negative },
+  ];
 
   // Slide the content in from the right on every step change
   useEffect(() => {
-    slideAnim.setValue(0);
-    Animated.timing(slideAnim, {
-      toValue: 1,
-      duration: 350,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
+    slideProgress.value = 0;
+    slideProgress.value = withTiming(1, { duration: duration.slow, easing: easing.decelerate });
   }, [currentStep]);
 
-  // Gentle floating animation for the hero emoji
+  // Gentle floating loop for the hero emoji
   useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(floatAnim, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(floatAnim, { toValue: 0, duration: 1400, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      ]),
+    floatY.value = withRepeat(
+      withSequence(
+        withTiming(-14, { duration: 1400, easing: ReanimatedEasing.inOut(ReanimatedEasing.quad) }),
+        withTiming(0, { duration: 1400, easing: ReanimatedEasing.inOut(ReanimatedEasing.quad) }),
+      ),
+      -1,
+      false,
     );
-    loop.start();
-    return () => loop.stop();
   }, []);
+
+  const contentStyle = useAnimatedStyle(() => ({
+    opacity: slideProgress.value,
+    transform: [{ translateX: (1 - slideProgress.value) * SCREEN_WIDTH * 0.25 }],
+  }));
+
+  const emojiStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: floatY.value }],
+  }));
 
   async function finish() {
     try {
-      await safeStorage.setItem(ONBOARDING_KEY, "true");
+      await safeStorage.setItem(ONBOARDING_KEY, 'true');
     } catch {
       // Non-critical — worst case they see onboarding once more
     }
-    router.replace("/(tabs)");
+    router.replace('/(tabs)');
   }
 
   function next() {
@@ -83,52 +93,59 @@ export default function OnboardingScreen() {
   }
 
   const step = STEPS[currentStep - 1];
-  const translateX = slideAnim.interpolate({ inputRange: [0, 1], outputRange: [SCREEN_WIDTH * 0.25, 0] });
-  const floatY = floatAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -14] });
 
   return (
-    <View style={styles.container}>
-      {/* Skip — all steps */}
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       <TouchableOpacity style={styles.skipBtn} onPress={finish} activeOpacity={0.7}>
-        <Text style={styles.skipText}>Skip</Text>
+        <Text style={[typography.bodyStrong, { color: colors.textSecondary }]}>Skip</Text>
       </TouchableOpacity>
 
-      <Animated.View style={[styles.content, { opacity: slideAnim, transform: [{ translateX }] }]}>
-        <Animated.Text style={[styles.heroEmoji, { transform: [{ translateY: floatY }] }]}>
-          {step.emoji}
-        </Animated.Text>
-        <Text style={styles.title}>{step.title}</Text>
-        <Text style={styles.body}>{step.body}</Text>
+      <Animated.View style={[styles.content, contentStyle]}>
+        <Animated.Text style={[styles.heroEmoji, emojiStyle]}>{step.emoji}</Animated.Text>
+        <Text style={[typography.display, { color: colors.text, textAlign: 'center', marginBottom: spacing.md }]}>
+          {step.title}
+        </Text>
+        <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', paddingHorizontal: spacing.sm }]}>
+          {step.body}
+        </Text>
 
-        {/* Step 2 — expense categories preview */}
         {currentStep === 2 && (
           <View style={styles.previewRow}>
             {CATEGORY_PREVIEW.map((cat) => (
-              <View key={cat} style={styles.categoryChip}>
-                <Text style={styles.categoryChipText}>{cat}</Text>
+              <View
+                key={cat}
+                style={[
+                  styles.categoryChip,
+                  { backgroundColor: colors.surfaceElevated, borderColor: colors.primarySubtle },
+                ]}
+              >
+                <Text style={[typography.bodyStrong, { color: colors.text }]}>{cat}</Text>
               </View>
             ))}
           </View>
         )}
 
-        {/* Step 3 — group balance preview */}
         {currentStep === 3 && (
-          <View style={styles.groupPreview}>
+          <View
+            style={[
+              styles.groupPreview,
+              { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle },
+            ]}
+          >
             {GROUP_PREVIEW.map((m) => (
               <View key={m.name} style={styles.groupRow}>
-                <View style={styles.groupAvatar}>
-                  <Text style={styles.groupAvatarText}>{m.name.charAt(0)}</Text>
+                <View style={[styles.groupAvatar, { backgroundColor: colors.primarySubtle }]}>
+                  <Text style={[typography.bodyStrong, { color: colors.primary }]}>{m.name.charAt(0)}</Text>
                 </View>
-                <Text style={styles.groupName}>{m.name}</Text>
-                <Text style={styles.groupLabel}>{m.label}</Text>
-                <Text style={[styles.groupAmount, { color: m.color }]}>{m.amount}</Text>
+                <Text style={[typography.bodyStrong, { color: colors.text, flex: 1 }]}>{m.name}</Text>
+                <Text style={[typography.caption, { color: colors.textSecondary }]}>{m.label}</Text>
+                <Text style={[typography.bodyStrong, { color: m.color }]}>{m.amount}</Text>
               </View>
             ))}
           </View>
         )}
       </Animated.View>
 
-      {/* Dots + navigation */}
       <View style={styles.footer}>
         <View style={styles.dotsRow}>
           {[1, 2, 3].map((s) => (
@@ -136,17 +153,14 @@ export default function OnboardingScreen() {
               key={s}
               style={[
                 styles.dot,
-                s === currentStep && styles.dotActive,
+                { backgroundColor: colors.borderSubtle },
+                s === currentStep && { backgroundColor: colors.primary, width: 22 },
               ]}
             />
           ))}
         </View>
 
-        <TouchableOpacity style={styles.nextBtn} onPress={next} activeOpacity={0.85}>
-          <Text style={styles.nextBtnText}>
-            {currentStep === 3 ? "Get Started →" : "Next →"}
-          </Text>
-        </TouchableOpacity>
+        <Button title={currentStep === 3 ? 'Get Started →' : 'Next →'} onPress={next} />
       </View>
     </View>
   );
@@ -155,135 +169,69 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0F1117",
-    paddingHorizontal: 28,
+    paddingHorizontal: spacing.xxl,
   },
   skipBtn: {
-    position: "absolute",
+    position: 'absolute',
     top: 56,
-    right: 24,
+    right: spacing.lg,
     zIndex: 10,
-    padding: 8,
-  },
-  skipText: {
-    color: "#8890A0",
-    fontSize: 15,
-    fontWeight: "600",
+    padding: spacing.sm,
   },
   content: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   heroEmoji: {
     fontSize: 80,
-    marginBottom: 28,
-  },
-  title: {
-    color: "#ffffff",
-    fontSize: 28,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 14,
-  },
-  body: {
-    color: "#8890A0",
-    fontSize: 15,
-    textAlign: "center",
-    lineHeight: 23,
-    paddingHorizontal: 12,
+    marginBottom: spacing.xl,
   },
   previewRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: 10,
-    marginTop: 28,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xl,
   },
   categoryChip: {
-    backgroundColor: "#1A1F2E",
     borderWidth: 1,
-    borderColor: "#00C89630",
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  categoryChipText: {
-    color: "#ffffff",
-    fontSize: 13,
-    fontWeight: "600",
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
   },
   groupPreview: {
-    width: "100%",
-    backgroundColor: "#1A1F2E",
-    borderRadius: 16,
+    width: '100%',
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: "#ffffff10",
-    padding: 16,
-    marginTop: 28,
-    gap: 12,
+    padding: spacing.lg,
+    marginTop: spacing.xl,
+    gap: spacing.md,
   },
   groupRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   groupAvatar: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "#00C89625",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  groupAvatarText: {
-    color: "#00C896",
-    fontSize: 14,
-    fontWeight: "bold",
-  },
-  groupName: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "600",
-    flex: 1,
-  },
-  groupLabel: {
-    color: "#8890A0",
-    fontSize: 12,
-  },
-  groupAmount: {
-    fontSize: 14,
-    fontWeight: "bold",
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   footer: {
     paddingBottom: 48,
-    gap: 24,
-    alignItems: "center",
+    gap: spacing.xl,
+    alignItems: 'center',
   },
   dotsRow: {
-    flexDirection: "row",
-    gap: 8,
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
   dot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#2A2F3E",
-  },
-  dotActive: {
-    backgroundColor: "#00C896",
-    width: 22,
-  },
-  nextBtn: {
-    backgroundColor: "#00C896",
-    borderRadius: 14,
-    paddingVertical: 16,
-    width: "100%",
-    alignItems: "center",
-  },
-  nextBtnText: {
-    color: "#0F1117",
-    fontSize: 16,
-    fontWeight: "bold",
   },
 });
