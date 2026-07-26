@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTheme } from '../../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius } from '../../theme';
+import { getExtendedColors, typography, spacing, radius, duration, easing } from '../../theme';
 import { ProgressBar } from '../ui';
 
 interface BudgetCategoryCardProps {
@@ -20,7 +21,10 @@ export function BudgetCategoryCard({ category, icon, spent, limit, percentage, i
   const barColor = isOverBudget ? colors.negative : isNearLimit ? colors.warning : colors.positive;
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>
+    <Animated.View
+      entering={FadeInDown.duration(duration.base).easing(easing.decelerate)}
+      style={[styles.card, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}
+    >
       <View style={styles.header}>
         <View style={styles.left}>
           <View style={[styles.iconCircle, { backgroundColor: colors.neutralBg }]}>
@@ -60,7 +64,7 @@ export function BudgetCategoryCard({ category, icon, spent, limit, percentage, i
             ? `GHS ${(spent - limit).toFixed(2)} over budget`
             : `GHS ${(limit - spent).toFixed(2)} remaining`}
       </Text>
-    </View>
+    </Animated.View>
   );
 }
 

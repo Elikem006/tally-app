@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,9 +8,16 @@ import {
   TouchableOpacity,
   Dimensions,
   RefreshControl,
-  Animated,
-  Easing,
 } from "react-native";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  useAnimatedReaction,
+  withTiming,
+  withDelay,
+  runOnJS,
+  Easing,
+} from "react-native-reanimated";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, router } from "expo-router";
@@ -58,48 +65,41 @@ function spendOf(e: any): number {
 
 /** Number that counts up from 0 to `value` on mount / value change */
 function CountUpText({ value, style }: { value: number; style?: any }) {
-  const anim = useRef(new Animated.Value(0)).current;
+  const progress = useSharedValue(0);
   const [display, setDisplay] = useState("0.00");
 
   useEffect(() => {
-    anim.setValue(0);
-    const id = anim.addListener(({ value: v }) => {
-      const safeVal = (Number(value) || 0) * v;
-      setDisplay(safeVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-    });
-    Animated.timing(anim, {
-      toValue: 1,
-      duration: 900,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-    return () => anim.removeListener(id);
+    progress.value = 0;
+    progress.value = withTiming(1, { duration: 900, easing: Easing.out(Easing.cubic) });
   }, [value]);
+
+  useAnimatedReaction(
+    () => progress.value,
+    (p) => {
+      const safeVal = (Number(value) || 0) * p;
+      runOnJS(setDisplay)(safeVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+    },
+    [value],
+  );
 
   return <Text style={style}>GHS {display}</Text>;
 }
 
 /** Progress bar that animates its fill, with an optional stagger delay */
 function AnimatedBar({ pct, color, delay, trackColor }: { pct: number; color: string; delay: number; trackColor: string }) {
-  const anim = useRef(new Animated.Value(0)).current;
+  const progress = useSharedValue(0);
   const safePct = isNaN(pct) || !isFinite(pct) ? 0 : Math.min(Math.max(pct, 0), 100);
 
   useEffect(() => {
-    anim.setValue(0);
-    Animated.timing(anim, {
-      toValue: 1,
-      duration: 600,
-      delay,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
+    progress.value = 0;
+    progress.value = withDelay(delay, withTiming(safePct, { duration: 600, easing: Easing.out(Easing.cubic) }));
   }, [safePct, delay]);
 
-  const width = anim.interpolate({ inputRange: [0, 1], outputRange: ["0%", `${safePct}%`] });
+  const barStyle = useAnimatedStyle(() => ({ width: `${progress.value}%` }));
 
   return (
     <View style={[styles.barTrack, { backgroundColor: trackColor }]}>
-      <Animated.View style={[styles.barFill, { width, backgroundColor: color }]} />
+      <Animated.View style={[styles.barFill, { backgroundColor: color }, barStyle]} />
     </View>
   );
 }
@@ -108,21 +108,21 @@ function AnimatedBar({ pct, color, delay, trackColor }: { pct: number; color: st
 function CategoryRow({
   cat, amount, pct, index, icon, t,
 }: { cat: string; amount: number; pct: number; index: number; icon: string; t: any }) {
-  const fade = useRef(new Animated.Value(0)).current;
+  const fade = useSharedValue(0);
   const color = getCategoryColor(cat);
 
   useEffect(() => {
-    fade.setValue(0);
-    Animated.timing(fade, {
-      toValue: 1,
-      duration: 350,
-      delay: index * 100,
-      useNativeDriver: true,
-    }).start();
+    fade.value = 0;
+    fade.value = withDelay(index * 100, withTiming(1, { duration: 350 }));
   }, [cat, index]);
 
+  const rowStyle = useAnimatedStyle(() => ({
+    opacity: fade.value,
+    transform: [{ translateY: (1 - fade.value) * 8 }],
+  }));
+
   return (
-    <Animated.View style={[styles.catRow, { opacity: fade, transform: [{ translateY: fade.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }]}>
+    <Animated.View style={[styles.catRow, rowStyle]}>
       <View style={styles.catHeader}>
         <View style={styles.catLeft}>
           <View style={[styles.catEmojiCircle, { backgroundColor: color + "22", borderColor: color + "44" }]}>
@@ -222,9 +222,9 @@ export default function ReportScreen() {
   const [upcomingBills, setUpcomingBills] = useState<any[]>([]);
 
   // Content slide/fade on month change
-  const slideAnim = useRef(new Animated.Value(1)).current;
+  const slideProgress = useSharedValue(1);
   // Chart draw-in reveal
-  const chartAnim = useRef(new Animated.Value(0)).current;
+  const chartProgress = useSharedValue(0);
 
   const getCategoryIcon = useCallback((categoryName: string): string => {
     if (CATEGORY_ICONS[categoryName]) return CATEGORY_ICONS[categoryName];
@@ -248,21 +248,21 @@ export default function ReportScreen() {
   // Animate content in whenever the month changes or loading completes
   useEffect(() => {
     if (!loading) {
-      slideAnim.setValue(0);
-      Animated.timing(slideAnim, {
-        toValue: 1,
-        duration: 320,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
+      slideProgress.value = 0;
+      slideProgress.value = withTiming(1, { duration: 320, easing: Easing.out(Easing.cubic) });
     }
   }, [selectedMonth, selectedYear, loading]);
 
+  const contentStyle = useAnimatedStyle(() => ({
+    opacity: slideProgress.value,
+    transform: [{ translateX: (1 - slideProgress.value) * 24 }],
+  }));
+
   // Chart draw-in on load and whenever data/timeline changes
   useEffect(() => {
-    chartAnim.setValue(0);
+    chartProgress.value = 0;
     setSelectedPoint(null);
-    Animated.timing(chartAnim, { toValue: 1, duration: 800, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start();
+    chartProgress.value = withTiming(1, { duration: 800, easing: Easing.out(Easing.cubic) });
   }, [chartTimeline, expenses, selectedMonth, selectedYear]);
 
   async function fetchReportAndExpenses(month: number, year: number, showSpinner = true) {
@@ -447,7 +447,9 @@ export default function ReportScreen() {
   }, [chartBars]);
 
   // Reveal mask width: covers the chart from the right, shrinking to 0
-  const maskWidth = chartAnim.interpolate({ inputRange: [0, 1], outputRange: [chartWidth, 0] });
+  const maskStyle = useAnimatedStyle(() => ({
+    width: (1 - chartProgress.value) * chartWidth,
+  }));
 
   // ── Hero card stats (memoized) ────────────────────────────────────────────
   const heroStats = useMemo(() => {
@@ -625,12 +627,7 @@ export default function ReportScreen() {
           <ActivityIndicator size="large" color={t.accent} />
         </View>
       ) : (
-        <Animated.View
-          style={{
-            opacity: slideAnim,
-            transform: [{ translateX: slideAnim.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }],
-          }}
-        >
+        <Animated.View style={contentStyle}>
           {/* ── Section 2: Hero spending card ── */}
           <View style={[styles.heroCard, { backgroundColor: t.heroBase }]}>
             {/* Layered circles simulate a gradient (expo-linear-gradient not installed) */}
@@ -777,14 +774,10 @@ export default function ReportScreen() {
 
               {/* Draw-in reveal mask (shrinks from the right) */}
               <Animated.View
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  bottom: 0,
-                  right: 0,
-                  width: maskWidth,
-                  backgroundColor: t.chartBg,
-                }}
+                style={[
+                  { position: "absolute", top: 0, bottom: 0, right: 0, backgroundColor: t.chartBg },
+                  maskStyle,
+                ]}
                 pointerEvents="none"
               />
             </View>

@@ -1,8 +1,11 @@
 import { ReactNode } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import Feather from '@expo/vector-icons/Feather';
 import { useTheme } from '../../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius } from '../../theme';
+import { getExtendedColors, typography, spacing, radius, duration, easing } from '../../theme';
+
+const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
 interface TransactionRowProps {
   leading: ReactNode;
@@ -23,7 +26,8 @@ export function TransactionRow({ leading, title, subtitle, badges, tags, amount,
   const colors = getExtendedColors(theme, baseColors);
 
   return (
-    <TouchableOpacity
+    <AnimatedTouchable
+      entering={FadeInDown.duration(duration.base).easing(easing.decelerate)}
       style={[
         styles.card,
         { backgroundColor: colors.surfaceElevated, borderColor: accentBorder ? `${colors.primary}40` : colors.borderSubtle },
@@ -58,7 +62,7 @@ export function TransactionRow({ leading, title, subtitle, badges, tags, amount,
         <Text style={[typography.bodyStrong, { color: amountColor ?? colors.text }]}>{amount}</Text>
         {onPress && <Feather name="chevron-right" size={18} color={colors.textTertiary} />}
       </View>
-    </TouchableOpacity>
+    </AnimatedTouchable>
   );
 }
 

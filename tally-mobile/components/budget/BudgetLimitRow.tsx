@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { View, Text, TextInput, StyleSheet } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTheme } from '../../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius } from '../../theme';
+import { getExtendedColors, typography, spacing, radius, duration, easing } from '../../theme';
 
 interface BudgetLimitRowProps {
   category: string;
@@ -18,7 +19,10 @@ export function BudgetLimitRow({ category, icon, spent, value, onChangeValue }: 
   const [focused, setFocused] = useState(false);
 
   return (
-    <View style={[styles.capsule, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>
+    <Animated.View
+      entering={FadeInDown.duration(duration.base).easing(easing.decelerate)}
+      style={[styles.capsule, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}
+    >
       <View style={styles.left}>
         <View style={[styles.iconCircle, { backgroundColor: colors.neutralBg }]}>
           <Text style={{ fontSize: 18 }}>{icon}</Text>
@@ -44,7 +48,7 @@ export function BudgetLimitRow({ category, icon, spent, value, onChangeValue }: 
           keyboardType="decimal-pad"
         />
       </View>
-    </View>
+    </Animated.View>
   );
 }
 

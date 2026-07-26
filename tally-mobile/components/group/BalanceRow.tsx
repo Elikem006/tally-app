@@ -1,7 +1,8 @@
 import { View, Text, StyleSheet } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import Avatar from '../Avatar';
 import { useTheme } from '../../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius } from '../../theme';
+import { getExtendedColors, typography, spacing, radius, duration, easing } from '../../theme';
 import { Button } from '../ui';
 
 interface BalanceRowProps {
@@ -21,7 +22,8 @@ export function BalanceRow({ userId, name, avatarData, owes, amount, isCurrentUs
   const tintColor = owes ? colors.negative : colors.positive;
 
   return (
-    <View
+    <Animated.View
+      entering={FadeInDown.duration(duration.base).easing(easing.decelerate)}
       style={[
         styles.row,
         { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle },
@@ -47,7 +49,7 @@ export function BalanceRow({ userId, name, avatarData, owes, amount, isCurrentUs
         </View>
         {onSettleUp && <Button title="💳 Settle Up" onPress={onSettleUp} size="sm" fullWidth={false} />}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 

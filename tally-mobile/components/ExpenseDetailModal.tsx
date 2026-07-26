@@ -1,29 +1,13 @@
-import { useEffect, useRef } from 'react';
-import {
-  Modal,
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Animated,
-  Dimensions,
-  ScrollView,
-} from 'react-native';
+import { useEffect } from 'react';
+import { Modal, View, Text, TouchableOpacity, StyleSheet, Dimensions, ScrollView } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { useTheme } from '../hooks/useTheme';
+import { getExtendedColors, getCategoryColor, typography, spacing, radius, duration, easing } from '../theme';
+import { CategoryIcon, Button } from './ui';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.75;
-
-const CATEGORY_COLORS: { [key: string]: string } = {
-  Food: '#FF6B6B',
-  Transport: '#4ECDC4',
-  Entertainment: '#A855F7',
-  Utilities: '#F59E0B',
-  Other: '#6B7280',
-  Settlement: '#00C896',
-  Shared: '#8B5CF6',
-};
 
 const CATEGORY_ICONS: { [key: string]: string } = {
   Food: '🍔',
@@ -84,287 +68,134 @@ export default function ExpenseDetailModal({
   onDelete,
   customCategories,
 }: ExpenseDetailModalProps) {
-  const { colors, theme } = useTheme();
-  const isDark = theme === 'dark';
+  const { theme, colors: baseColors } = useTheme();
+  const colors = getExtendedColors(theme, baseColors);
 
-  const overlayOpacity = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(SHEET_HEIGHT)).current;
+  const overlayOpacity = useSharedValue(0);
+  const translateY = useSharedValue(SHEET_HEIGHT);
 
   useEffect(() => {
     if (visible) {
-      overlayOpacity.setValue(0);
-      slideAnim.setValue(SHEET_HEIGHT);
-      Animated.parallel([
-        Animated.timing(overlayOpacity, {
-          toValue: 1,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-        Animated.spring(slideAnim, {
-          toValue: 0,
-          useNativeDriver: true,
-          tension: 80,
-          friction: 10,
-        }),
-      ]).start();
+      overlayOpacity.value = 0;
+      translateY.value = SHEET_HEIGHT;
+      overlayOpacity.value = withTiming(1, { duration: duration.base, easing: easing.standard });
+      translateY.value = withSpring(0, { damping: 18, stiffness: 180 });
     }
   }, [visible]);
 
   function handleClose() {
-    Animated.parallel([
-      Animated.timing(overlayOpacity, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: SHEET_HEIGHT,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start(() => onClose());
+    overlayOpacity.value = withTiming(0, { duration: duration.fast, easing: easing.standard });
+    translateY.value = withTiming(SHEET_HEIGHT, { duration: duration.fast, easing: easing.standard }, (finished) => {
+      if (finished) runOnJS(onClose)();
+    });
   }
+
+  const overlayStyle = useAnimatedStyle(() => ({ opacity: overlayOpacity.value }));
+  const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: translateY.value }] }));
 
   if (!expense) return null;
 
-  const isSettlement =
-    expense.paymentMethod === 'SETTLEMENT' || expense.type === 'income';
+  const isSettlement = expense.paymentMethod === 'SETTLEMENT' || expense.type === 'income';
   const isShared = expense.isShared || expense.type === 'shared';
   const amount = Math.abs(parseFloat(expense.amount || '0'));
   const amountStr = `${isSettlement ? '+' : '-'}GHS ${amount.toFixed(2)}`;
-  const amountColor = isSettlement ? '#00C896' : '#E05C5C';
+  const amountColor = isSettlement ? colors.positive : colors.negative;
 
   const { cleanDescription, tags } = parseTagsFromDescription(expense.description);
 
-  // Category info
   const categoryName = expense.category || 'Other';
-  const catColor = CATEGORY_COLORS[categoryName] || '#6B7280';
+  const catColor = getCategoryColor(categoryName);
   let catEmoji = CATEGORY_ICONS[categoryName];
   if (!catEmoji) {
     const custom = customCategories.find((c: any) => c.name === categoryName);
     catEmoji = custom?.emoji || '📦';
   }
 
-  // Recurring
-  const isRecurring =
-    expense.isRecurring === true || expense.isRecurring === 'true';
+  const isRecurring = expense.isRecurring === true || expense.isRecurring === 'true';
   const recurrenceTypeStr = expense.recurrenceType
     ? expense.recurrenceType.charAt(0) + expense.recurrenceType.slice(1).toLowerCase()
     : '';
-  const recurringLabel = isRecurring
-    ? `Yes — ${recurrenceTypeStr || 'Recurring'}`
-    : 'No';
+  const recurringLabel = isRecurring ? `Yes — ${recurrenceTypeStr || 'Recurring'}` : 'No';
 
-  // Payment
   const paymentLabel = getPaymentLabel(expense.paymentMethod);
 
-  // Type label
   let typeLabel = 'Personal';
   if (isSettlement) typeLabel = 'Settlement';
   else if (isShared) {
     typeLabel = expense.groupName ? `Shared (${expense.groupName})` : 'Shared';
   }
 
-  // Theme-aware colours
-  const cardBg = isDark ? '#1A1F2E' : '#FFFFFF';
-  const dividerColor = isDark ? '#ffffff15' : '#EAEBEF';
-  const rowBg = isDark ? '#0F1117' : '#F3F4F6';
-  const labelColor = isDark ? '#8890A0' : '#6B7280';
-  const valueColor = isDark ? '#FFFFFF' : '#111111';
-  const handleColor = isDark ? '#ffffff30' : '#00000020';
-
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      statusBarTranslucent
-      onRequestClose={handleClose}
-    >
-      {/* Dimmed overlay — tap to close */}
-      <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]}>
-        <TouchableOpacity
-          style={StyleSheet.absoluteFillObject}
-          onPress={handleClose}
-          activeOpacity={1}
-        />
+    <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={handleClose}>
+      <Animated.View style={[styles.overlay, { backgroundColor: colors.overlay }, overlayStyle]}>
+        <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={handleClose} activeOpacity={1} />
       </Animated.View>
 
-      {/* Bottom sheet */}
-      <Animated.View
-        style={[
-          styles.sheet,
-          { backgroundColor: cardBg, transform: [{ translateY: slideAnim }] },
-        ]}
-      >
-        {/* Handle bar */}
-        <View style={[styles.handleBar, { backgroundColor: handleColor }]} />
+      <Animated.View style={[styles.sheet, { backgroundColor: colors.surfaceHigh }, sheetStyle]}>
+        <View style={[styles.handleBar, { backgroundColor: colors.borderSubtle }]} />
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-          bounces={false}
-        >
-          {/* Category circle */}
-          <View
-            style={[
-              styles.categoryCircle,
-              {
-                backgroundColor: catColor + '25',
-                borderColor: catColor + '60',
-              },
-            ]}
-          >
-            <Text style={styles.categoryEmoji}>{catEmoji}</Text>
-          </View>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent} bounces={false}>
+          <CategoryIcon category={categoryName} size={80} style={{ marginBottom: spacing.lg }} />
 
-          {/* Amount */}
-          <Text style={[styles.amount, { color: amountColor }]}>
+          <Text style={[typography.displayLarge, { color: amountColor, textAlign: 'center', marginBottom: spacing.sm }]}>
             {amountStr}
           </Text>
 
-          {/* Description */}
           {!!cleanDescription && (
-            <Text style={[styles.description, { color: valueColor }]}>
+            <Text style={[typography.body, { color: colors.text, textAlign: 'center', marginBottom: spacing.lg, paddingHorizontal: spacing.md }]}>
               {cleanDescription}
             </Text>
           )}
 
-          {/* Divider */}
-          <View style={[styles.divider, { backgroundColor: dividerColor }]} />
+          <View style={[styles.divider, { backgroundColor: colors.borderSubtle }]} />
 
-          {/* Detail rows */}
           <View style={styles.detailRows}>
-            <DetailRow
-              label="📅 Date"
-              value={formatDate(expense.date)}
-              labelColor={labelColor}
-              valueColor={valueColor}
-              rowBg={rowBg}
-            />
-            <DetailRow
-              label="🏷️ Category"
-              value={`${catEmoji} ${categoryName}`}
-              labelColor={labelColor}
-              valueColor={valueColor}
-              rowBg={rowBg}
-            />
-            <DetailRow
-              label="💳 Payment"
-              value={paymentLabel}
-              labelColor={labelColor}
-              valueColor={valueColor}
-              rowBg={rowBg}
-            />
-            {expense.isRecurring !== undefined && (
-              <DetailRow
-                label="🔄 Recurring"
-                value={recurringLabel}
-                labelColor={labelColor}
-                valueColor={valueColor}
-                rowBg={rowBg}
-              />
-            )}
-            <DetailRow
-              label="👥 Type"
-              value={typeLabel}
-              labelColor={labelColor}
-              valueColor={valueColor}
-              rowBg={rowBg}
-            />
+            <DetailRow label="📅 Date" value={formatDate(expense.date)} colors={colors} />
+            <DetailRow label="🏷️ Category" value={`${catEmoji} ${categoryName}`} colors={colors} />
+            <DetailRow label="💳 Payment" value={paymentLabel} colors={colors} />
+            {expense.isRecurring !== undefined && <DetailRow label="🔄 Recurring" value={recurringLabel} colors={colors} />}
+            <DetailRow label="👥 Type" value={typeLabel} colors={colors} />
           </View>
 
-          {/* Tags */}
           {tags.length > 0 && (
-            <View style={[styles.tagsSection, { width: '100%' }]}>
-              <Text style={[styles.tagsLabel, { color: labelColor }]}>
-                🏷️ Tags
-              </Text>
+            <View style={{ width: '100%', marginBottom: spacing.lg }}>
+              <Text style={[typography.bodyStrong, { color: colors.textSecondary, marginBottom: spacing.sm, fontSize: 13 }]}>🏷️ Tags</Text>
               <View style={styles.tagsRow}>
                 {tags.map((tag) => (
-                  <View key={tag} style={styles.tagPill}>
-                    <Text style={styles.tagText}>{tag}</Text>
+                  <View key={tag} style={[styles.tagPill, { backgroundColor: `${colors.positive}15`, borderColor: `${colors.positive}40` }]}>
+                    <Text style={[typography.caption, { color: colors.positive, fontFamily: typography.bodyStrong.fontFamily }]}>{tag}</Text>
                   </View>
                 ))}
               </View>
             </View>
           )}
 
-          {/* Action buttons */}
           <View style={styles.actions}>
             {isSettlement ? (
-              // Settlement: no delete, just close
-              <TouchableOpacity
-                style={[styles.closeBtn, { borderColor: dividerColor }]}
-                onPress={handleClose}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.closeBtnText, { color: valueColor }]}>
-                  Close
-                </Text>
-              </TouchableOpacity>
+              <Button title="Close" onPress={handleClose} variant="secondary" />
             ) : isShared ? (
-              // Shared: view group (if groupId available) + close
               <>
                 {!!expense.groupId && (
-                  <TouchableOpacity
-                    style={[
-                      styles.viewGroupBtn,
-                      {
-                        backgroundColor: colors.neutralBg,
-                        borderColor: dividerColor,
-                      },
-                    ]}
+                  <Button
+                    title="👥 View Group"
                     onPress={() => {
                       handleClose();
                       setTimeout(() => {
                         router.push({
                           pathname: '/group-detail',
-                          params: {
-                            groupId: String(expense.groupId),
-                            groupName: expense.groupName || '',
-                          },
+                          params: { groupId: String(expense.groupId), groupName: expense.groupName || '' },
                         });
                       }, 250);
                     }}
-                    activeOpacity={0.8}
-                  >
-                    <Text
-                      style={[styles.viewGroupBtnText, { color: valueColor }]}
-                    >
-                      👥 View Group
-                    </Text>
-                  </TouchableOpacity>
+                    variant="secondary"
+                  />
                 )}
-                <TouchableOpacity
-                  style={[styles.closeBtn, { borderColor: dividerColor }]}
-                  onPress={handleClose}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.closeBtnText, { color: valueColor }]}>
-                    Close
-                  </Text>
-                </TouchableOpacity>
+                <Button title="Close" onPress={handleClose} variant="secondary" />
               </>
             ) : (
-              // Personal: delete + close
               <>
-                <TouchableOpacity
-                  style={styles.deleteBtn}
-                  onPress={() => onDelete(expense.id)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.deleteBtnText}>🗑️  Delete Expense</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.closeBtn, { borderColor: dividerColor }]}
-                  onPress={handleClose}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.closeBtnText, { color: valueColor }]}>
-                    Close
-                  </Text>
-                </TouchableOpacity>
+                <Button title="🗑️  Delete Expense" onPress={() => onDelete(expense.id)} variant="danger" />
+                <Button title="Close" onPress={handleClose} variant="secondary" />
               </>
             )}
           </View>
@@ -374,26 +205,11 @@ export default function ExpenseDetailModal({
   );
 }
 
-function DetailRow({
-  label,
-  value,
-  labelColor,
-  valueColor,
-  rowBg,
-}: {
-  label: string;
-  value: string;
-  labelColor: string;
-  valueColor: string;
-  rowBg: string;
-}) {
+function DetailRow({ label, value, colors }: { label: string; value: string; colors: ReturnType<typeof getExtendedColors> }) {
   return (
-    <View style={[styles.detailRow, { backgroundColor: rowBg }]}>
-      <Text style={[styles.detailLabel, { color: labelColor }]}>{label}</Text>
-      <Text
-        style={[styles.detailValue, { color: valueColor }]}
-        numberOfLines={2}
-      >
+    <View style={[styles.detailRow, { backgroundColor: colors.inputBg }]}>
+      <Text style={[typography.caption, { color: colors.textSecondary, flex: 1 }]}>{label}</Text>
+      <Text style={[typography.bodyStrong, { color: colors.text, maxWidth: '55%', textAlign: 'right', fontSize: 14 }]} numberOfLines={2}>
         {value}
       </Text>
     </View>
@@ -403,7 +219,6 @@ function DetailRow({
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.6)',
   },
   sheet: {
     position: 'absolute',
@@ -411,137 +226,54 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: SHEET_HEIGHT,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 24,
-    paddingTop: 12,
-    paddingBottom: 0,
+    borderTopLeftRadius: radius.xl + 4,
+    borderTopRightRadius: radius.xl + 4,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
   },
   handleBar: {
     width: 40,
     height: 4,
     borderRadius: 2,
     alignSelf: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   scrollContent: {
     alignItems: 'center',
     paddingBottom: 40,
   },
-  categoryCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    marginBottom: 16,
-  },
-  categoryEmoji: {
-    fontSize: 36,
-  },
-  amount: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  description: {
-    fontSize: 16,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 20,
-    paddingHorizontal: 16,
-  },
   divider: {
     width: '100%',
     height: 1,
-    marginBottom: 16,
+    marginBottom: spacing.lg,
   },
   detailRows: {
     width: '100%',
-    gap: 8,
-    marginBottom: 16,
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
-  detailLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    flex: 1,
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    maxWidth: '55%',
-    textAlign: 'right',
-  },
-  tagsSection: {
-    marginBottom: 20,
-  },
-  tagsLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: 8,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md,
   },
   tagsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: spacing.sm,
   },
   tagPill: {
-    backgroundColor: '#00C89615',
     borderWidth: 1,
-    borderColor: '#00C89640',
-    borderRadius: 12,
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-  },
-  tagText: {
-    fontSize: 13,
-    color: '#00C896',
-    fontWeight: '600',
+    borderRadius: radius.sm,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm + 2,
   },
   actions: {
     width: '100%',
-    gap: 10,
-    marginTop: 8,
-  },
-  deleteBtn: {
-    backgroundColor: '#E05C5C',
-    borderRadius: 14,
-    paddingVertical: 15,
-    alignItems: 'center',
-  },
-  deleteBtnText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
-  viewGroupBtn: {
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingVertical: 15,
-    alignItems: 'center',
-  },
-  viewGroupBtnText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  closeBtn: {
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingVertical: 15,
-    alignItems: 'center',
-  },
-  closeBtnText: {
-    fontSize: 15,
-    fontWeight: '600',
+    gap: spacing.sm + 2,
+    marginTop: spacing.xs,
   },
 });

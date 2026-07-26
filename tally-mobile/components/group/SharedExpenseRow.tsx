@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTheme } from '../../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius } from '../../theme';
+import { getExtendedColors, typography, spacing, radius, duration, easing } from '../../theme';
 
 interface SharedExpenseRowProps {
   title: string;
@@ -16,7 +17,10 @@ export function SharedExpenseRow({ title, subtitle, amount, amountColor, settled
   const colors = getExtendedColors(theme, baseColors);
 
   return (
-    <View style={[styles.row, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>
+    <Animated.View
+      entering={FadeInDown.duration(duration.base).easing(easing.decelerate)}
+      style={[styles.row, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}
+    >
       <View style={{ flex: 1, marginRight: spacing.sm + 2 }}>
         <Text style={[typography.bodyStrong, { color: colors.text }]} numberOfLines={2}>{title}</Text>
         <Text style={[typography.label, { color: colors.textSecondary, marginTop: 2 }]}>{subtitle}</Text>
@@ -27,7 +31,7 @@ export function SharedExpenseRow({ title, subtitle, amount, amountColor, settled
           <Text style={[typography.label, { color: colors.positive, marginTop: 2 }]}>Settled ✓</Text>
         )}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 

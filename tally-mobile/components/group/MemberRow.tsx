@@ -1,8 +1,9 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import Feather from '@expo/vector-icons/Feather';
 import Avatar from '../Avatar';
 import { useTheme } from '../../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius } from '../../theme';
+import { getExtendedColors, typography, spacing, radius, duration, easing } from '../../theme';
 
 interface MemberRowProps {
   userId: number | string;
@@ -18,7 +19,10 @@ export function MemberRow({ userId, name, avatarData, isCreator, onRemove }: Mem
   const colors = getExtendedColors(theme, baseColors);
 
   return (
-    <View style={[styles.row, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>
+    <Animated.View
+      entering={FadeInDown.duration(duration.base).easing(easing.decelerate)}
+      style={[styles.row, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}
+    >
       <Avatar userId={userId} name={name} size={40} avatarData={avatarData} style={{ marginRight: spacing.md }} />
       <View style={{ flex: 1 }}>
         <Text style={[typography.bodyStrong, { color: colors.text }]} numberOfLines={1}>
@@ -37,7 +41,7 @@ export function MemberRow({ userId, name, avatarData, isCreator, onRemove }: Mem
           <Feather name="x" size={14} color={colors.negative} />
         </TouchableOpacity>
       )}
-    </View>
+    </Animated.View>
   );
 }
 
