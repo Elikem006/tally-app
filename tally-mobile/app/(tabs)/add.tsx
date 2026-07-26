@@ -841,9 +841,11 @@ export default function AddScreen() {
         amountLabel={successInfo?.amountLabel ?? ''}
         onDone={() => {
           setSuccessInfo(null);
-          // Land back on the dashboard so the expense is visible where it
-          // matters, instead of leaving the user on an emptied form.
-          router.replace('/(tabs)');
+          // push, not replace: still lands on the dashboard so the expense is
+          // visible where it matters, but leaves Add on the stack so system
+          // back returns to it. replace() destroyed it, which made logging
+          // several expenses in one sitting a re-tap each time.
+          router.push('/(tabs)');
         }}
       />
     </KeyboardAvoidingView>

@@ -116,7 +116,11 @@ export function SuccessBurst({ visible, category, label, amountLabel, onDone }: 
   return (
     <Animated.View
       style={[styles.overlay, { backgroundColor: colors.overlay }, shellStyle]}
-      pointerEvents="none"
+      // Absorbs touches for the ~1.2s it is up. Still requires no action to
+      // dismiss, but stops a stray tap reaching the Add button underneath —
+      // which, on an already-cleared form, would fire a bogus "enter an
+      // amount" toast over the top of the confirmation.
+      pointerEvents="auto"
       accessibilityLiveRegion="polite"
       accessibilityLabel={`${label}. ${amountLabel}`}
     >
