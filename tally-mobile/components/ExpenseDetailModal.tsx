@@ -144,7 +144,7 @@ export default function ExpenseDetailModal({
 
           {tags.length > 0 && (
             <View style={{ width: '100%', marginBottom: spacing.lg }}>
-              <Text style={[typography.bodyStrong, { color: colors.textSecondary, marginBottom: spacing.sm, fontSize: 13 }]}>🏷️ Tags</Text>
+              <Text style={[typography.labelStrong, { color: colors.textSecondary, marginBottom: spacing.sm }]}>🏷️ Tags</Text>
               <View style={styles.tagsRow}>
                 {tags.map((tag) => (
                   <View key={tag} style={[styles.tagPill, { backgroundColor: `${colors.positive}15`, borderColor: `${colors.positive}40` }]}>
@@ -194,7 +194,7 @@ function DetailRow({ label, value, colors }: { label: string; value: string; col
   return (
     <View style={[styles.detailRow, { backgroundColor: colors.inputBg }]}>
       <Text style={[typography.caption, { color: colors.textSecondary, flex: 1 }]}>{label}</Text>
-      <Text style={[typography.bodyStrong, { color: colors.text, maxWidth: '55%', textAlign: 'right', fontSize: 14 }]} numberOfLines={2}>
+      <Text style={[typography.bodyCompact, { color: colors.text, maxWidth: '55%', textAlign: 'right' }]} numberOfLines={2}>
         {value}
       </Text>
     </View>

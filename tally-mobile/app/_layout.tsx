@@ -8,7 +8,7 @@ import NetInfo from "@react-native-community/netinfo";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ThemeProvider, useTheme } from "../hooks/useTheme";
-import { useAppFonts } from "../theme";
+import { useAppFonts, typography, FONT_FAMILY } from "../theme";
 import { StatusBar } from "expo-status-bar";
 
 // Must run at module scope, before the first render — holds the native
@@ -98,7 +98,7 @@ function RootLayoutContent() {
           headerShown: false,
           headerStyle: { backgroundColor: colors.background },
           headerTintColor: colors.text,
-          headerTitleStyle: { fontWeight: "bold" },
+          headerTitleStyle: { fontFamily: FONT_FAMILY.bold },
         }}
       >
         <Stack.Screen name="(auth)" />
@@ -179,7 +179,6 @@ const styles = StyleSheet.create({
   },
   offlineText: {
     color: "#ffffff",
-    fontSize: 13,
-    fontWeight: "600",
+    ...typography.labelStrong,
   },
 });

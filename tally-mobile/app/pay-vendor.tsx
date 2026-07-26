@@ -194,7 +194,7 @@ export default function PayVendorScreen() {
               }}
               activeOpacity={0.7}
             >
-              <Text style={[typography.bodyStrong, { color: colors.primary, fontSize: 16 }]}>← Back</Text>
+              <Text style={[typography.bodyStrong, { color: colors.primary }]}>← Back</Text>
             </TouchableOpacity>
 
             <Text style={[typography.display, { color: colors.text, marginBottom: spacing.xs }]} accessibilityRole="header">Pay Vendor via MoMo</Text>

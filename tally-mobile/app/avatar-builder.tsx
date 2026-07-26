@@ -126,11 +126,11 @@ export default function AvatarBuilderScreen() {
 
       <View style={styles.pickerRow}>
         <TouchableOpacity style={[styles.pickerBtn, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]} onPress={() => pickImage(true)}>
-          <Text style={[typography.bodyStrong, { color: colors.text, fontSize: 14, textAlign: 'center' }]}>📷 Take Photo</Text>
+          <Text style={[typography.bodyCompact, { color: colors.text, textAlign: 'center' }]}>📷 Take Photo</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.pickerBtn, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]} onPress={() => pickImage(false)}>
-          <Text style={[typography.bodyStrong, { color: colors.text, fontSize: 14, textAlign: 'center' }]}>🖼️ Choose from Gallery</Text>
+          <Text style={[typography.bodyCompact, { color: colors.text, textAlign: 'center' }]}>🖼️ Choose from Gallery</Text>
         </TouchableOpacity>
       </View>
 

@@ -500,7 +500,7 @@ export default function AddScreen() {
               >
                 <CategoryIcon category={template.category} customEmoji={getCustomEmoji(template.category)} size={32} />
                 <View>
-                  <Text style={[typography.bodyStrong, { color: colors.text, fontSize: 13 }]} numberOfLines={1}>{template.name}</Text>
+                  <Text style={[typography.labelStrong, { color: colors.text }]} numberOfLines={1}>{template.name}</Text>
                   <Text style={[typography.label, { color: colors.textSecondary }]}>GHS {template.amount}</Text>
                 </View>
               </TouchableOpacity>
@@ -516,7 +516,7 @@ export default function AddScreen() {
               }}
               activeOpacity={0.75}
             >
-              <Text style={[typography.bodyStrong, { color: colors.primary, fontSize: 13 }]}>+ Save Template</Text>
+              <Text style={[typography.labelStrong, { color: colors.primary }]}>+ Save Template</Text>
             </TouchableOpacity>
           </ScrollView>
 
@@ -554,7 +554,7 @@ export default function AddScreen() {
                   <CategoryIcon category={cat} size={28} />
                   <Text style={[typography.bodyStrong, { color: colors.text }]}>{cat}</Text>
                 </View>
-                <Text style={[typography.bodyStrong, { color: colors.textSecondary, fontSize: 13 }]}>
+                <Text style={[typography.labelStrong, { color: colors.textSecondary }]}>
                   GHS {Math.abs(spent[cat] || 0).toFixed(2)}
                 </Text>
               </TouchableOpacity>
@@ -575,7 +575,7 @@ export default function AddScreen() {
                   <CategoryIcon category={cat.name} customEmoji={cat.emoji} size={28} />
                   <Text style={[typography.bodyStrong, { color: colors.text }]}>{cat.name}</Text>
                 </View>
-                <Text style={[typography.bodyStrong, { color: colors.textSecondary, fontSize: 13 }]}>
+                <Text style={[typography.labelStrong, { color: colors.textSecondary }]}>
                   GHS {Math.abs(spent[cat.name] || 0).toFixed(2)}
                 </Text>
               </TouchableOpacity>
@@ -586,7 +586,7 @@ export default function AddScreen() {
               onPress={() => router.push('/manage-categories')}
               activeOpacity={0.7}
             >
-              <Text style={[typography.bodyStrong, { color: colors.textSecondary, fontSize: 14 }]}>+ New Category</Text>
+              <Text style={[typography.bodyCompact, { color: colors.textSecondary }]}>+ New Category</Text>
             </TouchableOpacity>
           </View>
 
@@ -687,7 +687,7 @@ export default function AddScreen() {
               returnKeyType="done"
             />
             <TouchableOpacity style={[styles.tagAddButton, { backgroundColor: colors.text }]} onPress={handleAddTag}>
-              <Text style={[typography.bodyStrong, { color: colors.background, fontSize: 14 }]}>Add</Text>
+              <Text style={[typography.bodyCompact, { color: colors.background }]}>Add</Text>
             </TouchableOpacity>
           </View>
 

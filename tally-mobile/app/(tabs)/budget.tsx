@@ -241,7 +241,7 @@ export default function BudgetScreen() {
             onPress={() => handleTabPress(0)}
             activeOpacity={0.7}
           >
-            <Text style={[typography.bodyStrong, { color: activeTab === 0 ? colors.text : colors.textSecondary, fontSize: 14 }]}>
+            <Text style={[typography.bodyCompact, { color: activeTab === 0 ? colors.text : colors.textSecondary }]}>
               Overview
             </Text>
           </TouchableOpacity>
@@ -250,7 +250,7 @@ export default function BudgetScreen() {
             onPress={() => handleTabPress(1)}
             activeOpacity={0.7}
           >
-            <Text style={[typography.bodyStrong, { color: activeTab === 1 ? colors.text : colors.textSecondary, fontSize: 14 }]}>
+            <Text style={[typography.bodyCompact, { color: activeTab === 1 ? colors.text : colors.textSecondary }]}>
               Setup
             </Text>
           </TouchableOpacity>

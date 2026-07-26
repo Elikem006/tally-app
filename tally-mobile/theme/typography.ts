@@ -36,8 +36,10 @@ export const typography: Record<
   | 'headline'
   | 'body'
   | 'bodyStrong'
+  | 'bodyCompact'
   | 'caption'
   | 'label'
+  | 'labelStrong'
   | 'numeric'
   | 'numericLarge',
   TypeStyle
@@ -81,6 +83,14 @@ export const typography: Record<
     fontSize: 15,
     lineHeight: 21,
   },
+  // bodyStrong one step down — dense rows, tab labels, inline actions. Added
+  // because ~20 call sites were writing `[typography.bodyStrong, {fontSize:14}]`
+  // by hand; the scale was missing a semibold step between label and body.
+  bodyCompact: {
+    fontFamily: FONT_FAMILY.semiBold,
+    fontSize: 14,
+    lineHeight: 19,
+  },
   // Timestamps, footnotes, helper text under inputs.
   caption: {
     fontFamily: FONT_FAMILY.medium,
@@ -90,6 +100,13 @@ export const typography: Record<
   // Form labels, tab labels, chip text.
   label: {
     fontFamily: FONT_FAMILY.medium,
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  // The semibold counterpart to `label` — "Forgot password?", segmented-filter
+  // text, small inline links. Same size as label, one weight up.
+  labelStrong: {
+    fontFamily: FONT_FAMILY.semiBold,
     fontSize: 13,
     lineHeight: 17,
   },

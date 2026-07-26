@@ -16,7 +16,7 @@ import { expenseAPI, remindersAPI, budgetAPI, momoAPI, categoriesAPI, groupAPI }
 import { getUserId, getUserName, safeStorage } from '../../services/storage';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius } from '../../theme';
+import { getExtendedColors, typography, spacing, radius, FONT_FAMILY } from '../../theme';
 import { Button, CategoryIcon } from '../../components/ui';
 import { ExpensesHeroCard } from '../../components/home/ExpensesHeroCard';
 import { MomoWalletCard } from '../../components/home/MomoWalletCard';
@@ -645,14 +645,14 @@ export default function HomeScreen() {
           >
             <View style={styles.netCol}>
               <Text style={[typography.label, { color: colors.textSecondary }]}>YOU OWE</Text>
-              <Text style={[typography.bodyStrong, { color: groupNet.youOwe > 0 ? colors.negative : colors.textSecondary, fontSize: 17, marginTop: 3 }]}>
+              <Text style={[typography.headline, { color: groupNet.youOwe > 0 ? colors.negative : colors.textSecondary, marginTop: 3 }]}>
                 GHS {groupNet.youOwe.toFixed(2)}
               </Text>
             </View>
             <View style={[styles.netDivider, { backgroundColor: colors.border }]} />
             <View style={styles.netCol}>
               <Text style={[typography.label, { color: colors.textSecondary }]}>YOU ARE OWED</Text>
-              <Text style={[typography.bodyStrong, { color: groupNet.youAreOwed > 0 ? colors.positive : colors.textSecondary, fontSize: 17, marginTop: 3 }]}>
+              <Text style={[typography.headline, { color: groupNet.youAreOwed > 0 ? colors.positive : colors.textSecondary, marginTop: 3 }]}>
                 GHS {groupNet.youAreOwed.toFixed(2)}
               </Text>
             </View>
@@ -925,8 +925,11 @@ const styles = StyleSheet.create({
   },
   bellBadgeText: {
     color: '#ffffff',
+    // Deliberately below the type scale's smallest step — this is a count
+    // bubble, not running text. Family still comes from the scale so it
+    // renders in Inter rather than the OS font.
     fontSize: 9,
-    fontWeight: 'bold',
+    fontFamily: FONT_FAMILY.bold,
   },
   avatarButton: {
     width: 40,

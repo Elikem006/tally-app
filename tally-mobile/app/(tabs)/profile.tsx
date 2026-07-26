@@ -438,7 +438,7 @@ export default function ProfileScreen() {
           <TouchableOpacity style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]} onPress={() => router.push('/(tabs)/reminders')} activeOpacity={0.8}>
             <View style={styles.actionLeft}>
               <Feather name="bell" size={16} color={colors.text} style={{ marginRight: spacing.sm }} />
-              <Text style={[typography.bodyStrong, { color: colors.text, fontSize: 13 }]}>Bill Reminders</Text>
+              <Text style={[typography.labelStrong, { color: colors.text }]}>Bill Reminders</Text>
             </View>
             <Feather name="chevron-right" size={16} color={colors.textSecondary} />
           </TouchableOpacity>
@@ -446,7 +446,7 @@ export default function ProfileScreen() {
           <TouchableOpacity style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]} onPress={() => router.push('/(tabs)/report')} activeOpacity={0.8}>
             <View style={styles.actionLeft}>
               <Feather name="trending-up" size={16} color={colors.text} style={{ marginRight: spacing.sm }} />
-              <Text style={[typography.bodyStrong, { color: colors.text, fontSize: 13 }]}>Financial Reports</Text>
+              <Text style={[typography.labelStrong, { color: colors.text }]}>Financial Reports</Text>
             </View>
             <Feather name="chevron-right" size={16} color={colors.textSecondary} />
           </TouchableOpacity>
@@ -454,7 +454,7 @@ export default function ProfileScreen() {
           <TouchableOpacity style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]} onPress={() => router.push('/help')} activeOpacity={0.8}>
             <View style={styles.actionLeft}>
               <Feather name="help-circle" size={16} color={colors.text} style={{ marginRight: spacing.sm }} />
-              <Text style={[typography.bodyStrong, { color: colors.text, fontSize: 13 }]}>Help & Support</Text>
+              <Text style={[typography.labelStrong, { color: colors.text }]}>Help & Support</Text>
             </View>
             <Feather name="chevron-right" size={16} color={colors.textSecondary} />
           </TouchableOpacity>
