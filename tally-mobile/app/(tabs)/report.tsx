@@ -12,10 +12,15 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   useAnimatedProps,
+  useAnimatedReaction,
   withTiming,
   withDelay,
+  withSpring,
+  runOnJS,
   FadeInDown,
 } from "react-native-reanimated";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import Feather from "@expo/vector-icons/Feather";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
@@ -41,6 +46,7 @@ import {
   radius,
   duration,
   easing,
+  spring,
   staggerDelay,
 } from "../../theme";
 import {
@@ -470,6 +476,95 @@ export default function ReportScreen() {
     opacity: Math.max(0, chartProgress.value * 1.6 - 0.6),
   }));
 
+  // ── Scrub ─────────────────────────────────────────────────────────────────
+  // Drag across the chart and the readout tracks your finger. Point geometry
+  // is flattened to two number arrays so the gesture worklet closes over
+  // plain values rather than objects.
+  const pointXs = useMemo(() => points.map((p) => p.x), [points]);
+  const pointYs = useMemo(() => points.map((p) => p.y), [points]);
+
+  const scrubOn = useSharedValue(0);
+  const activeIdx = useSharedValue(-1);
+  const trackerX = useSharedValue(0);
+  const trackerY = useSharedValue(0);
+
+  const onScrubMove = useCallback((idx: number) => {
+    // A tick per bucket crossed — the chart feels detented rather than smooth.
+    Haptics.selectionAsync().catch(() => {});
+    setSelectedPoint(idx);
+  }, []);
+
+  useAnimatedReaction(
+    () => activeIdx.value,
+    (idx, prev) => {
+      if (idx < 0 || idx >= pointXs.length) return;
+      trackerX.value = withSpring(pointXs[idx], spring.snappy);
+      trackerY.value = withSpring(pointYs[idx], spring.snappy);
+      if (prev !== null && prev !== idx) runOnJS(onScrubMove)(idx);
+    },
+    [pointXs, pointYs],
+  );
+
+  // Keep a tapped dot and a scrubbed point on the same tracker.
+  useEffect(() => {
+    if (selectedPoint === null || selectedPoint >= pointXs.length) return;
+    activeIdx.value = selectedPoint;
+  }, [selectedPoint, pointXs.length]);
+
+  const scrub = useMemo(
+    () =>
+      Gesture.Pan()
+        // Horizontal intent claims the scrub; vertical still scrolls the page.
+        .activeOffsetX([-8, 8])
+        .failOffsetY([-14, 14])
+        .onBegin((e) => {
+          scrubOn.value = withTiming(1, { duration: duration.fast });
+          let best = 0;
+          let bestD = Number.MAX_VALUE;
+          for (let i = 0; i < pointXs.length; i++) {
+            const d = Math.abs(pointXs[i] - e.x);
+            if (d < bestD) {
+              bestD = d;
+              best = i;
+            }
+          }
+          activeIdx.value = best;
+        })
+        .onUpdate((e) => {
+          let best = 0;
+          let bestD = Number.MAX_VALUE;
+          for (let i = 0; i < pointXs.length; i++) {
+            const d = Math.abs(pointXs[i] - e.x);
+            if (d < bestD) {
+              bestD = d;
+              best = i;
+            }
+          }
+          activeIdx.value = best;
+        })
+        .onFinalize(() => {
+          scrubOn.value = withTiming(0, { duration: duration.base });
+        }),
+    [pointXs],
+  );
+
+  const trackerStyle = useAnimatedStyle(() => ({
+    opacity: scrubOn.value,
+    transform: [{ translateX: trackerX.value }],
+  }));
+
+  const trackerDotStyle = useAnimatedStyle(() => ({
+    opacity: scrubOn.value,
+    transform: [
+      { translateX: trackerX.value - 8 },
+      { translateY: trackerY.value - 8 },
+      { scale: 0.6 + scrubOn.value * 0.4 },
+    ],
+  }));
+
+  const scrubReadoutStyle = useAnimatedStyle(() => ({ opacity: scrubOn.value }));
+  const staticHeaderStyle = useAnimatedStyle(() => ({ opacity: 1 - scrubOn.value }));
+
   // ── Hero card stats (memoized) ────────────────────────────────────────────
   const heroStats = useMemo(() => {
     const currentTotal = parseFloat(report?.currentMonth) || 0;
@@ -752,7 +847,22 @@ export default function ReportScreen() {
           {/* ── Section 3: Interactive spending chart ── */}
           <Card elevation="raised" style={styles.section}>
             <View style={styles.chartHeaderRow}>
-              <SectionHeader title="Spending trend" style={{ marginBottom: 0, flex: 1 }} />
+              <View style={{ flex: 1 }}>
+                <Animated.View style={staticHeaderStyle}>
+                  <SectionHeader title="Spending trend" style={{ marginBottom: 0 }} />
+                </Animated.View>
+                {/* Live readout — takes over the title while a finger is down */}
+                <Animated.View style={[StyleSheet.absoluteFill, scrubReadoutStyle]} pointerEvents="none">
+                  <Text style={[typography.caption, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {selectedPoint !== null && points[selectedPoint] ? points[selectedPoint].dateLabel : ""}
+                  </Text>
+                  <Text style={[typography.bodyStrong, { color: colors.primary }]} numberOfLines={1}>
+                    {selectedPoint !== null && points[selectedPoint]
+                      ? `GHS ${points[selectedPoint].spend.toFixed(2)}`
+                      : ""}
+                  </Text>
+                </Animated.View>
+              </View>
 
               {/* Segmented pill control */}
               <View style={[styles.segment, { backgroundColor: colors.neutralBg }]}>
@@ -779,6 +889,7 @@ export default function ReportScreen() {
               </View>
             </View>
 
+            <GestureDetector gesture={scrub}>
             <View style={{ height: chartHeight, position: "relative", marginTop: spacing.sm }}>
               {/* Grid, area fill, ghost comparison and curve — one SVG */}
               <Svg width={chartWidth} height={chartHeight}>
@@ -861,9 +972,24 @@ export default function ReportScreen() {
                 </Animated.View>
               ))}
 
-              {/* Tooltip — inverse surface so it reads in both themes */}
+              {/* Scrub tracker — vertical rule plus a puck riding the curve */}
+              <Animated.View
+                style={[styles.trackerLine, { backgroundColor: colors.primary }, trackerStyle]}
+                pointerEvents="none"
+              />
+              <Animated.View
+                style={[
+                  styles.trackerDot,
+                  { backgroundColor: colors.primary, borderColor: colors.surfaceElevated },
+                  trackerDotStyle,
+                ]}
+                pointerEvents="none"
+              />
+
+              {/* Tooltip — inverse surface so it reads in both themes. Shown for
+                  a tapped point; the scrub uses the header readout instead. */}
               {selectedPoint !== null && points[selectedPoint] && (
-                <View
+                <Animated.View
                   style={[
                     styles.tooltip,
                     {
@@ -871,6 +997,7 @@ export default function ReportScreen() {
                       left: Math.min(Math.max(points[selectedPoint].x - 55, 0), chartWidth - 110),
                       top: Math.max(points[selectedPoint].y - 52, 0),
                     },
+                    staticHeaderStyle,
                   ]}
                   pointerEvents="none"
                 >
@@ -880,10 +1007,11 @@ export default function ReportScreen() {
                   <Text style={[typography.label, { color: colors.background }]}>
                     GHS {points[selectedPoint].spend.toFixed(2)}
                   </Text>
-                </View>
+                </Animated.View>
               )}
 
             </View>
+            </GestureDetector>
 
             {/* Legend — only shown when there's a comparison to explain */}
             {!!prevCurvePath && (
@@ -1090,6 +1218,17 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   chartDot: { width: 11, height: 11, borderRadius: 6, borderWidth: 2.5 },
+  trackerLine: { position: "absolute", top: 0, bottom: 0, width: 1.5, opacity: 0.45 },
+  trackerDot: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 3,
+    zIndex: 6,
+  },
   tooltip: {
     position: "absolute",
     width: 110,
