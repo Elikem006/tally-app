@@ -1,13 +1,12 @@
-import { useEffect, useRef } from 'react';
-import {
-  Modal,
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Animated,
-} from 'react-native';
+import { ReactNode, useEffect } from 'react';
+import { Modal, View, Text, Pressable, StyleSheet } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import { useTheme } from '../hooks/useTheme';
+import { getExtendedColors } from '../theme';
+import { typography } from '../theme/typography';
+import { spacing, radius } from '../theme/spacing';
+import { duration, easing } from '../theme/motion';
 
 interface ConfirmModalProps {
   visible: boolean;
@@ -18,7 +17,15 @@ interface ConfirmModalProps {
   confirmColor?: string;
   onConfirm: () => void;
   onCancel: () => void;
-  icon?: string;
+  /**
+   * Accepts either a legacy emoji string (existing call sites) or a vector
+   * icon element — kept union-typed so screens can migrate to a proper icon
+   * incrementally without this component needing to change again. New call
+   * sites should pass a ReactNode (e.g. a Feather icon), not an emoji.
+   */
+  icon?: string | ReactNode;
+  /** For single-action acknowledgements (e.g. a success notice) — hides the Cancel button so there's one clear action, not two identically-behaving buttons. */
+  hideCancel?: boolean;
 }
 
 export default function ConfirmModal({
@@ -27,92 +34,85 @@ export default function ConfirmModal({
   message,
   confirmText = 'Confirm',
   cancelText = 'Cancel',
-  confirmColor = '#E05C5C',
+  confirmColor,
   onConfirm,
   onCancel,
   icon,
+  hideCancel = false,
 }: ConfirmModalProps) {
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
+  const { theme, colors: baseColors } = useTheme();
+  const colors = getExtendedColors(theme, baseColors);
+  const resolvedConfirmColor = confirmColor ?? colors.negative;
 
-  const scaleAnim = useRef(new Animated.Value(0.8)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
+  const scale = useSharedValue(0.85);
+  const opacity = useSharedValue(0);
 
   useEffect(() => {
     if (visible) {
-      // Reset to starting values then spring in
-      scaleAnim.setValue(0.8);
-      opacityAnim.setValue(0);
-      Animated.parallel([
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          useNativeDriver: true,
-          tension: 120,
-          friction: 8,
-        }),
-        Animated.timing(opacityAnim, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start();
+      scale.value = 0.85;
+      opacity.value = 0;
+      opacity.value = withTiming(1, { duration: duration.base, easing: easing.standard });
+      scale.value = withSpring(1, { damping: 16, stiffness: 220 });
     }
   }, [visible]);
 
-  /** Fade out then call callback (cancel or confirm). */
   function dismiss(callback: () => void) {
-    Animated.timing(opacityAnim, {
-      toValue: 0,
-      duration: 150,
-      useNativeDriver: true,
-    }).start(() => callback());
+    opacity.value = withTiming(0, { duration: duration.fast, easing: easing.standard }, (finished) => {
+      if (finished) runOnJS(callback)();
+    });
+    scale.value = withTiming(0.92, { duration: duration.fast, easing: easing.standard });
   }
 
-  const cardBg = isDark ? '#1A1F2E' : '#FFFFFF';
-  const overlayBg = isDark ? 'rgba(0,0,0,0.75)' : 'rgba(0,0,0,0.5)';
-  const titleColor = isDark ? '#FFFFFF' : '#111111';
-  const cancelBorderColor = isDark ? '#ffffff20' : '#EAEBEF';
+  function handleConfirm() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    dismiss(onConfirm);
+  }
+
+  const overlayStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  const cardStyle = useAnimatedStyle(() => ({ opacity: opacity.value, transform: [{ scale: scale.value }] }));
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      statusBarTranslucent
-      onRequestClose={() => dismiss(onCancel)}
-    >
-      <View style={[styles.overlay, { backgroundColor: overlayBg }]}>
-        <Animated.View
-          style={[
-            styles.card,
-            { backgroundColor: cardBg },
-            { opacity: opacityAnim, transform: [{ scale: scaleAnim }] },
-          ]}
-        >
-          {!!icon && <Text style={styles.icon}>{icon}</Text>}
+    <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={() => dismiss(onCancel)}>
+      <Animated.View style={[styles.overlay, { backgroundColor: colors.overlay }, overlayStyle]}>
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={() => dismiss(onCancel)} />
 
-          <Text style={[styles.title, { color: titleColor }]}>{title}</Text>
-          <Text style={styles.message}>{message}</Text>
+        <Animated.View style={[styles.card, { backgroundColor: colors.surfaceHigh }, cardStyle]}>
+          {!!icon && (typeof icon === 'string' ? <Text style={styles.iconEmoji}>{icon}</Text> : <View style={styles.iconWrap}>{icon}</View>)}
+
+          <Text style={[typography.title, { color: colors.text, textAlign: 'center', marginBottom: spacing.xs }]}>{title}</Text>
+          <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.xl }]}>
+            {message}
+          </Text>
 
           <View style={styles.buttonRow}>
-            <TouchableOpacity
-              style={[styles.cancelBtn, { borderColor: cancelBorderColor }]}
-              onPress={() => dismiss(onCancel)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.cancelText}>{cancelText}</Text>
-            </TouchableOpacity>
+            {!hideCancel && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.cancelBtn,
+                  { borderColor: colors.border, opacity: pressed ? 0.7 : 1 },
+                ]}
+                onPress={() => dismiss(onCancel)}
+                accessibilityRole="button"
+                accessibilityLabel={cancelText}
+              >
+                <Text style={[typography.bodyStrong, { color: colors.textSecondary }]}>{cancelText}</Text>
+              </Pressable>
+            )}
 
-            <TouchableOpacity
-              style={[styles.confirmBtn, { backgroundColor: confirmColor }]}
-              onPress={() => dismiss(onConfirm)}
-              activeOpacity={0.8}
+            <Pressable
+              style={({ pressed }) => [
+                styles.confirmBtn,
+                { backgroundColor: resolvedConfirmColor, opacity: pressed ? 0.85 : 1 },
+              ]}
+              onPress={handleConfirm}
+              accessibilityRole="button"
+              accessibilityLabel={confirmText}
             >
-              <Text style={styles.confirmText}>{confirmText}</Text>
-            </TouchableOpacity>
+              <Text style={[typography.bodyStrong, { color: '#FFFFFF' }]}>{confirmText}</Text>
+            </Pressable>
           </View>
         </Animated.View>
-      </View>
+      </Animated.View>
     </Modal>
   );
 }
@@ -122,59 +122,38 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 32,
+    padding: spacing.xxl,
   },
   card: {
-    borderRadius: 24,
-    padding: 28,
+    borderRadius: radius.xl,
+    padding: spacing.xl + 4,
     width: '100%',
     maxWidth: 340,
   },
-  icon: {
+  iconWrap: {
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  iconEmoji: {
     fontSize: 40,
     textAlign: 'center',
-    marginBottom: 12,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  message: {
-    fontSize: 14,
-    color: '#8890A0',
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 24,
+    marginBottom: spacing.md,
   },
   buttonRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing.md,
   },
   cancelBtn: {
     flex: 1,
     borderWidth: 1,
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md + 2,
     alignItems: 'center',
-  },
-  cancelText: {
-    color: '#8890A0',
-    fontSize: 15,
-    fontWeight: '600',
-    textAlign: 'center',
   },
   confirmBtn: {
     flex: 1,
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md + 2,
     alignItems: 'center',
-  },
-  confirmText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: 'bold',
-    textAlign: 'center',
   },
 });
