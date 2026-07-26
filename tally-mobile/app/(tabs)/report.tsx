@@ -18,6 +18,7 @@ import Svg, { Circle } from "react-native-svg";
 import { expenseAPI, categoriesAPI, remindersAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
 import { useTheme } from "../../hooks/useTheme";
+import { getExtendedColors, getCategoryColor } from "../../theme";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -32,30 +33,6 @@ const CATEGORY_ICONS: { [key: string]: string } = {
   Shared: "👥",
   Settlement: "💚",
 };
-
-// Consistent category colors across the app
-const CATEGORY_COLORS: { [key: string]: string } = {
-  Food: "#FF6B6B",
-  Transport: "#4ECDC4",
-  Entertainment: "#A855F7",
-  Utilities: "#F59E0B",
-  Other: "#6B7280",
-};
-
-// Palette used to derive stable colors for custom categories
-const HASH_PALETTE = [
-  "#EF4444", "#F97316", "#EAB308", "#22C55E", "#14B8A6",
-  "#0EA5E9", "#6366F1", "#8B5CF6", "#EC4899", "#F43F5E",
-];
-
-function categoryColor(name: string): string {
-  if (CATEGORY_COLORS[name]) return CATEGORY_COLORS[name];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-  }
-  return HASH_PALETTE[hash % HASH_PALETTE.length];
-}
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -132,7 +109,7 @@ function CategoryRow({
   cat, amount, pct, index, icon, t,
 }: { cat: string; amount: number; pct: number; index: number; icon: string; t: any }) {
   const fade = useRef(new Animated.Value(0)).current;
-  const color = categoryColor(cat);
+  const color = getCategoryColor(cat);
 
   useEffect(() => {
     fade.setValue(0);
@@ -198,49 +175,34 @@ function Donut({ pct, color, size, trackColor, t }: { pct: number; color: string
 
 export default function ReportScreen() {
   const insets = useSafeAreaInsets();
-  const { theme } = useTheme();
+  const { theme, colors: baseColors } = useTheme();
+  const colors = getExtendedColors(theme, baseColors);
   const isDark = theme === "dark";
 
-  // Comprehensive theme object applied to every element
-  const t = useMemo(() => (isDark ? {
-    bg: "#0F1117",
-    card: "#1A1F2E",
-    cardBorder: "#ffffff10",
-    text: "#ffffff",
-    textSecondary: "#8890A0",
-    accent: "#A78BFA",
-    chartBg: "#1A1F2E",
-    segmentBg: "#0F1117",
-    segmentActive: "#A78BFA",
-    segmentActiveText: "#000000",
-    segmentText: "#8890A0",
-    heroBase: "#203A43",
-    heroCircleA: "#0F2027",
-    heroCircleB: "#2C5364",
-    heroText: "#ffffff",
-    gridLine: "#ffffff12",
-    up: "#F87171",
-    down: "#34D399",
-  } : {
-    bg: "#F5F7FA",
-    card: "#FFFFFF",
-    cardBorder: "#E5E7EB",
-    text: "#1A1A2E",
-    textSecondary: "#6B7280",
-    accent: "#8B5CF6",
-    chartBg: "#FFFFFF",
-    segmentBg: "#E5E7EB",
-    segmentActive: "#8B5CF6",
-    segmentActiveText: "#FFFFFF",
-    segmentText: "#6B7280",
-    heroBase: "#E8F8F3",
-    heroCircleA: "#F0FFF8",
-    heroCircleB: "#D2F5E8",
-    heroText: "#1A1A2E",
-    gridLine: "#E5E7EB",
-    up: "#EF4444",
-    down: "#059669",
-  }), [isDark]);
+  // Comprehensive theme object applied to every element — sourced from the
+  // shared token palette so this screen can't drift out of sync with the
+  // rest of the app; only the decorative hero-card gradient (no shared
+  // equivalent) stays as a local literal.
+  const t = useMemo(() => ({
+    bg: colors.background,
+    card: colors.surfaceElevated,
+    cardBorder: colors.borderSubtle,
+    text: colors.text,
+    textSecondary: colors.textSecondary,
+    accent: colors.primary,
+    chartBg: colors.surfaceElevated,
+    segmentBg: colors.neutralBg,
+    segmentActive: colors.primary,
+    segmentActiveText: isDark ? "#000000" : "#FFFFFF",
+    segmentText: colors.textSecondary,
+    heroBase: isDark ? "#203A43" : "#E8F8F3",
+    heroCircleA: isDark ? "#0F2027" : "#F0FFF8",
+    heroCircleB: isDark ? "#2C5364" : "#D2F5E8",
+    heroText: isDark ? "#ffffff" : "#1A1A2E",
+    gridLine: colors.borderSubtle,
+    up: colors.negative,
+    down: colors.positive,
+  }), [colors, isDark]);
 
   const now = new Date();
   const todayMonth = now.getMonth();
@@ -589,9 +551,9 @@ export default function ReportScreen() {
   }, [expenses, report, budgetPerformance, upcomingBills, selectedMonth, selectedYear]);
 
   function budgetColor(pct: number) {
-    if (pct >= 100) return "#EF4444";
-    if (pct >= 80) return "#F59E0B";
-    return "#34D399";
+    if (pct >= 100) return colors.negative;
+    if (pct >= 80) return colors.warning;
+    return colors.positive;
   }
 
   // ── Error state ───────────────────────────────────────────────────────────
@@ -902,10 +864,10 @@ export default function ReportScreen() {
                   const pct = parseFloat(item.percentage) || 0;
                   const color = budgetColor(pct);
                   const status = pct >= 100
-                    ? { label: "Over Budget 🚨", color: "#EF4444" }
+                    ? { label: "Over Budget 🚨", color: colors.negative }
                     : pct >= 80
-                    ? { label: "Near Limit ⚠️", color: "#F59E0B" }
-                    : { label: "On Track ✓", color: "#34D399" };
+                    ? { label: "Near Limit ⚠️", color: colors.warning }
+                    : { label: "On Track ✓", color: colors.positive };
                   return (
                     <View key={item.category} style={[styles.budgetCard, { backgroundColor: t.segmentBg, borderColor: t.cardBorder }]}>
                       <Text style={[styles.budgetCardTitle, { color: t.text }]} numberOfLines={1}>

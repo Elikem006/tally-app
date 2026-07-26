@@ -1,69 +1,58 @@
-import { useState, useCallback } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  RefreshControl,
-  ScrollView,
-} from "react-native";
-import { useFocusEffect, router } from "expo-router";
+import { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, ScrollView } from 'react-native';
+import { useFocusEffect, router } from 'expo-router';
+import Feather from '@expo/vector-icons/Feather';
 import {
   getHistory,
   markAllRead,
   deleteItem,
   clearHistory,
   HistoryNotif,
-} from "../services/notificationHistory";
+} from '../services/notificationHistory';
+import { useTheme } from '../hooks/useTheme';
+import { getExtendedColors, typography, spacing, radius } from '../theme';
+import { useConfirmModal } from '../hooks/useConfirmModal';
 
-// ── Config per notification type ──────────────────────────────────────────────
-const TYPE_CONFIG: Record<
-  HistoryNotif["type"],
-  { icon: string; color: string; bg: string }
-> = {
-  budget_over: { icon: "🚨", color: "#E05C5C", bg: "#E05C5C18" },
-  budget_near: { icon: "⚠️", color: "#F7A84F", bg: "#F7A84F18" },
-  expense_added: { icon: "💰", color: "#00C896", bg: "#00C89618" },
-  income_added: { icon: "📈", color: "#10B981", bg: "#10B98118" },
-  reminder_due: { icon: "⏰", color: "#60A5FA", bg: "#60A5FA18" },
-  shared_expense: { icon: "💸", color: "#A78BFA", bg: "#A78BFA18" },
-  settle_up: { icon: "✅", color: "#00C896", bg: "#00C89618" },
-  monthly_report: { icon: "📊", color: "#FFC107", bg: "#FFC10718" },
+// ── Config per notification type (deliberately theme-independent — these are
+// stable category colors, not affected by light/dark) ─────────────────────
+const TYPE_CONFIG: Record<HistoryNotif['type'], { icon: string; color: string; bg: string }> = {
+  budget_over: { icon: '🚨', color: '#E05C5C', bg: '#E05C5C18' },
+  budget_near: { icon: '⚠️', color: '#F7A84F', bg: '#F7A84F18' },
+  expense_added: { icon: '💰', color: '#00C896', bg: '#00C89618' },
+  income_added: { icon: '📈', color: '#10B981', bg: '#10B98118' },
+  reminder_due: { icon: '⏰', color: '#60A5FA', bg: '#60A5FA18' },
+  shared_expense: { icon: '💸', color: '#A78BFA', bg: '#A78BFA18' },
+  settle_up: { icon: '✅', color: '#00C896', bg: '#00C89618' },
+  monthly_report: { icon: '📊', color: '#FFC107', bg: '#FFC10718' },
 };
 
-// ── Relative time label ───────────────────────────────────────────────────────
 function relativeTime(ts: number): string {
   const diffMs = Date.now() - ts;
   const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return "just now";
+  if (diffMin < 1) return 'just now';
   if (diffMin < 60) return `${diffMin}m ago`;
   const diffHr = Math.floor(diffMin / 60);
   if (diffHr < 24) return `${diffHr}h ago`;
   const diffDay = Math.floor(diffHr / 24);
-  if (diffDay === 1) return "yesterday";
+  if (diffDay === 1) return 'yesterday';
   if (diffDay < 7) return `${diffDay}d ago`;
-  return new Date(ts).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  return new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-// ── Day label for section headers ─────────────────────────────────────────────
 function dayKey(ts: number): string {
   const d = new Date(ts);
   const t = new Date();
-  if (d.toDateString() === t.toDateString()) return "Today";
+  if (d.toDateString() === t.toDateString()) return 'Today';
   const y = new Date(t); y.setDate(t.getDate() - 1);
-  if (d.toDateString() === y.toDateString()) return "Yesterday";
-  return d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" });
+  if (d.toDateString() === y.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
 }
 
-// ── Grouped list item type ────────────────────────────────────────────────────
 type ListItem = { _isHeader: true; label: string } | (HistoryNotif & { _isHeader: false });
 
 function buildSections(items: HistoryNotif[]): ListItem[] {
   const result: ListItem[] = [];
-  let lastKey = "";
+  let lastKey = '';
   for (const n of items) {
     const k = dayKey(n.timestamp);
     if (k !== lastKey) {
@@ -75,21 +64,22 @@ function buildSections(items: HistoryNotif[]): ListItem[] {
   return result;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ── Navigation helper ─────────────────────────────────────────────────────────
-const SCREEN_BY_TYPE: Record<HistoryNotif["type"], string> = {
-  budget_over: "budget",
-  budget_near: "budget",
-  expense_added: "history",
-  income_added: "history",
-  reminder_due: "reminders",
-  shared_expense: "groups",
-  settle_up: "groups",
-  monthly_report: "report",
+const SCREEN_BY_TYPE: Record<HistoryNotif['type'], string> = {
+  budget_over: 'budget',
+  budget_near: 'budget',
+  expense_added: 'history',
+  income_added: 'history',
+  reminder_due: 'reminders',
+  shared_expense: 'groups',
+  settle_up: 'groups',
+  monthly_report: 'report',
 };
 
 export default function NotificationHistoryScreen() {
+  const { theme, colors: baseColors } = useTheme();
+  const colors = getExtendedColors(theme, baseColors);
+  const { showConfirm, ConfirmModalComponent } = useConfirmModal();
+
   const [items, setItems] = useState<HistoryNotif[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -113,7 +103,6 @@ export default function NotificationHistoryScreen() {
         const list = await getHistory();
         if (active) setItems(list);
         setLoading(false);
-        // Mark everything read now that user is viewing
         await markAllRead();
       })();
       return () => { active = false; };
@@ -126,62 +115,58 @@ export default function NotificationHistoryScreen() {
   }
 
   function handleNotificationPress(notification: HistoryNotif) {
-    // Prefer stored data field (new items); fall back to type-based routing (legacy)
     const screen = notification.data?.screen ?? SCREEN_BY_TYPE[notification.type];
     if (!screen) return;
 
-    if (screen === "group-detail" && notification.data?.groupId) {
-      router.push({ pathname: "/group-detail", params: { groupId: notification.data.groupId } });
-    } else if (screen === "budget-overview" || screen === "budget") {
-      // budget-overview was merged into the Budget screen in the redesign;
-      // legacy stored notifications may still carry the old screen name
-      router.push("/(tabs)/budget");
-    } else if (screen === "reminders") {
-      router.push("/(tabs)/reminders");
-    } else if (screen === "report") {
-      router.push("/(tabs)/report");
-    } else if (screen === "groups") {
-      router.push("/(tabs)/groups");
-    } else if (screen === "history") {
-      router.push("/(tabs)/history");
+    if (screen === 'group-detail' && notification.data?.groupId) {
+      router.push({ pathname: '/group-detail', params: { groupId: notification.data.groupId } });
+    } else if (screen === 'budget-overview' || screen === 'budget') {
+      router.push('/(tabs)/budget');
+    } else if (screen === 'reminders') {
+      router.push('/(tabs)/reminders');
+    } else if (screen === 'report') {
+      router.push('/(tabs)/report');
+    } else if (screen === 'groups') {
+      router.push('/(tabs)/groups');
+    } else if (screen === 'history') {
+      router.push('/(tabs)/history');
     }
   }
 
-  async function handleClearAll() {
-    Alert.alert("Clear all", "Remove all notification history?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Clear",
-        style: "destructive",
-        onPress: async () => {
-          await clearHistory();
-          setItems([]);
-        },
+  function handleClearAll() {
+    showConfirm({
+      icon: '🗑️',
+      title: 'Clear All',
+      message: 'Remove all notification history? This cannot be undone.',
+      confirmText: 'Clear',
+      confirmColor: colors.negative,
+      onConfirm: async () => {
+        await clearHistory();
+        setItems([]);
       },
-    ]);
+    });
   }
 
   const listData = buildSections(items);
 
   if (loading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#00C896" />
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { borderBottomColor: colors.borderSubtle }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
-          <Text style={styles.backArrow}>‹</Text>
+          <Feather name="chevron-left" size={26} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.title}>Notifications</Text>
+        <Text style={[typography.bodyStrong, { color: colors.text }]}>Notifications</Text>
         {items.length > 0 ? (
           <TouchableOpacity onPress={handleClearAll} style={styles.clearBtn} activeOpacity={0.7}>
-            <Text style={styles.clearText}>Clear all</Text>
+            <Text style={[typography.caption, { color: colors.negative, fontFamily: typography.bodyStrong.fontFamily }]}>Clear all</Text>
           </TouchableOpacity>
         ) : (
           <View style={{ width: 64 }} />
@@ -191,27 +176,23 @@ export default function NotificationHistoryScreen() {
       {items.length === 0 ? (
         <ScrollView
           contentContainerStyle={styles.empty}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
         >
-          <Text style={styles.emptyIcon}>🔔</Text>
-          <Text style={styles.emptyTitle}>All caught up</Text>
-          <Text style={styles.emptyBody}>
+          <Text style={{ fontSize: 52 }}>🔔</Text>
+          <Text style={[typography.headline, { color: colors.text }]}>All caught up</Text>
+          <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center' }]}>
             Budget alerts, expense saves, and reminders will appear here.
           </Text>
         </ScrollView>
       ) : (
         <FlatList
           data={listData}
-          keyExtractor={(item, i) =>
-            item._isHeader ? `hdr-${i}` : item.id
-          }
-          contentContainerStyle={{ paddingBottom: 32, paddingTop: 8 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00C896" colors={["#00C896"]} />}
+          keyExtractor={(item, i) => (item._isHeader ? `hdr-${i}` : item.id)}
+          contentContainerStyle={{ paddingBottom: 32, paddingTop: spacing.sm }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
           renderItem={({ item }) => {
             if (item._isHeader) {
-              return (
-                <Text style={styles.sectionLabel}>{item.label}</Text>
-              );
+              return <Text style={[typography.label, { color: colors.textSecondary, paddingHorizontal: spacing.lg, paddingTop: spacing.xl, paddingBottom: spacing.sm }]}>{item.label}</Text>;
             }
             const cfg = TYPE_CONFIG[item.type];
             return (
@@ -220,118 +201,77 @@ export default function NotificationHistoryScreen() {
                 onPress={() => handleNotificationPress(item)}
                 style={[
                   styles.card,
-                  { backgroundColor: cfg.bg },
-                  !item.read && styles.cardUnread,
+                  { backgroundColor: cfg.bg, borderColor: item.read ? 'transparent' : colors.borderSubtle },
                 ]}
               >
-                <View style={[styles.iconCircle, { backgroundColor: cfg.color + "25" }]}>
-                  <Text style={styles.iconText}>{cfg.icon}</Text>
+                <View style={[styles.iconCircle, { backgroundColor: `${cfg.color}25` }]}>
+                  <Text style={{ fontSize: 20 }}>{cfg.icon}</Text>
                 </View>
-                <View style={styles.cardBody}>
+                <View style={{ flex: 1 }}>
                   <View style={styles.cardTop}>
-                    <Text style={[styles.cardTitle, !item.read && styles.cardTitleUnread]}>
+                    <Text style={[typography.bodyStrong, { color: item.read ? colors.textSecondary : colors.text, flex: 1 }]}>
                       {item.title}
                     </Text>
-                    {!item.read && <View style={styles.unreadDot} />}
+                    {!item.read && <View style={[styles.unreadDot, { backgroundColor: colors.primary }]} />}
                   </View>
-                  <Text style={styles.cardDesc}>{item.body}</Text>
-                  <Text style={styles.cardTime}>{relativeTime(item.timestamp)}</Text>
+                  <Text style={[typography.caption, { color: colors.textSecondary, lineHeight: 18, marginBottom: spacing.xs }]}>{item.body}</Text>
+                  <Text style={[typography.label, { color: colors.textTertiary }]}>{relativeTime(item.timestamp)}</Text>
                 </View>
-                <Text style={styles.chevron}>›</Text>
-                <TouchableOpacity
-                  style={styles.deleteBtn}
-                  onPress={() => handleDelete(item.id)}
-                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.deleteX}>✕</Text>
+                <Feather name="chevron-right" size={18} color={colors.textSecondary} style={{ alignSelf: 'center', marginHorizontal: spacing.xs }} />
+                <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item.id)} hitSlop={12} activeOpacity={0.7}>
+                  <Feather name="x" size={14} color={colors.textTertiary} />
                 </TouchableOpacity>
               </TouchableOpacity>
             );
           }}
         />
       )}
+
+      {ConfirmModalComponent}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0F1117" },
-  centered: { flex: 1, backgroundColor: "#0F1117", alignItems: "center", justifyContent: "center" },
-
-  // Header
+  container: { flex: 1 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
     paddingTop: 56,
-    paddingBottom: 12,
+    paddingBottom: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: "#ffffff10",
   },
-  backBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
-  backArrow: { fontSize: 32, color: "#ffffff", lineHeight: 36, marginTop: -4 },
-  title: { fontSize: 18, fontWeight: "700", color: "#ffffff" },
+  backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   clearBtn: { paddingHorizontal: 4 },
-  clearText: { fontSize: 13, color: "#E05C5C", fontWeight: "600" },
-
-  // Section label
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#8890A0",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 8,
-  },
-
-  // Notification card
   card: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginHorizontal: 16,
-    marginBottom: 10,
-    borderRadius: 14,
-    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    borderRadius: radius.md,
+    padding: spacing.sm + 2,
     borderWidth: 1,
-    borderColor: "#ffffff08",
-  },
-  cardUnread: {
-    borderColor: "#ffffff20",
   },
   iconCircle: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.sm + 2,
     flexShrink: 0,
   },
-  iconText: { fontSize: 20 },
-  cardBody: { flex: 1 },
-  cardTop: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 },
-  cardTitle: { fontSize: 14, fontWeight: "600", color: "#8890A0", flex: 1 },
-  cardTitleUnread: { color: "#ffffff" },
-  unreadDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#00C896" },
-  cardDesc: { fontSize: 13, color: "#8890A0", lineHeight: 18, marginBottom: 4 },
-  cardTime: { fontSize: 11, color: "#6B7280" },
-  chevron: { fontSize: 20, color: "#8890A0", paddingHorizontal: 4, alignSelf: "center" },
-  deleteBtn: { paddingLeft: 4, paddingTop: 2 },
-  deleteX: { fontSize: 14, color: "#6B7280" },
-
-  // Empty state
+  cardTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: 2 },
+  unreadDot: { width: 7, height: 7, borderRadius: 4 },
+  deleteBtn: { paddingLeft: spacing.xs, paddingTop: 2 },
   empty: {
     flexGrow: 1,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 40,
-    gap: 12,
+    gap: spacing.md,
   },
-  emptyIcon: { fontSize: 52 },
-  emptyTitle: { fontSize: 18, fontWeight: "700", color: "#ffffff" },
-  emptyBody: { fontSize: 14, color: "#8890A0", textAlign: "center", lineHeight: 20 },
 });

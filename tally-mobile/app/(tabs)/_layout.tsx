@@ -4,6 +4,7 @@ import { currentUser } from "../../services/storage";
 import { TouchableOpacity, StyleSheet, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useTheme } from "../../hooks/useTheme";
+import { radius } from "../../theme";
 
 export default function TabLayout() {
   const isLoggedIn = currentUser.token !== "";
@@ -120,10 +121,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: 56,
     height: 56,
-    borderRadius: 28,
-    backgroundColor: '#111111',
+    borderRadius: radius.pill,
     borderWidth: 3,
-    borderColor: '#ffffff',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
@@ -140,7 +139,6 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#111111',
     position: 'absolute',
     bottom: 0,
   },

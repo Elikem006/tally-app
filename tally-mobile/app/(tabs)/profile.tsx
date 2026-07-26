@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   Image,
   ScrollView,
   Modal,
@@ -24,7 +23,10 @@ import Avatar from '../../components/Avatar';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import { useConfirmModal } from '../../hooks/useConfirmModal';
+import { useActionSheet } from '../../hooks/useActionSheet';
 import { useTheme } from '../../hooks/useTheme';
+import { getExtendedColors, typography, spacing, radius } from '../../theme';
+import { Card, Button, Input } from '../../components/ui';
 
 const CATEGORY_ICONS: { [key: string]: string } = {
   Food: '🍔',
@@ -36,31 +38,30 @@ const CATEGORY_ICONS: { [key: string]: string } = {
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { themeMode, setThemeMode, colors, theme } = useTheme();
+  const { themeMode, setThemeMode, theme, colors: baseColors } = useTheme();
+  const colors = getExtendedColors(theme, baseColors);
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [showUrlModal, setShowUrlModal] = useState(false);
   const [inputUrl, setInputUrl] = useState('');
 
-  // Stats States
   const [stats, setStats] = useState<any>(null);
   const [loadingStats, setLoadingStats] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Avatar + Phone from main branch
   const [avatarData, setAvatarData] = useState<string | null>(currentUser.avatarData || null);
-  const [phoneNumber, setPhoneNumber] = useState(currentUser.phoneNumber || "");
+  const [phoneNumber, setPhoneNumber] = useState(currentUser.phoneNumber || '');
   const [editingPhone, setEditingPhone] = useState(false);
   const [savingPhone, setSavingPhone] = useState(false);
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
   const { showConfirm, ConfirmModalComponent } = useConfirmModal();
+  const { showActionSheet, ActionSheetComponent } = useActionSheet();
 
   useEffect(() => {
     loadProfileImage();
     fetchStats(true);
   }, []);
 
-  // Refresh avatar state every time this screen comes into focus
   useFocusEffect(
     useCallback(() => {
       setAvatarData(currentUser.avatarData || null);
@@ -84,9 +85,9 @@ export default function ProfileScreen() {
     try {
       await safeStorage.setItem(`profile_image_${currentUser.userId}`, uri);
       setProfileImage(uri);
-      showToast("Profile image updated!", "success");
+      showToast('Profile image updated!', 'success');
     } catch {
-      showToast("Could not save profile image", "error");
+      showToast('Could not save profile image', 'error');
     }
   }
 
@@ -103,51 +104,46 @@ export default function ProfileScreen() {
       const expenses: any[] = expensesRes.data || [];
       const report = reportRes.data || {};
 
-      const isSettlement = (e: any) => e.paymentMethod === "SETTLEMENT";
+      const isSettlement = (e: any) => e.paymentMethod === 'SETTLEMENT';
       const totalExpenses = expenses.filter((e) => !isSettlement(e)).length;
-      // Spending only — settlements are income and amounts can be stored signed
       const totalSpent = expenses
         .filter((e) => !isSettlement(e))
-        .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || "0")), 0);
+        .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || '0')), 0);
 
       const now = new Date();
-      const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-      // Net summary (Mint-style): income (settlements received) vs spending this month
       const monthIncome = expenses
         .filter((e) => isSettlement(e) && e.date?.startsWith(monthPrefix))
-        .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || "0")), 0);
+        .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || '0')), 0);
 
-      // Spending streaks from unique expense dates
       const dateSet = new Set(expenses.filter((e) => !isSettlement(e)).map((e) => e.date));
       const key = (dt: Date) =>
-        `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+        `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
       let streak = 0;
       const cursor = new Date();
-      if (!dateSet.has(key(cursor))) cursor.setDate(cursor.getDate() - 1); // streak may end yesterday
+      if (!dateSet.has(key(cursor))) cursor.setDate(cursor.getDate() - 1);
       while (dateSet.has(key(cursor))) {
         streak++;
         cursor.setDate(cursor.getDate() - 1);
       }
       const daysThisMonth = [...dateSet].filter(
-        (d) => typeof d === "string" && (d as string).startsWith(monthPrefix),
+        (d) => typeof d === 'string' && (d as string).startsWith(monthPrefix),
       ).length;
 
-      // Spending personality (Cowrywise-style) from budget adherence
       const perf: any[] = report.budgetPerformance || [];
-      let personality = { label: "🌱 Getting Started", desc: "Set budgets to unlock your spending personality" };
+      let personality = { label: '🌱 Getting Started', desc: 'Set budgets to unlock your spending personality' };
       if (perf.length > 0) {
         const onTrack = perf.filter((b) => (parseFloat(b.percentage) || 0) < 80).length;
         const ratio = onTrack / perf.length;
         personality =
           ratio >= 0.8
-            ? { label: "🦉 The Saver", desc: "You stay well within your budgets" }
+            ? { label: '🦉 The Saver', desc: 'You stay well within your budgets' }
             : ratio >= 0.5
-            ? { label: "⚖️ The Balancer", desc: "Mostly on budget, with the occasional splurge" }
-            : { label: "🎢 The Spender", desc: "Your budgets are working overtime" };
+              ? { label: '⚖️ The Balancer', desc: 'Mostly on budget, with the occasional splurge' }
+              : { label: '🎢 The Spender', desc: 'Your budgets are working overtime' };
       }
 
-      // Most used category
       const categoryCounts: { [key: string]: number } = {};
       for (const e of expenses) {
         categoryCounts[e.category] = (categoryCounts[e.category] || 0) + 1;
@@ -166,7 +162,7 @@ export default function ProfileScreen() {
         personality,
       });
     } catch (err) {
-      setError("Failed to load statistics. Pull down to refresh.");
+      setError('Failed to load statistics. Pull down to refresh.');
     } finally {
       setLoadingStats(false);
     }
@@ -180,9 +176,9 @@ export default function ProfileScreen() {
   }
 
   async function handleSavePhone() {
-    const cleaned = phoneNumber.trim().replace(/\s/g, "");
+    const cleaned = phoneNumber.trim().replace(/\s/g, '');
     if (cleaned.length !== 10) {
-      showToast("Enter a valid 10-digit phone number", "error");
+      showToast('Enter a valid 10-digit phone number', 'error');
       return;
     }
     setSavingPhone(true);
@@ -190,9 +186,9 @@ export default function ProfileScreen() {
       await authAPI.updatePhone(getUserId(), cleaned);
       currentUser.phoneNumber = cleaned;
       setEditingPhone(false);
-      showToast("Phone number saved!", "success");
+      showToast('Phone number saved!', 'success');
     } catch {
-      showToast("Failed to save phone number", "error");
+      showToast('Failed to save phone number', 'error');
     } finally {
       setSavingPhone(false);
     }
@@ -202,7 +198,7 @@ export default function ProfileScreen() {
     try {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permissionResult.granted) {
-        Alert.alert('Permission Denied', 'Media Library permission is required to select photos.');
+        showToast('Media Library permission is required to select photos.', 'error');
         return;
       }
 
@@ -217,7 +213,7 @@ export default function ProfileScreen() {
         saveProfileImage(result.assets[0].uri);
       }
     } catch {
-      Alert.alert('Error', 'Failed to pick image from gallery.');
+      showToast('Failed to pick image from gallery.', 'error');
     }
   }
 
@@ -225,7 +221,7 @@ export default function ProfileScreen() {
     try {
       const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
       if (!permissionResult.granted) {
-        Alert.alert('Permission Denied', 'Camera permission is required to take photos.');
+        showToast('Camera permission is required to take photos.', 'error');
         return;
       }
 
@@ -239,7 +235,7 @@ export default function ProfileScreen() {
         saveProfileImage(result.assets[0].uri);
       }
     } catch {
-      Alert.alert('Error', 'Failed to take photo with camera.');
+      showToast('Failed to take photo with camera.', 'error');
     }
   }
 
@@ -249,11 +245,11 @@ export default function ProfileScreen() {
       title: 'Log Out',
       message: 'Are you sure you want to log out of Tally?',
       confirmText: 'Log Out',
-      confirmColor: '#E05C5C',
+      confirmColor: colors.negative,
       onConfirm: async () => {
         resetCurrentUser();
         await clearRememberedUser();
-        router.replace("/(auth)/login");
+        router.replace('/(auth)/login');
       },
     });
   }
@@ -264,62 +260,66 @@ export default function ProfileScreen() {
       title: 'Remove MoMo Number',
       message: 'Are you sure you want to remove your MoMo number? You will need to re-enter it to make MoMo payments.',
       confirmText: 'Remove',
-      confirmColor: '#E05C5C',
+      confirmColor: colors.negative,
       onConfirm: async () => {
         try {
           await authAPI.updatePhone(getUserId(), '');
           currentUser.phoneNumber = '';
           setPhoneNumber('');
-          showToast("MoMo number removed", "info");
+          showToast('MoMo number removed', 'info');
         } catch {
-          showToast("Failed to remove phone number", "error");
+          showToast('Failed to remove phone number', 'error');
         }
       },
     });
   }
 
   function triggerImageOptions() {
-    Alert.alert(
-      'Profile Photo / Avatar',
-      'Choose how you want to update your profile photo:',
-      [
-        { text: 'Cancel', style: 'cancel' },
+    showActionSheet({
+      title: 'Profile Photo / Avatar',
+      message: 'Choose how you want to update your profile photo',
+      options: [
         {
-          text: 'Set Group Profile Photo 📷',
-          onPress: () => router.push("/avatar-builder"),
+          label: 'Set Group Profile Photo',
+          icon: <Feather name="user" size={18} color={colors.text} />,
+          onPress: () => router.push('/avatar-builder'),
         },
         {
-          text: 'Choose from Gallery 📁',
+          label: 'Choose from Gallery',
+          icon: <Feather name="image" size={18} color={colors.text} />,
           onPress: pickImageFromGallery,
         },
         {
-          text: 'Take Photo 📸',
+          label: 'Take Photo',
+          icon: <Feather name="camera" size={18} color={colors.text} />,
           onPress: takePhotoWithCamera,
         },
         {
-          text: 'Paste Photo URL...',
+          label: 'Paste Photo URL...',
+          icon: <Feather name="link" size={18} color={colors.text} />,
           onPress: () => {
             setInputUrl(profileImage || '');
             setShowUrlModal(true);
           },
         },
-        profileImage
-          ? {
-              text: 'Remove Custom Photo',
-              style: 'destructive',
+        ...(profileImage
+          ? [{
+              label: 'Remove Custom Photo',
+              icon: <Feather name="trash-2" size={18} color={colors.negative} />,
+              destructive: true,
               onPress: async () => {
                 try {
                   await safeStorage.removeItem(`profile_image_${currentUser.userId}`);
                   setProfileImage(null);
-                  showToast("Profile image removed", "info");
+                  showToast('Profile image removed', 'info');
                 } catch {
-                  showToast("Could not remove photo", "error");
+                  showToast('Could not remove photo', 'error');
                 }
               },
-            }
-          : null,
-      ].filter(Boolean) as any
-    );
+            }]
+          : []),
+      ],
+    });
   }
 
   function handleSaveUrl() {
@@ -327,130 +327,108 @@ export default function ProfileScreen() {
       saveProfileImage(inputUrl.trim());
       setShowUrlModal(false);
     } else {
-      Alert.alert('Error', 'Please enter a valid HTTP/HTTPS image link.');
+      showToast('Please enter a valid HTTP/HTTPS image link.', 'error');
     }
   }
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.flex, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <KeyboardAvoidingView style={[styles.flex, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
-        style={[styles.container, { backgroundColor: colors.background }]}
-        contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}
+        style={styles.container}
+        contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, spacing.xl) }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
         keyboardShouldPersistTaps="handled"
         automaticallyAdjustKeyboardInsets={true}
       >
-        {/* Card container */}
-        <View style={[styles.mainCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-          <Text style={[styles.cardHeaderTitle, { color: colors.text }]}>My Profile</Text>
+        <Card elevation="raised">
+          <Text style={[typography.display, { color: colors.text, marginBottom: spacing.lg }]}>My Profile</Text>
 
-          {/* Avatar View with edit indicator */}
           <View style={styles.avatarSection}>
-            <TouchableOpacity
-              style={styles.avatarWrapper}
-              onPress={triggerImageOptions}
-              activeOpacity={0.8}
-            >
+            <TouchableOpacity style={styles.avatarWrapper} onPress={triggerImageOptions} activeOpacity={0.8}>
               {profileImage ? (
                 <Image source={{ uri: profileImage }} style={styles.avatarImage} />
               ) : (
                 <View style={styles.avatarInnerWrapper}>
-                  <Avatar
-                    userId={Number(currentUser.userId)}
-                    name={currentUser.userName}
-                    size={96}
-                    avatarData={avatarData}
-                  />
+                  <Avatar userId={Number(currentUser.userId)} name={currentUser.userName} size={96} avatarData={avatarData} />
                 </View>
               )}
-              <View style={styles.cameraIconContainer}>
-                <Feather name="camera" size={14} color="#ffffff" />
+              <View style={[styles.cameraIconContainer, { backgroundColor: colors.text, borderColor: colors.surfaceElevated }]}>
+                <Feather name="camera" size={14} color={colors.background} />
               </View>
             </TouchableOpacity>
 
-            <Text style={[styles.name, { color: colors.text }]}>{currentUser.userName}</Text>
-            <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Tally Member</Text>
+            <Text style={[typography.title, { color: colors.text, marginTop: spacing.md }]}>{currentUser.userName}</Text>
+            <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.xs }]}>Tally Member</Text>
           </View>
 
-          {/* Stats section */}
-          <Text style={[styles.label, { color: colors.textSecondary }]}>Your Stats</Text>
+          <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm + 2 }]}>Your Stats</Text>
           {loadingStats && !refreshing ? (
-            <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 16 }} />
+            <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.lg }} />
           ) : error && !stats ? (
-            <Text style={styles.errorText}>{error}</Text>
+            <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', marginVertical: spacing.lg }]}>{error}</Text>
           ) : stats ? (
-            <View style={{ marginBottom: 16 }}>
-              {/* 3-card stat row */}
+            <View style={{ marginBottom: spacing.md, gap: spacing.sm + 2 }}>
               <View style={styles.statsRow}>
                 <View style={[styles.statCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-                  <Text style={[styles.statNumber, { color: colors.text }]}>{stats.totalExpenses}</Text>
-                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total Trx</Text>
+                  <Text style={[typography.title, { color: colors.text, marginBottom: 2 }]}>{stats.totalExpenses}</Text>
+                  <Text style={[typography.label, { color: colors.textSecondary }]}>Total Trx</Text>
                 </View>
                 <View style={[styles.statCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-                  <Text style={[styles.statNumber, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>
+                  <Text style={[typography.title, { color: colors.text, marginBottom: 2 }]} numberOfLines={1} adjustsFontSizeToFit>
                     GHS {stats.totalSpent.toFixed(0)}
                   </Text>
-                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total Spent</Text>
+                  <Text style={[typography.label, { color: colors.textSecondary }]}>Total Spent</Text>
                 </View>
                 <View style={[styles.statCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-                  <Text style={[styles.statNumber, { color: colors.text }]} numberOfLines={1} adjustsFontSizeToFit>
+                  <Text style={[typography.title, { color: colors.text, marginBottom: 2 }]} numberOfLines={1} adjustsFontSizeToFit>
                     GHS {stats.thisMonthSpent.toFixed(0)}
                   </Text>
-                  <Text style={[styles.statLabel, { color: colors.textSecondary }]}>This Month</Text>
+                  <Text style={[typography.label, { color: colors.textSecondary }]}>This Month</Text>
                 </View>
               </View>
 
-              {/* Top category card */}
               {stats.topCategory?.category && (
                 <View style={[styles.topCategoryCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-                  <Text style={{ fontSize: 28 }}>
-                    {CATEGORY_ICONS[stats.topCategory.category] || "📦"}
-                  </Text>
+                  <Text style={{ fontSize: 28 }}>{CATEGORY_ICONS[stats.topCategory.category] || '📦'}</Text>
                   <View>
-                    <Text style={[styles.topCatName, { color: colors.text }]}>{stats.topCategory.category}</Text>
-                    <Text style={[styles.topCatSub, { color: colors.textSecondary }]}>Your most spent category</Text>
+                    <Text style={[typography.bodyStrong, { color: colors.text }]}>{stats.topCategory.category}</Text>
+                    <Text style={[typography.label, { color: colors.textSecondary, marginTop: 2 }]}>Your most spent category</Text>
                   </View>
                 </View>
               )}
 
-              {/* Net summary (Mint-style): money in vs money out this month */}
               <View style={[styles.topCategoryCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
                 <Text style={{ fontSize: 28 }}>⚖️</Text>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.topCatName, { color: colors.text }]}>Net This Month</Text>
-                  <Text style={[styles.topCatSub, { color: colors.textSecondary }]}>
-                    <Text style={{ color: colors.positive, fontWeight: '700' }}>+GHS {(stats.monthIncome ?? 0).toFixed(2)}</Text>
+                  <Text style={[typography.bodyStrong, { color: colors.text }]}>Net This Month</Text>
+                  <Text style={[typography.label, { color: colors.textSecondary, marginTop: 2 }]}>
+                    <Text style={{ color: colors.positive, fontFamily: typography.bodyStrong.fontFamily }}>+GHS {(stats.monthIncome ?? 0).toFixed(2)}</Text>
                     {'  in  •  '}
-                    <Text style={{ color: colors.negative, fontWeight: '700' }}>-GHS {(stats.thisMonthSpent ?? 0).toFixed(2)}</Text>
+                    <Text style={{ color: colors.negative, fontFamily: typography.bodyStrong.fontFamily }}>-GHS {(stats.thisMonthSpent ?? 0).toFixed(2)}</Text>
                     {'  out'}
                   </Text>
                 </View>
               </View>
 
-              {/* Spending personality (Cowrywise-style) */}
               {stats.personality && (
-                <View style={[styles.topCategoryCard, { backgroundColor: colors.primary + '10', borderColor: colors.primary + '30' }]}>
+                <View style={[styles.topCategoryCard, { backgroundColor: colors.primarySubtle, borderColor: `${colors.primary}30` }]}>
                   <Text style={{ fontSize: 28 }}>{stats.personality.label.split(' ')[0]}</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.topCatName, { color: colors.primary }]}>
+                    <Text style={[typography.bodyStrong, { color: colors.primary }]}>
                       {stats.personality.label.split(' ').slice(1).join(' ')}
                     </Text>
-                    <Text style={[styles.topCatSub, { color: colors.textSecondary }]}>{stats.personality.desc}</Text>
+                    <Text style={[typography.label, { color: colors.textSecondary, marginTop: 2 }]}>{stats.personality.desc}</Text>
                   </View>
                 </View>
               )}
 
-              {/* Spending streaks */}
               <View style={[styles.topCategoryCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
                 <Text style={{ fontSize: 28 }}>🔥</Text>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.topCatName, { color: colors.text }]}>
+                  <Text style={[typography.bodyStrong, { color: colors.text }]}>
                     {stats.streak ?? 0} day streak of logging expenses
                   </Text>
-                  <Text style={[styles.topCatSub, { color: colors.textSecondary }]}>
+                  <Text style={[typography.label, { color: colors.textSecondary, marginTop: 2 }]}>
                     ✅ {stats.daysThisMonth ?? 0} day{(stats.daysThisMonth ?? 0) === 1 ? '' : 's'} this month with logged expenses
                   </Text>
                 </View>
@@ -458,48 +436,34 @@ export default function ProfileScreen() {
             </View>
           ) : null}
 
-          {/* Navigation Action Links */}
-          <Text style={[styles.label, { color: colors.textSecondary }]}>Actions</Text>
-          <TouchableOpacity
-            style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
-            onPress={() => router.push('/(tabs)/reminders')}
-            activeOpacity={0.8}
-          >
+          <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm + 2 }]}>Actions</Text>
+          <TouchableOpacity style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]} onPress={() => router.push('/(tabs)/reminders')} activeOpacity={0.8}>
             <View style={styles.actionLeft}>
-              <Feather name="bell" size={16} color={colors.text} style={{ marginRight: 8 }} />
-              <Text style={[styles.actionText, { color: colors.text }]}>Bill Reminders</Text>
+              <Feather name="bell" size={16} color={colors.text} style={{ marginRight: spacing.sm }} />
+              <Text style={[typography.bodyStrong, { color: colors.text, fontSize: 13 }]}>Bill Reminders</Text>
             </View>
             <Feather name="chevron-right" size={16} color={colors.textSecondary} />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
-            onPress={() => router.push('/(tabs)/report')}
-            activeOpacity={0.8}
-          >
+          <TouchableOpacity style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]} onPress={() => router.push('/(tabs)/report')} activeOpacity={0.8}>
             <View style={styles.actionLeft}>
-              <Feather name="trending-up" size={16} color={colors.text} style={{ marginRight: 8 }} />
-              <Text style={[styles.actionText, { color: colors.text }]}>Financial Reports</Text>
+              <Feather name="trending-up" size={16} color={colors.text} style={{ marginRight: spacing.sm }} />
+              <Text style={[typography.bodyStrong, { color: colors.text, fontSize: 13 }]}>Financial Reports</Text>
             </View>
             <Feather name="chevron-right" size={16} color={colors.textSecondary} />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]}
-            onPress={() => router.push('/help')}
-            activeOpacity={0.8}
-          >
+          <TouchableOpacity style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]} onPress={() => router.push('/help')} activeOpacity={0.8}>
             <View style={styles.actionLeft}>
-              <Feather name="help-circle" size={16} color={colors.text} style={{ marginRight: 8 }} />
-              <Text style={[styles.actionText, { color: colors.text }]}>Help & Support</Text>
+              <Feather name="help-circle" size={16} color={colors.text} style={{ marginRight: spacing.sm }} />
+              <Text style={[typography.bodyStrong, { color: colors.text, fontSize: 13 }]}>Help & Support</Text>
             </View>
             <Feather name="chevron-right" size={16} color={colors.textSecondary} />
           </TouchableOpacity>
 
-          {/* Preferences / Theme Selector */}
-          <Text style={[styles.label, { color: colors.textSecondary }]}>Preferences</Text>
+          <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm + 2 }]}>Preferences</Text>
           <View style={[styles.themeSelectorCard, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-            <Text style={[styles.themeSelectorTitle, { color: colors.text }]}>App Theme</Text>
+            <Text style={[typography.bodyStrong, { color: colors.text, marginBottom: spacing.md }]}>App Theme</Text>
             <View style={[styles.themeSelectorRow, { backgroundColor: colors.neutralBg }]}>
               {(['light', 'dark', 'system'] as const).map((mode) => {
                 const isActive = themeMode === mode;
@@ -507,18 +471,11 @@ export default function ProfileScreen() {
                 return (
                   <TouchableOpacity
                     key={mode}
-                    style={[
-                      styles.themeBtn,
-                      isActive && { backgroundColor: colors.cardBg }
-                    ]}
+                    style={[styles.themeBtn, isActive && { backgroundColor: colors.surfaceElevated }]}
                     onPress={() => setThemeMode(mode)}
                     activeOpacity={0.8}
                   >
-                    <Text style={[
-                      styles.themeBtnText,
-                      { color: colors.textSecondary },
-                      isActive && { color: colors.text, fontWeight: 'bold' }
-                    ]}>
+                    <Text style={[typography.caption, { color: isActive ? colors.text : colors.textSecondary, fontFamily: isActive ? typography.bodyStrong.fontFamily : typography.caption.fontFamily }]}>
                       {labelMap[mode]}
                     </Text>
                   </TouchableOpacity>
@@ -527,41 +484,39 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Profile Details Capsules */}
-          <Text style={[styles.label, { color: colors.textSecondary }]}>Profile Details</Text>
+          <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm + 2 }]}>Profile Details</Text>
 
           <View style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-            <Text style={[styles.detailLabel, { color: colors.text }]}>Name</Text>
-            <Text style={[styles.detailValue, { color: colors.textSecondary }]}>{currentUser.userName}</Text>
+            <Text style={[typography.caption, { color: colors.text, fontFamily: typography.bodyStrong.fontFamily }]}>Name</Text>
+            <Text style={[typography.caption, { color: colors.textSecondary }]}>{currentUser.userName}</Text>
           </View>
 
           <View style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-            <Text style={[styles.detailLabel, { color: colors.text }]}>Email</Text>
-            <Text style={[styles.detailValue, { color: colors.textSecondary }]}>{currentUser.email || 'N/A'}</Text>
+            <Text style={[typography.caption, { color: colors.text, fontFamily: typography.bodyStrong.fontFamily }]}>Email</Text>
+            <Text style={[typography.caption, { color: colors.textSecondary }]}>{currentUser.email || 'N/A'}</Text>
           </View>
 
           <View style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-            <Text style={[styles.detailLabel, { color: colors.text }]}>User ID</Text>
-            <Text style={[styles.detailValue, { color: colors.textSecondary }]}>#{currentUser.userId}</Text>
+            <Text style={[typography.caption, { color: colors.text, fontFamily: typography.bodyStrong.fontFamily }]}>User ID</Text>
+            <Text style={[typography.caption, { color: colors.textSecondary }]}>#{currentUser.userId}</Text>
           </View>
 
-          {/* MoMo number capsule */}
-          <View style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }, editingPhone && { height: 'auto', flexDirection: 'column', alignItems: 'stretch', gap: 10 }]}>
+          <View style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }, editingPhone && { height: 'auto', flexDirection: 'column', alignItems: 'stretch', gap: spacing.sm }]}>
             <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={[styles.detailLabel, { color: colors.text }]}>MoMo Number</Text>
+              <Text style={[typography.caption, { color: colors.text, fontFamily: typography.bodyStrong.fontFamily }]}>MoMo Number</Text>
               {!editingPhone && (
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={[styles.detailValue, { marginRight: 8, color: colors.textSecondary }]}>
+                  <Text style={[typography.caption, { color: colors.textSecondary, marginRight: spacing.sm }]}>
                     {currentUser.phoneNumber || 'Not set'}
                   </Text>
                   <TouchableOpacity onPress={() => setEditingPhone(true)}>
-                    <Text style={[styles.editLinkText, { color: colors.primary }]}>
+                    <Text style={[typography.caption, { color: colors.primary, fontFamily: typography.bodyStrong.fontFamily }]}>
                       {currentUser.phoneNumber ? 'Edit' : '+ Add'}
                     </Text>
                   </TouchableOpacity>
                   {!!currentUser.phoneNumber && (
-                    <TouchableOpacity onPress={handleRemovePhone} style={{ marginLeft: 10 }}>
-                      <Text style={[styles.editLinkText, { color: '#E05C5C' }]}>Remove</Text>
+                    <TouchableOpacity onPress={handleRemovePhone} style={{ marginLeft: spacing.sm + 2 }}>
+                      <Text style={[typography.caption, { color: colors.negative, fontFamily: typography.bodyStrong.fontFamily }]}>Remove</Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -570,13 +525,13 @@ export default function ProfileScreen() {
             {editingPhone && (
               <View style={styles.phoneInputRow}>
                 <TextInput
-                  style={[styles.phoneInputSmall, { backgroundColor: colors.cardBg, borderColor: colors.border, color: colors.text }]}
+                  style={[typography.bodyStrong, styles.phoneInputSmall, { backgroundColor: colors.surfaceElevated, borderColor: colors.border, color: colors.text }]}
                   value={phoneNumber}
                   onChangeText={setPhoneNumber}
                   keyboardType="phone-pad"
                   maxLength={10}
                   placeholder="e.g. 0241234567"
-                  placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
+                  placeholderTextColor={colors.textTertiary}
                   autoFocus
                 />
                 <View style={styles.phoneActions}>
@@ -584,11 +539,11 @@ export default function ProfileScreen() {
                     {savingPhone ? (
                       <ActivityIndicator size="small" color={colors.primary} />
                     ) : (
-                      <Text style={[styles.phoneActionBtnText, { color: colors.primary }]}>Save</Text>
+                      <Text style={[typography.caption, { color: colors.primary, fontFamily: typography.bodyStrong.fontFamily }]}>Save</Text>
                     )}
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => { setEditingPhone(false); setPhoneNumber(currentUser.phoneNumber || ""); }} style={styles.phoneActionBtn}>
-                    <Text style={styles.phoneActionBtnCancel}>Cancel</Text>
+                  <TouchableOpacity onPress={() => { setEditingPhone(false); setPhoneNumber(currentUser.phoneNumber || ''); }} style={styles.phoneActionBtn}>
+                    <Text style={[typography.caption, { color: colors.textSecondary, fontFamily: typography.bodyStrong.fontFamily }]}>Cancel</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -596,54 +551,33 @@ export default function ProfileScreen() {
           </View>
 
           <View style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-            <Text style={[styles.detailLabel, { color: colors.text }]}>Account Type</Text>
-            <Text style={[styles.detailValue, { color: colors.textSecondary }]}>Standard</Text>
+            <Text style={[typography.caption, { color: colors.text, fontFamily: typography.bodyStrong.fontFamily }]}>Account Type</Text>
+            <Text style={[typography.caption, { color: colors.textSecondary }]}>Standard</Text>
           </View>
 
-          {/* Logout button */}
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
-            <Text style={styles.logoutText}>Log Out</Text>
-          </TouchableOpacity>
-        </View>
+          <Button title="Log Out" onPress={handleLogout} variant="danger" style={{ marginTop: spacing.lg }} />
+        </Card>
 
-        {/* Cross-platform Modal for entering Image URL */}
-        <Modal
-          animationType="fade"
-          transparent={true}
-          visible={showUrlModal}
-          onRequestClose={() => setShowUrlModal(false)}
-        >
+        <Modal animationType="fade" transparent visible={showUrlModal} onRequestClose={() => setShowUrlModal(false)}>
           <View style={styles.modalOverlay}>
-            <View style={[styles.modalContentCard, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>Paste Image URL</Text>
-              <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>Provide a link to your online profile photo:</Text>
+            <View style={[styles.modalContentCard, { backgroundColor: colors.surfaceHigh, borderColor: colors.borderSubtle }]}>
+              <Text style={[typography.headline, { color: colors.text, textAlign: 'center', marginBottom: spacing.xs }]}>Paste Image URL</Text>
+              <Text style={[typography.caption, { color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.lg }]}>Provide a link to your online profile photo:</Text>
 
-              <TextInput
-                style={[styles.modalInput, { backgroundColor: colors.inputBg, borderColor: colors.border, color: colors.text }]}
+              <Input
+                label="Image URL"
                 placeholder="https://example.com/avatar.jpg"
-                placeholderTextColor={theme === 'dark' ? '#4B5563' : '#8E9AA6'}
                 value={inputUrl}
                 onChangeText={setInputUrl}
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="url"
+                containerStyle={{ marginBottom: spacing.lg }}
               />
 
               <View style={styles.modalBtnRow}>
-                <TouchableOpacity
-                  style={[styles.modalBtn, { backgroundColor: colors.neutralBg }]}
-                  onPress={() => setShowUrlModal(false)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.modalBtnCancelText, { color: colors.textSecondary }]}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalBtn, { backgroundColor: colors.primary }]}
-                  onPress={handleSaveUrl}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.modalBtnSaveText, { color: '#ffffff' }]}>Save</Text>
-                </TouchableOpacity>
+                <Button title="Cancel" onPress={() => setShowUrlModal(false)} variant="secondary" style={{ flex: 1 }} />
+                <Button title="Save" onPress={handleSaveUrl} style={{ flex: 1 }} />
               </View>
             </View>
           </View>
@@ -651,93 +585,28 @@ export default function ProfileScreen() {
       </ScrollView>
 
       {ConfirmModalComponent}
+      {ActionSheetComponent}
       <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  themeSelectorCard: {
-    borderRadius: 20,
-    padding: 16,
-    borderWidth: 1,
-    marginBottom: 20,
-  },
-  themeSelectorTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    marginBottom: 12,
-  },
-  themeSelectorRow: {
-    flexDirection: 'row',
-    borderRadius: 12,
-    padding: 4,
-  },
-  themeBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-  },
-  themeBtnActive: {
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  themeBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  themeBtnTextActive: {
-    fontWeight: 'bold',
-  },
-  flex: {
-    flex: 1,
-    backgroundColor: '#F2F4F7',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#F2F4F7',
-  },
+  flex: { flex: 1 },
+  container: { flex: 1 },
   content: {
-    paddingHorizontal: 20,
-    paddingTop: 30,
+    paddingHorizontal: spacing.lg,
     paddingBottom: 40,
-  },
-  mainCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 28,
-    padding: 24,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.05,
-    shadowRadius: 16,
-    elevation: 3,
-  },
-  cardHeaderTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#111111',
-    marginBottom: 20,
   },
   avatarSection: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: spacing.xl,
   },
   avatarWrapper: {
     position: 'relative',
     width: 96,
     height: 96,
     borderRadius: 48,
-    backgroundColor: '#F8F9FA',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 1,
   },
   avatarImage: {
     width: '100%',
@@ -757,261 +626,100 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#111111',
     borderWidth: 2,
-    borderColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
   },
-  name: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111111',
-    marginTop: 14,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: '#8E9AA6',
-    marginTop: 4,
-  },
-  label: {
-    fontSize: 11,
-    fontWeight: 'bold',
-    color: '#8E9AA6',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 10,
-    marginTop: 16,
-  },
-  
-  // Stats row styles
   statsRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
+    gap: spacing.md,
   },
   statCard: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
     borderWidth: 1,
-    borderColor: '#EAEBEF',
-    borderRadius: 20,
-    padding: 14,
+    borderRadius: radius.lg,
+    padding: spacing.sm + 2,
     alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111111',
-    marginBottom: 2,
-  },
-  statLabel: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: '#8E9AA6',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
   },
   topCategoryCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    backgroundColor: '#F8F9FA',
+    gap: spacing.md,
     borderWidth: 1,
-    borderColor: '#EAEBEF',
-    borderRadius: 20,
-    padding: 16,
+    borderRadius: radius.lg,
+    padding: spacing.md,
   },
-  topCatName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#111111',
+  themeSelectorCard: {
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    marginBottom: spacing.lg,
   },
-  topCatSub: {
-    fontSize: 11,
-    color: '#8E9AA6',
-    marginTop: 2,
+  themeSelectorRow: {
+    flexDirection: 'row',
+    borderRadius: radius.md,
+    padding: 4,
   },
-
-  // Detail capsules & Actions
+  themeBtn: {
+    flex: 1,
+    paddingVertical: spacing.sm + 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.sm,
+  },
   detailCapsule: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    marginBottom: 8,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    marginBottom: spacing.sm,
     borderWidth: 1,
-    borderColor: '#EAEBEF',
-  },
-  detailLabel: {
-    fontSize: 13,
-    color: '#8E9AA6',
-    fontWeight: '500',
-  },
-  detailValue: {
-    fontSize: 13,
-    color: '#111111',
-    fontWeight: '700',
-  },
-  editLinkText: {
-    color: '#8B5CF6',
-    fontSize: 13,
-    fontWeight: 'bold',
   },
   actionLeft: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  actionText: {
-    fontSize: 13,
-    color: '#111111',
-    fontWeight: '700',
-  },
-
-  // Phone input row styles
   phoneInputRow: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginTop: 6,
+    gap: spacing.sm,
+    marginTop: spacing.xs,
   },
   phoneInputSmall: {
     flex: 1,
-    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#EAEBEF',
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm + 2,
     height: 40,
-    color: '#111111',
-    fontSize: 14,
-    fontWeight: 'bold',
   },
   phoneActions: {
     flexDirection: 'row',
-    gap: 6,
+    gap: spacing.xs + 2,
   },
   phoneActionBtn: {
     height: 40,
     justifyContent: 'center',
-    paddingHorizontal: 10,
+    paddingHorizontal: spacing.sm + 2,
   },
-  phoneActionBtnText: {
-    color: '#8B5CF6',
-    fontWeight: 'bold',
-    fontSize: 13,
-  },
-  phoneActionBtnCancel: {
-    color: '#8E9AA6',
-    fontWeight: '600',
-    fontSize: 13,
-  },
-
-  // Logout button styles
-  logoutButton: {
-    borderWidth: 1,
-    borderColor: '#FF3B30',
-    backgroundColor: '#FF3B3010',
-    borderRadius: 24,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  logoutText: {
-    color: '#FF3B30',
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
-
-  // Modal URL styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 20,
+    padding: spacing.lg,
   },
   modalContentCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 28,
-    padding: 24,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
     width: '100%',
     maxWidth: 320,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111111',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  modalSubtitle: {
-    fontSize: 13,
-    color: '#8E9AA6',
-    marginBottom: 16,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  modalInput: {
-    backgroundColor: '#F8F9FA',
     borderWidth: 1,
-    borderColor: '#EAEBEF',
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    height: 52,
-    color: '#111111',
-    fontSize: 14,
-    marginBottom: 20,
   },
   modalBtnRow: {
     flexDirection: 'row',
-    gap: 10,
-  },
-  modalBtn: {
-    flex: 1,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalBtnCancel: {
-    borderWidth: 1,
-    borderColor: '#EAEBEF',
-    backgroundColor: '#ffffff',
-  },
-  modalBtnCancelText: {
-    color: '#8E9AA6',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  modalBtnSave: {
-    backgroundColor: '#111111',
-  },
-  modalBtnSaveText: {
-    color: '#ffffff',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-  
-  // General
-  errorText: {
-    fontSize: 14,
-    color: '#8E9AA6',
-    textAlign: 'center',
-    marginVertical: 16,
+    gap: spacing.sm + 2,
   },
 });

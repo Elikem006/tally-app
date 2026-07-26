@@ -13,11 +13,12 @@ interface TransactionRowProps {
   amount: string;
   amountColor?: string;
   onPress?: () => void;
+  onLongPress?: () => void;
   accentBorder?: boolean;
 }
 
 /** A generic transaction/reminder/recurring row — icon chip, title/subtitle, optional badges + tags, trailing amount. */
-export function TransactionRow({ leading, title, subtitle, badges, tags, amount, amountColor, onPress, accentBorder }: TransactionRowProps) {
+export function TransactionRow({ leading, title, subtitle, badges, tags, amount, amountColor, onPress, onLongPress, accentBorder }: TransactionRowProps) {
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
 
@@ -28,8 +29,9 @@ export function TransactionRow({ leading, title, subtitle, badges, tags, amount,
         { backgroundColor: colors.surfaceElevated, borderColor: accentBorder ? `${colors.primary}40` : colors.borderSubtle },
       ]}
       onPress={onPress}
+      onLongPress={onLongPress}
       activeOpacity={onPress ? 0.85 : 1}
-      disabled={!onPress}
+      disabled={!onPress && !onLongPress}
     >
       <View style={styles.left}>
         {leading}
