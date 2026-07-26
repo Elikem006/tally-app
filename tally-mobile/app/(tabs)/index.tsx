@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import ExpenseDetailModal from '../../components/ExpenseDetailModal';
 import {
   View,
@@ -102,9 +102,16 @@ export default function HomeScreen() {
   const [quickDescription, setQuickDescription] = useState('');
   const [savingExpense, setSavingExpense] = useState(false);
 
+  // Skeleton on the very first load only. Home refetches on every focus, so
+  // without this guard every tab switch back — including the landing after
+  // adding an expense — would flash the skeleton and replay the whole
+  // opening sequence. Subsequent focuses refresh silently underneath the
+  // content that is already on screen.
+  const hasLoadedOnce = useRef(false);
+
   useFocusEffect(
     useCallback(() => {
-      fetchData(true);
+      fetchData(!hasLoadedOnce.current);
       loadProfileImage();
       consumeMomoRefresh();
       getUnreadCount().then(setUnreadCount);
@@ -187,6 +194,7 @@ export default function HomeScreen() {
     } catch (err: any) {
       setError('Failed to load dashboard data. Please check your connection.');
     } finally {
+      hasLoadedOnce.current = true;
       setLoading(false);
     }
 
