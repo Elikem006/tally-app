@@ -234,7 +234,7 @@ export default function RemindersScreen() {
             accessibilityRole="button"
             accessibilityLabel={showAddForm ? 'Close new reminder form' : 'Add reminder'}
           >
-            <Feather name={showAddForm ? 'x' : 'plus'} size={20} color="#ffffff" />
+            <Feather name={showAddForm ? 'x' : 'plus'} size={20} color={colors.onPrimary} />
           </TouchableOpacity>
         </View>
 
@@ -271,7 +271,7 @@ export default function RemindersScreen() {
                   <ScrollView style={styles.datePickerScroll} showsVerticalScrollIndicator={false} nestedScrollEnabled>
                     {DAYS.map((day) => (
                       <TouchableOpacity key={day} style={[styles.datePickerItem, selectedDay === day && { backgroundColor: colors.primary }]} onPress={() => setSelectedDay(day)}>
-                        <Text style={[typography.caption, { color: selectedDay === day ? '#FFFFFF' : colors.textSecondary, textAlign: 'center', fontFamily: selectedDay === day ? typography.bodyStrong.fontFamily : typography.caption.fontFamily }]}>{day}</Text>
+                        <Text style={[typography.caption, { color: selectedDay === day ? colors.onPrimary : colors.textSecondary, textAlign: 'center', fontFamily: selectedDay === day ? typography.bodyStrong.fontFamily : typography.caption.fontFamily }]}>{day}</Text>
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
@@ -288,7 +288,7 @@ export default function RemindersScreen() {
                           if (parseInt(selectedDay) > month.days) setSelectedDay('01');
                         }}
                       >
-                        <Text style={[typography.caption, { color: selectedMonth === month.value ? '#FFFFFF' : colors.textSecondary, textAlign: 'center', fontFamily: selectedMonth === month.value ? typography.bodyStrong.fontFamily : typography.caption.fontFamily }]}>{month.label}</Text>
+                        <Text style={[typography.caption, { color: selectedMonth === month.value ? colors.onPrimary : colors.textSecondary, textAlign: 'center', fontFamily: selectedMonth === month.value ? typography.bodyStrong.fontFamily : typography.caption.fontFamily }]}>{month.label}</Text>
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
@@ -298,7 +298,7 @@ export default function RemindersScreen() {
                   <ScrollView style={styles.datePickerScroll} showsVerticalScrollIndicator={false} nestedScrollEnabled>
                     {YEARS.map((year) => (
                       <TouchableOpacity key={year} style={[styles.datePickerItem, selectedYear === year && { backgroundColor: colors.primary }]} onPress={() => setSelectedYear(year)}>
-                        <Text style={[typography.caption, { color: selectedYear === year ? '#FFFFFF' : colors.textSecondary, textAlign: 'center', fontFamily: selectedYear === year ? typography.bodyStrong.fontFamily : typography.caption.fontFamily }]}>{year}</Text>
+                        <Text style={[typography.caption, { color: selectedYear === year ? colors.onPrimary : colors.textSecondary, textAlign: 'center', fontFamily: selectedYear === year ? typography.bodyStrong.fontFamily : typography.caption.fontFamily }]}>{year}</Text>
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
@@ -317,7 +317,7 @@ export default function RemindersScreen() {
                   onPress={() => setIsRecurring(!isRecurring)}
                   activeOpacity={0.8}
                 >
-                  <Text style={[typography.label, { color: isRecurring ? '#FFFFFF' : colors.textSecondary }]}>
+                  <Text style={[typography.label, { color: isRecurring ? colors.onPrimary : colors.textSecondary }]}>
                     {isRecurring ? 'Monthly ✓' : 'Once'}
                   </Text>
                 </TouchableOpacity>
@@ -406,7 +406,7 @@ export default function RemindersScreen() {
                         </View>
                       ) : (
                         <TouchableOpacity style={[styles.markPaidBtn, { backgroundColor: colors.primary }]} onPress={() => handleMarkPaid(String(item.id))} activeOpacity={0.8}>
-                          <Text style={[typography.label, { color: '#FFFFFF' }]}>Mark Paid</Text>
+                          <Text style={[typography.label, { color: colors.onPrimary }]}>Mark Paid</Text>
                         </TouchableOpacity>
                       )}
                     </View>
