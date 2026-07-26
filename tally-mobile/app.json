@@ -6,11 +6,11 @@
     "scheme": "tally",
     "orientation": "portrait",
     "icon": "./assets/icon-tally.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0F1117"
+      "backgroundColor": "#0F1115"
     },
     "ios": {
       "supportsTablet": false,
@@ -20,7 +20,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon-tally-adaptive.png",
-        "backgroundColor": "#0F1117"
+        "backgroundColor": "#0F1115"
       },
       "package": "com.tally.app",
       "versionCode": 2,

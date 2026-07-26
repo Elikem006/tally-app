@@ -78,6 +78,7 @@ export function MomoWalletCard({
             onPress={onToggleHide}
             style={[styles.hideBtn, { backgroundColor: colors.accentSubtle, borderColor: `${colors.accent}30` }]}
             activeOpacity={0.7}
+            hitSlop={7}
             accessibilityRole="button"
             accessibilityLabel={hideBalance ? 'Show balance' : 'Hide balance'}
           >

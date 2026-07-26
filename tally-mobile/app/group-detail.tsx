@@ -421,7 +421,7 @@ export default function GroupDetailScreen() {
         automaticallyAdjustKeyboardInsets={true}
       >
         <View style={[styles.mainCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>
-          <Text style={[typography.display, { color: colors.text, marginBottom: spacing.xl }]}>{groupName}</Text>
+          <Text style={[typography.display, { color: colors.text, marginBottom: spacing.xl }]} accessibilityRole="header">{groupName}</Text>
 
           {/* Recent Activity */}
           <View style={styles.section}>

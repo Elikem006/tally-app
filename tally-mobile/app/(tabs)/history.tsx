@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import ExpenseDetailModal from '../../components/ExpenseDetailModal';
-import { View, Text, ScrollView, StyleSheet, ActivityIndicator, TouchableOpacity, TextInput, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, ActivityIndicator, TouchableOpacity, TextInput, RefreshControl, KeyboardAvoidingView, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -444,6 +444,7 @@ export default function HistoryScreen() {
 
   return (
     <>
+      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
         style={[styles.container, { backgroundColor: colors.background }]}
         contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, spacing.xl) }]}
@@ -451,7 +452,7 @@ export default function HistoryScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.headerRow}>
-          <Text style={[typography.display, { color: colors.text }]}>Analytics & History</Text>
+          <Text style={[typography.display, { color: colors.text }]} accessibilityRole="header">Analytics & History</Text>
           <TouchableOpacity
             style={[styles.exportBtn, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }, exporting && { opacity: 0.5 }]}
             onPress={handleExportPress}
@@ -523,7 +524,14 @@ export default function HistoryScreen() {
             onChangeText={setSearchQuery}
           />
           {searchQuery !== '' && (
-            <TouchableOpacity onPress={() => setSearchQuery('')} activeOpacity={0.7} style={{ padding: spacing.xs }}>
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              activeOpacity={0.7}
+              style={{ padding: spacing.xs }}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+            >
               <Feather name="x" size={16} color={colors.textSecondary} />
             </TouchableOpacity>
           )}
@@ -631,6 +639,7 @@ export default function HistoryScreen() {
           Tip: You can also long press a transaction to delete it
         </Text>
       </ScrollView>
+      </KeyboardAvoidingView>
       {ConfirmModalComponent}
       {ActionSheetComponent}
       <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />

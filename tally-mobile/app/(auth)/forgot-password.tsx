@@ -138,7 +138,7 @@ export default function ForgotPasswordScreen() {
         <Text style={[typography.headline, { color: colors.primary, textAlign: 'center', marginBottom: spacing.md }]}>
           💰 Tally
         </Text>
-        <Text style={[typography.display, { color: colors.text, textAlign: 'center', marginBottom: spacing.xs }]}>
+        <Text style={[typography.display, { color: colors.text, textAlign: 'center', marginBottom: spacing.xs }]} accessibilityRole="header">
           {step === 1 ? 'Forgot Password?' : step === 2 ? 'Enter OTP' : 'New Password'}
         </Text>
         <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.lg }]}>
@@ -220,7 +220,13 @@ export default function ForgotPasswordScreen() {
                 secureTextEntry={!showNewPassword}
                 autoFocus
                 rightElement={
-                  <TouchableOpacity onPress={() => setShowNewPassword(!showNewPassword)} activeOpacity={0.7} hitSlop={8}>
+                  <TouchableOpacity
+                    onPress={() => setShowNewPassword(!showNewPassword)}
+                    activeOpacity={0.7}
+                    hitSlop={13}
+                    accessibilityRole="button"
+                    accessibilityLabel={showNewPassword ? 'Hide password' : 'Show password'}
+                  >
                     <Feather name={showNewPassword ? 'eye' : 'eye-off'} size={18} color={colors.textSecondary} />
                   </TouchableOpacity>
                 }
@@ -233,7 +239,13 @@ export default function ForgotPasswordScreen() {
                 onChangeText={setConfirmPassword}
                 secureTextEntry={!showConfirmPassword}
                 rightElement={
-                  <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} activeOpacity={0.7} hitSlop={8}>
+                  <TouchableOpacity
+                    onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                    activeOpacity={0.7}
+                    hitSlop={13}
+                    accessibilityRole="button"
+                    accessibilityLabel={showConfirmPassword ? 'Hide password' : 'Show password'}
+                  >
                     <Feather name={showConfirmPassword ? 'eye' : 'eye-off'} size={18} color={colors.textSecondary} />
                   </TouchableOpacity>
                 }

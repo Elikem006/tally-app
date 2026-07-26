@@ -97,7 +97,7 @@ export default function GroupsScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
     >
       <View style={[styles.mainCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>
-        <Text style={[typography.display, { color: colors.text, marginBottom: spacing.lg }]}>My Groups</Text>
+        <Text style={[typography.display, { color: colors.text, marginBottom: spacing.lg }]} accessibilityRole="header">My Groups</Text>
 
         {groups.length === 0 ? (
           <EmptyState

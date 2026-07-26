@@ -108,7 +108,7 @@ export default function AvatarBuilderScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={[typography.display, { color: colors.text, marginTop: 40, marginBottom: spacing.xs }]}>Profile Photo</Text>
+      <Text style={[typography.display, { color: colors.text, marginTop: 40, marginBottom: spacing.xs }]} accessibilityRole="header">Profile Photo</Text>
       <Text style={[typography.body, { color: colors.textSecondary, marginBottom: spacing.xxl, textAlign: 'center' }]}>
         Choose a photo to represent you in groups
       </Text>

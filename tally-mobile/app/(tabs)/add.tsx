@@ -465,7 +465,7 @@ export default function AddScreen() {
         automaticallyAdjustKeyboardInsets={true}
       >
         <View style={[styles.mainCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>
-          <Text style={[typography.display, { color: colors.text, marginBottom: spacing.lg }]}>
+          <Text style={[typography.display, { color: colors.text, marginBottom: spacing.lg }]} accessibilityRole="header">
             {transactionType === 'income' ? 'Add Income' : 'Add Expense'}
           </Text>
 
@@ -703,7 +703,12 @@ export default function AddScreen() {
               {tags.map((tag) => (
                 <View key={tag} style={[styles.tagPill, { backgroundColor: colors.neutralBg }]}>
                   <Text style={[typography.caption, { color: colors.textSecondary }]}>{tag}</Text>
-                  <TouchableOpacity onPress={() => handleRemoveTag(tag)} hitSlop={6}>
+                  <TouchableOpacity
+                    onPress={() => handleRemoveTag(tag)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove tag ${tag}`}
+                  >
                     <Feather name="x" size={12} color={colors.textSecondary} />
                   </TouchableOpacity>
                 </View>
@@ -763,7 +768,7 @@ export default function AddScreen() {
                 {transactionType === 'income' ? 'Receive with MoMo 📱' : 'Pay with MoMo 📱'}
               </Text>
               {!momoLoading && (
-                <TouchableOpacity onPress={closeMomoModal} hitSlop={12}>
+                <TouchableOpacity onPress={closeMomoModal} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
                   <Feather name="x" size={20} color={colors.textSecondary} />
                 </TouchableOpacity>
               )}

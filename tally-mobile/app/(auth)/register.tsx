@@ -51,7 +51,7 @@ export default function RegisterScreen() {
         <Text style={[typography.headline, { color: colors.primary, textAlign: 'center', marginBottom: spacing.md }]}>
           💰 Tally
         </Text>
-        <Text style={[typography.display, { color: colors.text, textAlign: 'center', marginBottom: spacing.xs }]}>
+        <Text style={[typography.display, { color: colors.text, textAlign: 'center', marginBottom: spacing.xs }]} accessibilityRole="header">
           Create Account
         </Text>
         <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.xl }]}>
@@ -77,7 +77,13 @@ export default function RegisterScreen() {
             onChangeText={setPassword}
             secureTextEntry={!showPassword}
             rightElement={
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} activeOpacity={0.7} hitSlop={8}>
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                activeOpacity={0.7}
+                hitSlop={13}
+                accessibilityRole="button"
+                accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+              >
                 <Feather name={showPassword ? 'eye' : 'eye-off'} size={18} color={colors.textSecondary} />
               </TouchableOpacity>
             }

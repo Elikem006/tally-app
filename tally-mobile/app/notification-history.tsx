@@ -160,10 +160,17 @@ export default function NotificationHistoryScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { borderBottomColor: colors.borderSubtle }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backBtn}
+          activeOpacity={0.7}
+          hitSlop={5}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <Feather name="chevron-left" size={26} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[typography.bodyStrong, { color: colors.text }]}>Notifications</Text>
+        <Text style={[typography.bodyStrong, { color: colors.text }]} accessibilityRole="header">Notifications</Text>
         {items.length > 0 ? (
           <TouchableOpacity onPress={handleClearAll} style={styles.clearBtn} activeOpacity={0.7}>
             <Text style={[typography.caption, { color: colors.negative, fontFamily: typography.bodyStrong.fontFamily }]}>Clear all</Text>
@@ -218,7 +225,14 @@ export default function NotificationHistoryScreen() {
                   <Text style={[typography.label, { color: colors.textTertiary }]}>{relativeTime(item.timestamp)}</Text>
                 </View>
                 <Feather name="chevron-right" size={18} color={colors.textSecondary} style={{ alignSelf: 'center', marginHorizontal: spacing.xs }} />
-                <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item.id)} hitSlop={12} activeOpacity={0.7}>
+                <TouchableOpacity
+                  style={styles.deleteBtn}
+                  onPress={() => handleDelete(item.id)}
+                  hitSlop={12}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel="Dismiss notification"
+                >
                   <Feather name="x" size={14} color={colors.textTertiary} />
                 </TouchableOpacity>
               </TouchableOpacity>

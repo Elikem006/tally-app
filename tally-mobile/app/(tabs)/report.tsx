@@ -583,11 +583,14 @@ export default function ReportScreen() {
           onPress={goToPreviousMonth}
           style={[styles.navArrow, { backgroundColor: t.card, borderColor: t.cardBorder }]}
           activeOpacity={0.7}
+          hitSlop={4}
+          accessibilityRole="button"
+          accessibilityLabel="Previous month"
         >
           <Feather name="chevron-left" size={22} color={t.text} />
         </TouchableOpacity>
 
-        <View style={{ alignItems: "center" }}>
+        <View style={{ alignItems: "center" }} accessibilityRole="header">
           <Text style={[styles.monthTitle, { color: t.text }]}>{selectedMonthName}</Text>
           <Text style={[styles.yearSubtitle, { color: t.textSecondary }]}>{selectedYear}</Text>
         </View>
@@ -597,6 +600,10 @@ export default function ReportScreen() {
           style={[styles.navArrow, { backgroundColor: t.card, borderColor: t.cardBorder, opacity: isCurrentMonth ? 0.35 : 1 }]}
           disabled={isCurrentMonth}
           activeOpacity={0.7}
+          hitSlop={4}
+          accessibilityRole="button"
+          accessibilityLabel="Next month"
+          accessibilityState={{ disabled: isCurrentMonth }}
         >
           <Feather name="chevron-right" size={22} color={t.text} />
         </TouchableOpacity>

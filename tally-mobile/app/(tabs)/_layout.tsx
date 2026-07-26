@@ -51,7 +51,8 @@ export default function TabLayout() {
                 onPress={props.onPress || undefined}
                 onLongPress={props.onLongPress || undefined}
                 accessibilityState={props.accessibilityState || undefined}
-                accessibilityRole={props.accessibilityRole}
+                accessibilityRole={props.accessibilityRole ?? 'button'}
+                accessibilityLabel="Add"
                 style={[styles.customAddButton, { backgroundColor: colors.primary, borderColor: colors.cardBg }]}
                 activeOpacity={0.85}
               >

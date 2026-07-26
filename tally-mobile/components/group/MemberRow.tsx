@@ -37,6 +37,7 @@ export function MemberRow({ userId, name, avatarData, isCreator, onRemove, index
           style={[styles.removeBtn, { backgroundColor: `${colors.negative}12`, borderColor: `${colors.negative}30` }]}
           onPress={onRemove}
           activeOpacity={0.7}
+          hitSlop={6}
           accessibilityRole="button"
           accessibilityLabel={`Remove ${name}`}
         >

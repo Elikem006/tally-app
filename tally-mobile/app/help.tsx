@@ -100,10 +100,13 @@ export default function HelpScreen() {
           style={[styles.backBtn, { backgroundColor: colors.neutralBg }]}
           onPress={() => router.back()}
           activeOpacity={0.7}
+          hitSlop={4}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
         >
           <Feather name="arrow-left" size={20} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[typography.bodyStrong, { color: colors.text }]}>Help & Support</Text>
+        <Text style={[typography.bodyStrong, { color: colors.text }]} accessibilityRole="header">Help & Support</Text>
         <View style={{ width: 40 }} />
       </View>
 

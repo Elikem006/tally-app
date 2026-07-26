@@ -102,7 +102,7 @@ export default function OnboardingScreen() {
 
       <Animated.View style={[styles.content, contentStyle]}>
         <Animated.Text style={[styles.heroEmoji, emojiStyle]}>{step.emoji}</Animated.Text>
-        <Text style={[typography.display, { color: colors.text, textAlign: 'center', marginBottom: spacing.md }]}>
+        <Text style={[typography.display, { color: colors.text, textAlign: 'center', marginBottom: spacing.md }]} accessibilityRole="header">
           {step.title}
         </Text>
         <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', paddingHorizontal: spacing.sm }]}>

@@ -225,11 +225,14 @@ export default function RemindersScreen() {
     <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[styles.flex, { paddingTop: Math.max(insets.top, spacing.lg) }]}>
         <View style={styles.header}>
-          <Text style={[typography.display, { color: colors.text }]}>Bill Reminders</Text>
+          <Text style={[typography.display, { color: colors.text }]} accessibilityRole="header">Bill Reminders</Text>
           <TouchableOpacity
             style={[styles.addBtn, { backgroundColor: colors.primary }]}
             onPress={() => setShowAddForm(!showAddForm)}
             activeOpacity={0.8}
+            hitSlop={4}
+            accessibilityRole="button"
+            accessibilityLabel={showAddForm ? 'Close new reminder form' : 'Add reminder'}
           >
             <Feather name={showAddForm ? 'x' : 'plus'} size={20} color="#ffffff" />
           </TouchableOpacity>
@@ -390,6 +393,9 @@ export default function RemindersScreen() {
                         style={[styles.deleteBtn, { backgroundColor: `${colors.negative}12`, borderColor: `${colors.negative}30` }]}
                         onPress={() => handleDelete(String(item.id))}
                         activeOpacity={0.7}
+                        hitSlop={6}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Delete reminder: ${item.title}`}
                       >
                         <Feather name="trash-2" size={16} color={colors.negative} />
                       </TouchableOpacity>

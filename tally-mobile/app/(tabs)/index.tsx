@@ -532,7 +532,7 @@ export default function HomeScreen() {
         <View style={styles.headerRow}>
           <View>
             <Text style={[typography.label, { color: colors.textSecondary }]}>Welcome back 👋</Text>
-            <Text style={[typography.headline, { color: colors.text, marginTop: 2 }]}>Good day, {userName}</Text>
+            <Text style={[typography.headline, { color: colors.text, marginTop: 2 }]} accessibilityRole="header">Good day, {userName}</Text>
           </View>
           <View style={styles.headerRightActions}>
             <TouchableOpacity

@@ -34,7 +34,10 @@ const lightExtensions: Omit<ExtendedThemeColors, keyof ThemeColors> = {
   surfaceElevated: '#FFFFFF',
   surfaceHigh: '#FFFFFF',
   borderSubtle: '#F0F1F4',
-  textTertiary: '#9CA3AF',
+  // #9CA3AF here measures ~2.5:1 against white — fails WCAG AA (4.5:1) for
+  // the caption/label text this renders (timestamps, footnotes). #6B7280
+  // clears ~4.8:1.
+  textTertiary: '#6B7280',
   overlay: 'rgba(15, 17, 21, 0.5)',
   primarySubtle: 'rgba(139, 92, 246, 0.12)',
   accentSubtle: 'rgba(245, 158, 11, 0.12)',
@@ -47,7 +50,9 @@ const darkExtensions: Omit<ExtendedThemeColors, keyof ThemeColors> = {
   surfaceElevated: '#181A22',
   surfaceHigh: '#20232D',
   borderSubtle: '#22242D',
-  textTertiary: '#6B7280',
+  // Lighter than the light-mode value on purpose — #6B7280 only clears
+  // ~3.6:1 against this dark surface; #9CA3AF clears ~6.8:1.
+  textTertiary: '#9CA3AF',
   overlay: 'rgba(0, 0, 0, 0.72)',
   primarySubtle: 'rgba(167, 139, 250, 0.16)',
   accentSubtle: 'rgba(251, 191, 36, 0.16)',

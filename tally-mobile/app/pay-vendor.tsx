@@ -202,7 +202,7 @@ export default function PayVendorScreen() {
               <Text style={[typography.bodyStrong, { color: colors.primary, fontSize: 16 }]}>← Back</Text>
             </TouchableOpacity>
 
-            <Text style={[typography.display, { color: colors.text, marginBottom: spacing.xs }]}>Pay Vendor via MoMo</Text>
+            <Text style={[typography.display, { color: colors.text, marginBottom: spacing.xs }]} accessibilityRole="header">Pay Vendor via MoMo</Text>
             <Text style={[typography.body, { color: colors.textSecondary, marginBottom: spacing.xl }]}>
               Send money directly to a vendor's MoMo wallet.
             </Text>
@@ -268,7 +268,7 @@ export default function PayVendorScreen() {
         {/* ──────────────────── STEP 2 — Confirm ──────────────────────── */}
         {step === 2 && (
           <View>
-            <Text style={[typography.display, { color: colors.text, marginBottom: spacing.xs }]}>Confirm Transfer</Text>
+            <Text style={[typography.display, { color: colors.text, marginBottom: spacing.xs }]} accessibilityRole="header">Confirm Transfer</Text>
             <Text style={[typography.body, { color: colors.textSecondary, marginBottom: spacing.xl }]}>Review the details before sending.</Text>
 
             <View style={[styles.confirmCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>

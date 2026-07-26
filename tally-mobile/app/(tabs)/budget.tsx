@@ -300,7 +300,7 @@ export default function BudgetScreen() {
               </View>
             ) : (
               <View style={[styles.mainCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>
-                <Text style={[typography.display, { color: colors.text, marginBottom: spacing.xs }]}>Budget Overview</Text>
+                <Text style={[typography.display, { color: colors.text, marginBottom: spacing.xs }]} accessibilityRole="header">Budget Overview</Text>
                 <Text style={[typography.body, { color: colors.textSecondary, marginBottom: spacing.xl }]}>
                   Your spending this month vs your limits
                 </Text>
@@ -412,7 +412,7 @@ export default function BudgetScreen() {
             keyboardShouldPersistTaps="handled"
           >
             <View style={[styles.mainCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>
-              <Text style={[typography.display, { color: colors.text, marginBottom: spacing.xs }]}>Monthly Budgets</Text>
+              <Text style={[typography.display, { color: colors.text, marginBottom: spacing.xs }]} accessibilityRole="header">Monthly Budgets</Text>
               <Text style={[typography.body, { color: colors.textSecondary, marginBottom: spacing.lg }]}>
                 Set how much you want to spend per category this month
               </Text>

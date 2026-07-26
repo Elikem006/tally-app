@@ -85,7 +85,7 @@ export default function ManageCategoriesScreen() {
     <KeyboardAvoidingView style={[styles.flex, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <View style={styles.flex}>
         <View style={styles.header}>
-          <Text style={[typography.display, { color: colors.text }]}>My Categories</Text>
+          <Text style={[typography.display, { color: colors.text }]} accessibilityRole="header">My Categories</Text>
           <Button title="+ Add" onPress={() => setShowAddModal(true)} size="sm" fullWidth={false} />
         </View>
 

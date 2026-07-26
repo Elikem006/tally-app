@@ -40,7 +40,7 @@ export default function CreateGroupScreen() {
   return (
     <Screen keyboardAvoiding contentStyle={styles.scrollContent}>
       <Card elevation="raised">
-        <Text style={[typography.display, { color: colors.text, marginBottom: spacing.xs }]}>Create a Group</Text>
+        <Text style={[typography.display, { color: colors.text, marginBottom: spacing.xs }]} accessibilityRole="header">Create a Group</Text>
         <Text style={[typography.body, { color: colors.textSecondary, marginBottom: spacing.xl }]}>
           Give your group a name — like "KNUST Friends" or "Roommates"
         </Text>

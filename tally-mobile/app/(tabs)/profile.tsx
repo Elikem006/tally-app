@@ -341,10 +341,16 @@ export default function ProfileScreen() {
         automaticallyAdjustKeyboardInsets={true}
       >
         <Card elevation="raised">
-          <Text style={[typography.display, { color: colors.text, marginBottom: spacing.lg }]}>My Profile</Text>
+          <Text style={[typography.display, { color: colors.text, marginBottom: spacing.lg }]} accessibilityRole="header">My Profile</Text>
 
           <View style={styles.avatarSection}>
-            <TouchableOpacity style={styles.avatarWrapper} onPress={triggerImageOptions} activeOpacity={0.8}>
+            <TouchableOpacity
+              style={styles.avatarWrapper}
+              onPress={triggerImageOptions}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Change profile photo"
+            >
               {profileImage ? (
                 <Image source={{ uri: profileImage }} style={styles.avatarImage} />
               ) : (
