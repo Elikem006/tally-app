@@ -121,6 +121,10 @@ export function SuccessBurst({ visible, category, label, amountLabel, onDone }: 
       // which, on an already-cleared form, would fire a bogus "enter an
       // amount" toast over the top of the confirmation.
       pointerEvents="auto"
+      // Grouped: without this the ring, rays and the two Text lines are
+      // traversed separately, so the confirmation is announced twice — once
+      // as this label and again as its own children.
+      accessible
       accessibilityLiveRegion="polite"
       accessibilityLabel={`${label}. ${amountLabel}`}
     >
