@@ -25,7 +25,16 @@ export function SectionHeader({ title, actionLabel, onPressAction, style }: Sect
     >
       <Text style={[typography.headline, { color: colors.text }]}>{title}</Text>
       {!!actionLabel && !!onPressAction && (
-        <Pressable onPress={onPressAction} hitSlop={8} accessibilityRole="button" accessibilityLabel={actionLabel}>
+        <Pressable
+          onPress={onPressAction}
+          hitSlop={8}
+          // "See all" is a navigation trigger and had no press feedback at
+          // all — it looked identical pressed and unpressed until the next
+          // screen arrived. Dims on press like every other text action.
+          style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+          accessibilityRole="button"
+          accessibilityLabel={actionLabel}
+        >
           <Text style={[typography.label, { color: colors.primary }]}>{actionLabel}</Text>
         </Pressable>
       )}

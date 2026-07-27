@@ -26,7 +26,7 @@ import { useConfirmModal } from '../../hooks/useConfirmModal';
 import { useActionSheet } from '../../hooks/useActionSheet';
 import { useTheme } from '../../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius } from '../../theme';
-import { Card, Button, Input, CategoryIcon } from '../../components/ui';
+import { Card, Button, Input, CategoryIcon, Skeleton } from '../../components/ui';
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
@@ -238,6 +238,7 @@ export default function ProfileScreen() {
       message: 'Are you sure you want to log out of Tally?',
       confirmText: 'Log Out',
       confirmColor: colors.negative,
+      destructive: true,
       onConfirm: async () => {
         resetCurrentUser();
         await clearRememberedUser();
@@ -253,6 +254,7 @@ export default function ProfileScreen() {
       message: 'Are you sure you want to remove your MoMo number? You will need to re-enter it to make MoMo payments.',
       confirmText: 'Remove',
       confirmColor: colors.negative,
+      destructive: true,
       onConfirm: async () => {
         try {
           await authAPI.updatePhone(getUserId(), '');
@@ -361,7 +363,18 @@ export default function ProfileScreen() {
 
           <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm + 2 }]}>Your Stats</Text>
           {loadingStats && !refreshing ? (
-            <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.lg }} />
+            // Shaped like the stats grid it stands in for. A small spinner
+            // here occupied roughly 40px and was then replaced by a block
+            // several hundred tall, shoving everything below it down the page.
+            <View style={{ marginBottom: spacing.md, gap: spacing.sm + 2 }}>
+              <View style={styles.statsRow}>
+                {[0, 1, 2].map((i) => (
+                  <Skeleton key={i} height={66} borderRadius={radius.lg} style={{ flex: 1 }} />
+                ))}
+              </View>
+              <Skeleton height={72} borderRadius={radius.lg} />
+              <Skeleton height={72} borderRadius={radius.lg} />
+            </View>
           ) : error && !stats ? (
             <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', marginVertical: spacing.lg }]}>{error}</Text>
           ) : stats ? (

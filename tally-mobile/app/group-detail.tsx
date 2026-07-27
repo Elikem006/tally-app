@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  ActivityIndicator,
   TouchableOpacity,
   TextInput,
   KeyboardAvoidingView,
@@ -24,7 +23,7 @@ import { useToast } from '../hooks/useToast';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import { useTheme } from '../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius } from '../theme';
-import { Button, Input, ProgressBar } from '../components/ui';
+import { Button, Input, ProgressBar, Skeleton } from '../components/ui';
 import { MemberRow } from '../components/group/MemberRow';
 import { BalanceRow } from '../components/group/BalanceRow';
 import { SharedExpenseRow } from '../components/group/SharedExpenseRow';
@@ -339,6 +338,7 @@ export default function GroupDetailScreen() {
       message: `Are you sure you want to remove ${memberName} from this group?`,
       confirmText: 'Remove',
       confirmColor: colors.negative,
+      destructive: true,
       onConfirm: async () => {
         try {
           await groupAPI.removeMember(String(groupId), String(member.userId), getUserId());
@@ -377,6 +377,7 @@ export default function GroupDetailScreen() {
       message: 'This will permanently delete the group and all shared expenses. This cannot be undone.',
       confirmText: 'Delete Group',
       confirmColor: colors.negative,
+      destructive: true,
       onConfirm: async () => {
         try {
           await groupAPI.deleteGroup(String(groupId));
@@ -390,9 +391,29 @@ export default function GroupDetailScreen() {
   }
 
   if (loading && !refreshing) {
+    // Shaped like the card below rather than a spinner on a blank screen. The
+    // group name is a route param and is known immediately, so it renders for
+    // real — only the fetched sections below it are placeheld.
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <View style={[styles.flex, { backgroundColor: colors.background }]}>
+        <View style={[styles.content, { paddingTop: Math.max(insets.top, spacing.xl) }]}>
+          <View style={[styles.mainCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>
+            <Text
+              style={[typography.display, { color: colors.text, marginBottom: spacing.xl }]}
+              accessibilityRole="header"
+            >
+              {groupName}
+            </Text>
+            <Skeleton width="40%" height={13} style={{ marginBottom: spacing.md }} />
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} height={64} borderRadius={radius.lg} style={{ marginBottom: spacing.sm }} />
+            ))}
+            <Skeleton width="35%" height={13} style={{ marginTop: spacing.lg, marginBottom: spacing.md }} />
+            {[0, 1].map((i) => (
+              <Skeleton key={i} height={64} borderRadius={radius.lg} style={{ marginBottom: spacing.sm }} />
+            ))}
+          </View>
+        </View>
       </View>
     );
   }

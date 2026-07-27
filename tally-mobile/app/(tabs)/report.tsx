@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -317,9 +317,17 @@ export default function ReportScreen() {
     [isCurrentMonth, selectedMonth, selectedYear],
   );
 
+  // Which month's data is already on screen. Unlike the other screens this
+  // guard is keyed rather than boolean: re-entering the tab on the month you
+  // were already looking at should refresh silently, but *changing* month
+  // genuinely swaps every figure on the screen and has to show the skeleton —
+  // otherwise the old month's numbers sit there looking current.
+  const loadedKey = useRef<string | null>(null);
+
   useFocusEffect(
     useCallback(() => {
-      fetchReportAndExpenses(selectedMonth, selectedYear, true);
+      const key = `${selectedYear}-${selectedMonth}`;
+      fetchReportAndExpenses(selectedMonth, selectedYear, loadedKey.current !== key);
     }, [selectedMonth, selectedYear])
   );
 
@@ -363,6 +371,7 @@ export default function ReportScreen() {
     } catch (e) {
       setError("Failed to load reports. Pull down to refresh.");
     } finally {
+      loadedKey.current = `${year}-${month}`;
       setLoading(false);
     }
   }

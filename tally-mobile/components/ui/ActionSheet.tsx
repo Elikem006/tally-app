@@ -142,7 +142,13 @@ export function ActionSheet({ visible, title, message, options, onCancel, cancel
 
         <Pressable
           onPress={() => handleDismiss()}
-          style={[styles.cancelButton, { backgroundColor: colors.surfaceElevated }]}
+          // Matches the option rows above, which already dim on press. This
+          // one was a static style, so the sheet's most-tapped control was
+          // the only one in it that gave no feedback.
+          style={({ pressed }) => [
+            styles.cancelButton,
+            { backgroundColor: pressed ? colors.surface : colors.surfaceElevated },
+          ]}
           accessibilityRole="button"
           accessibilityLabel={cancelLabel}
         >

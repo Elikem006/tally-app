@@ -8,6 +8,8 @@ interface ConfirmConfig {
   cancelText?: string;
   confirmColor?: string;
   icon?: string;
+  /** Weights the confirm haptic more heavily — see ConfirmModal. */
+  destructive?: boolean;
   onConfirm: () => void;
 }
 
@@ -58,6 +60,7 @@ export function useConfirmModal() {
       cancelText={config.cancelText}
       confirmColor={config.confirmColor}
       icon={config.icon}
+      destructive={config.destructive}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
     />

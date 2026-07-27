@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { useState, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { categoriesAPI } from '../services/api';
 import { getUserId } from '../services/storage';
@@ -8,7 +8,7 @@ import { useToast } from '../hooks/useToast';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import { useTheme } from '../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius } from '../theme';
-import { Button, Input, EmptyState } from '../components/ui';
+import { Button, Input, EmptyState, Skeleton } from '../components/ui';
 
 type CustomCategory = { id: number; name: string; emoji: string };
 
@@ -24,13 +24,18 @@ export default function ManageCategoriesScreen() {
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
   const { showConfirm, ConfirmModalComponent } = useConfirmModal();
 
+  // First load only — returning from the add-category modal re-focuses this
+  // screen, and without the guard the list it just updated blinked away.
+  const hasLoadedOnce = useRef(false);
+
   useFocusEffect(
     useCallback(() => {
-      fetchCategories();
+      fetchCategories(!hasLoadedOnce.current);
     }, []),
   );
 
-  async function fetchCategories() {
+  async function fetchCategories(showLoading = true) {
+    if (showLoading) setLoading(true);
     try {
       setLoading(true);
       const res = await categoriesAPI.getUserCategories(getUserId());
@@ -38,6 +43,7 @@ export default function ManageCategoriesScreen() {
     } catch {
       showToast('Could not load categories', 'error');
     } finally {
+      hasLoadedOnce.current = true;
       setLoading(false);
     }
   }
@@ -69,6 +75,7 @@ export default function ManageCategoriesScreen() {
       message: `Are you sure you want to delete the "${cat.name}" category? Existing expenses with this category will keep their category name.`,
       confirmText: 'Delete',
       confirmColor: colors.negative,
+      destructive: true,
       onConfirm: async () => {
         try {
           await categoriesAPI.deleteCategory(String(cat.id), getUserId());
@@ -94,7 +101,11 @@ export default function ManageCategoriesScreen() {
         </Text>
 
         {loading ? (
-          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
+          <View style={styles.list}>
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} height={62} borderRadius={radius.lg} style={{ marginBottom: spacing.sm }} />
+            ))}
+          </View>
         ) : categories.length === 0 ? (
           <EmptyState icon="tag" title="No custom categories yet" body='Tap "+ Add" to create your first one' />
         ) : (

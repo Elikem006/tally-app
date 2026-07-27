@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import ExpenseDetailModal from '../../components/ExpenseDetailModal';
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator, TouchableOpacity, TextInput, RefreshControl, KeyboardAvoidingView, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -8,7 +8,6 @@ import { Svg, Path } from 'react-native-svg';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
-import * as Haptics from 'expo-haptics';
 import { expenseAPI, budgetAPI, categoriesAPI } from '../../services/api';
 import { getUserId, currentUser } from '../../services/storage';
 import { useConfirmModal } from '../../hooks/useConfirmModal';
@@ -77,9 +76,14 @@ export default function HistoryScreen() {
   const { showConfirm, ConfirmModalComponent } = useConfirmModal();
   const { showActionSheet, ActionSheetComponent } = useActionSheet();
 
+  // Skeleton on the first load only. This screen refetches on every focus, so
+  // without the guard the skeleton replaced the whole list every time the tab
+  // was re-entered — a flash on content the user had already seen.
+  const hasLoadedOnce = useRef(false);
+
   useFocusEffect(
     useCallback(() => {
-      fetchData(true);
+      fetchData(!hasLoadedOnce.current);
     }, [])
   );
 
@@ -107,6 +111,7 @@ export default function HistoryScreen() {
     } catch (err: any) {
       setError('Failed to load history data. Please check your connection.');
     } finally {
+      hasLoadedOnce.current = true;
       setLoading(false);
     }
   }
@@ -274,9 +279,11 @@ export default function HistoryScreen() {
       message: 'Are you sure you want to delete this expense? This cannot be undone.',
       confirmText: 'Delete',
       confirmColor: colors.negative,
+      destructive: true,
       onConfirm: async () => {
         try {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => { });
+          // Heavy haptic now comes from ConfirmModal via `destructive` — this
+          // fired on top of its Medium, so a delete buzzed twice.
           await expenseAPI.deleteExpense(String(item.id), getUserId());
           setExpenses((prev) => prev.filter((e) => !(e.id === item.id && !(e.isShared || e.type === 'shared'))));
         } catch {

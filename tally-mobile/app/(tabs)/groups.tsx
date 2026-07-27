@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
@@ -19,9 +19,12 @@ export default function GroupsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [groupSummaries, setGroupSummaries] = useState<{ [key: string]: { total: number; memberCount: number } }>({});
 
+  // Skeleton on the first load only — see history.tsx for the same guard.
+  const hasLoadedOnce = useRef(false);
+
   useFocusEffect(
     useCallback(() => {
-      fetchGroups(true);
+      fetchGroups(!hasLoadedOnce.current);
     }, [])
   );
 
@@ -55,6 +58,7 @@ export default function GroupsScreen() {
     } catch (err: any) {
       setError('Failed to load groups. Please check your connection.');
     } finally {
+      hasLoadedOnce.current = true;
       setLoading(false);
     }
   }

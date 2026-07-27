@@ -23,7 +23,7 @@ import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import { useTheme } from '../../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius } from '../../theme';
-import { Button, Input, Chip, CategoryIcon, SuccessBurst } from '../../components/ui';
+import { Button, Input, Chip, CategoryIcon, SuccessBurst, Skeleton } from '../../components/ui';
 
 const CATEGORIES = ['Food', 'Transport', 'Entertainment', 'Utilities', 'Other'];
 
@@ -448,14 +448,6 @@ export default function AddScreen() {
     setMomoStatus('idle');
   }
 
-  if (fetching) {
-    return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
-
   return (
     <KeyboardAvoidingView
       style={[styles.flex, { backgroundColor: colors.background }]}
@@ -566,9 +558,13 @@ export default function AddScreen() {
                   <CategoryIcon category={cat} size={28} />
                   <Text style={[typography.bodyStrong, { color: colors.text }]}>{cat}</Text>
                 </View>
-                <Text style={[typography.labelStrong, { color: colors.textSecondary }]}>
-                  GHS {Math.abs(spent[cat] || 0).toFixed(2)}
-                </Text>
+                {fetching ? (
+                  <Skeleton width={62} height={14} />
+                ) : (
+                  <Text style={[typography.labelStrong, { color: colors.textSecondary }]}>
+                    GHS {Math.abs(spent[cat] || 0).toFixed(2)}
+                  </Text>
+                )}
               </TouchableOpacity>
             ))}
 
@@ -587,9 +583,13 @@ export default function AddScreen() {
                   <CategoryIcon category={cat.name} customEmoji={cat.emoji} size={28} />
                   <Text style={[typography.bodyStrong, { color: colors.text }]}>{cat.name}</Text>
                 </View>
-                <Text style={[typography.labelStrong, { color: colors.textSecondary }]}>
-                  GHS {Math.abs(spent[cat.name] || 0).toFixed(2)}
-                </Text>
+                {fetching ? (
+                  <Skeleton width={62} height={14} />
+                ) : (
+                  <Text style={[typography.labelStrong, { color: colors.textSecondary }]}>
+                    GHS {Math.abs(spent[cat.name] || 0).toFixed(2)}
+                  </Text>
+                )}
               </TouchableOpacity>
             ))}
 

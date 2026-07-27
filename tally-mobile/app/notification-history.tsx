@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, ScrollView } from 'react-native';
+import { useState, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, ScrollView } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
 import {
@@ -11,6 +11,7 @@ import {
 } from '../services/notificationHistory';
 import { useTheme } from '../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius } from '../theme';
+import { Skeleton } from '../components/ui';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 
 // ── Config per notification type (deliberately theme-independent — these are
@@ -95,14 +96,26 @@ export default function NotificationHistoryScreen() {
     }
   }
 
+  // First load only. Reads from local storage, so a refocus resolves almost
+  // instantly — the spinner it used to show was a flicker, not information.
+  const hasLoadedOnce = useRef(false);
+
   useFocusEffect(
     useCallback(() => {
       let active = true;
       (async () => {
-        setLoading(true);
-        const list = await getHistory();
-        if (active) setItems(list);
-        setLoading(false);
+        if (!hasLoadedOnce.current) setLoading(true);
+        try {
+          const list = await getHistory();
+          if (active) setItems(list);
+        } finally {
+          // Guarded by `active` so a screen left mid-flight doesn't set state
+          // after unmount.
+          if (active) {
+            hasLoadedOnce.current = true;
+            setLoading(false);
+          }
+        }
         await markAllRead();
       })();
       return () => { active = false; };
@@ -140,6 +153,7 @@ export default function NotificationHistoryScreen() {
       message: 'Remove all notification history? This cannot be undone.',
       confirmText: 'Clear',
       confirmColor: colors.negative,
+      destructive: true,
       onConfirm: async () => {
         await clearHistory();
         setItems([]);
@@ -148,14 +162,6 @@ export default function NotificationHistoryScreen() {
   }
 
   const listData = buildSections(items);
-
-  if (loading) {
-    return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -180,7 +186,22 @@ export default function NotificationHistoryScreen() {
         )}
       </View>
 
-      {items.length === 0 ? (
+      {/* Loading is checked before empty: otherwise an in-flight read renders
+          "All caught up" and then replaces it, telling the user there is
+          nothing here before that is actually known. */}
+      {loading ? (
+        <View style={{ padding: spacing.lg }}>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <View key={i} style={styles.skeletonRow}>
+              <Skeleton width={38} height={38} borderRadius={19} />
+              <View style={{ flex: 1, gap: spacing.sm }}>
+                <Skeleton width="70%" height={13} />
+                <Skeleton width="45%" height={11} />
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : items.length === 0 ? (
         <ScrollView
           contentContainerStyle={styles.empty}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
@@ -281,6 +302,12 @@ const styles = StyleSheet.create({
   cardTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: 2 },
   unreadDot: { width: 7, height: 7, borderRadius: 4 },
   deleteBtn: { paddingLeft: spacing.xs, paddingTop: 2 },
+  skeletonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+  },
   empty: {
     flexGrow: 1,
     alignItems: 'center',
