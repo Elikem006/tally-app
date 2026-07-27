@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { categoriesAPI } from '../services/api';
 import { getUserId } from '../services/storage';
@@ -8,7 +8,7 @@ import { useToast } from '../hooks/useToast';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import { useTheme } from '../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius } from '../theme';
-import { Button, Input, EmptyState } from '../components/ui';
+import { Button, Input, EmptyState, Skeleton } from '../components/ui';
 
 type CustomCategory = { id: number; name: string; emoji: string };
 
@@ -100,7 +100,11 @@ export default function ManageCategoriesScreen() {
         </Text>
 
         {loading ? (
-          <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 40 }} />
+          <View style={styles.list}>
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} height={62} borderRadius={radius.lg} style={{ marginBottom: spacing.sm }} />
+            ))}
+          </View>
         ) : categories.length === 0 ? (
           <EmptyState icon="tag" title="No custom categories yet" body='Tap "+ Add" to create your first one' />
         ) : (
