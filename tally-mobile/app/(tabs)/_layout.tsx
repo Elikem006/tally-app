@@ -3,6 +3,7 @@ import { Redirect } from "expo-router";
 import { currentUser } from "../../services/storage";
 import { TouchableOpacity, StyleSheet, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import { useTheme } from "../../hooks/useTheme";
 import { radius } from "../../theme";
 
@@ -16,6 +17,22 @@ export default function TabLayout() {
 
   return (
     <Tabs
+      // Tab change is one of the four places the motion phase said haptics
+      // belong (alongside successful submit, delete, and budget threshold),
+      // and it was the only one of the four with no implementation at all.
+      //
+      // selectionAsync rather than an impact: this reuses the weight the
+      // report chart's bucket-crossing already uses for "moved to a different
+      // discrete option", and it is the lightest option available — which
+      // matters for the control the user touches most often in the app.
+      screenListeners={({ navigation }) => ({
+        tabPress: () => {
+          // Re-tapping the tab you are already on is not a navigation, so it
+          // should not buzz. Without this the bar fires on every stray tap.
+          if (navigation.isFocused()) return;
+          Haptics.selectionAsync().catch(() => {});
+        },
+      })}
       screenOptions={{
         tabBarActiveTintColor: colors.text,
         tabBarInactiveTintColor: colors.textSecondary,
