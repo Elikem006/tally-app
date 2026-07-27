@@ -204,6 +204,7 @@ export default function BudgetScreen() {
       message: 'Clear all budget limits? This cannot be undone.',
       confirmText: 'Reset',
       confirmColor: colors.negative,
+      destructive: true,
       onConfirm: async () => {
         setLimits({ Food: '', Transport: '', Entertainment: '', Utilities: '', Other: '' });
         const userId = getUserId();

@@ -238,6 +238,7 @@ export default function ProfileScreen() {
       message: 'Are you sure you want to log out of Tally?',
       confirmText: 'Log Out',
       confirmColor: colors.negative,
+      destructive: true,
       onConfirm: async () => {
         resetCurrentUser();
         await clearRememberedUser();
@@ -253,6 +254,7 @@ export default function ProfileScreen() {
       message: 'Are you sure you want to remove your MoMo number? You will need to re-enter it to make MoMo payments.',
       confirmText: 'Remove',
       confirmColor: colors.negative,
+      destructive: true,
       onConfirm: async () => {
         try {
           await authAPI.updatePhone(getUserId(), '');

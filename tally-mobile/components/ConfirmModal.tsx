@@ -26,6 +26,12 @@ interface ConfirmModalProps {
   icon?: string | ReactNode;
   /** For single-action acknowledgements (e.g. a success notice) — hides the Cancel button so there's one clear action, not two identically-behaving buttons. */
   hideCancel?: boolean;
+  /**
+   * Marks the confirm action as destructive, which weights its haptic more
+   * heavily than a routine confirmation. Mirrors ActionSheetOption's existing
+   * `destructive` flag rather than introducing a second way to express it.
+   */
+  destructive?: boolean;
 }
 
 export default function ConfirmModal({
@@ -39,6 +45,7 @@ export default function ConfirmModal({
   onCancel,
   icon,
   hideCancel = false,
+  destructive = false,
 }: ConfirmModalProps) {
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
@@ -64,7 +71,13 @@ export default function ConfirmModal({
   }
 
   function handleConfirm() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    // Destructive confirmations land heavier than routine ones. Fired here,
+    // once, rather than at the call site — history.tsx was adding its own
+    // Heavy inside onConfirm on top of this Medium, so deleting an expense
+    // buzzed twice.
+    Haptics.impactAsync(
+      destructive ? Haptics.ImpactFeedbackStyle.Heavy : Haptics.ImpactFeedbackStyle.Medium,
+    ).catch(() => {});
     dismiss(onConfirm);
   }
 

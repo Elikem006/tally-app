@@ -188,6 +188,7 @@ export default function RemindersScreen() {
       message: 'Are you sure you want to delete this reminder?',
       confirmText: 'Delete',
       confirmColor: colors.negative,
+      destructive: true,
       onConfirm: async () => {
         try {
           await remindersAPI.deleteReminder(reminderId);

@@ -338,6 +338,7 @@ export default function GroupDetailScreen() {
       message: `Are you sure you want to remove ${memberName} from this group?`,
       confirmText: 'Remove',
       confirmColor: colors.negative,
+      destructive: true,
       onConfirm: async () => {
         try {
           await groupAPI.removeMember(String(groupId), String(member.userId), getUserId());
@@ -376,6 +377,7 @@ export default function GroupDetailScreen() {
       message: 'This will permanently delete the group and all shared expenses. This cannot be undone.',
       confirmText: 'Delete Group',
       confirmColor: colors.negative,
+      destructive: true,
       onConfirm: async () => {
         try {
           await groupAPI.deleteGroup(String(groupId));

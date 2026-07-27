@@ -75,6 +75,7 @@ export default function ManageCategoriesScreen() {
       message: `Are you sure you want to delete the "${cat.name}" category? Existing expenses with this category will keep their category name.`,
       confirmText: 'Delete',
       confirmColor: colors.negative,
+      destructive: true,
       onConfirm: async () => {
         try {
           await categoriesAPI.deleteCategory(String(cat.id), getUserId());

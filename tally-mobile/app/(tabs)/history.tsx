@@ -8,7 +8,6 @@ import { Svg, Path } from 'react-native-svg';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
-import * as Haptics from 'expo-haptics';
 import { expenseAPI, budgetAPI, categoriesAPI } from '../../services/api';
 import { getUserId, currentUser } from '../../services/storage';
 import { useConfirmModal } from '../../hooks/useConfirmModal';
@@ -280,9 +279,11 @@ export default function HistoryScreen() {
       message: 'Are you sure you want to delete this expense? This cannot be undone.',
       confirmText: 'Delete',
       confirmColor: colors.negative,
+      destructive: true,
       onConfirm: async () => {
         try {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => { });
+          // Heavy haptic now comes from ConfirmModal via `destructive` — this
+          // fired on top of its Medium, so a delete buzzed twice.
           await expenseAPI.deleteExpense(String(item.id), getUserId());
           setExpenses((prev) => prev.filter((e) => !(e.id === item.id && !(e.isShared || e.type === 'shared'))));
         } catch {

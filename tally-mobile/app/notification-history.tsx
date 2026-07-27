@@ -153,6 +153,7 @@ export default function NotificationHistoryScreen() {
       message: 'Remove all notification history? This cannot be undone.',
       confirmText: 'Clear',
       confirmColor: colors.negative,
+      destructive: true,
       onConfirm: async () => {
         await clearHistory();
         setItems([]);
