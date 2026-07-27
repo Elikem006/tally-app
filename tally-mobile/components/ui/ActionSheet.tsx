@@ -1,4 +1,4 @@
-import { ReactNode, useEffect } from 'react';
+import { ReactNode, useEffect, useRef } from 'react';
 import { Modal, View, Text, Pressable, StyleSheet, Dimensions } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -27,6 +27,18 @@ interface ActionSheetProps {
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 /**
+ * Gap between the sheet closing and the chosen action running.
+ *
+ * An option's action may present another native surface (the image picker,
+ * the camera, a share sheet) or navigate. Any of those launched while this
+ * Modal is still mounted will not appear — on iOS you cannot present a view
+ * controller from one that is mid-dismiss — and the picker's promise then
+ * never settles, which reads as the app freezing rather than failing. Letting
+ * React flush the unmount first avoids the whole class of problem.
+ */
+const ACTION_DEFER_MS = 80;
+
+/**
  * A multi-option bottom sheet — for choices that aren't a yes/no confirmation
  * (export format, recurrence frequency, photo source) and aren't a passive
  * notice either. Distinct from ConfirmModal (always exactly 2 buttons) and
@@ -40,17 +52,43 @@ export function ActionSheet({ visible, title, message, options, onCancel, cancel
   const overlayOpacity = useSharedValue(0);
   const translateY = useSharedValue(SCREEN_HEIGHT);
 
+  // Held on the JS side rather than passed through runOnJS — the exit
+  // callback is a worklet, and functions are not serializable across that
+  // boundary.
+  const pendingAction = useRef<(() => void) | undefined>(undefined);
+
   useEffect(() => {
     if (visible) {
+      // Reset before animating in, so an exit that was interrupted mid-flight
+      // can't leave the sheet part-way up on the next open.
+      overlayOpacity.value = 0;
+      translateY.value = SCREEN_HEIGHT;
       overlayOpacity.value = withTiming(1, { duration: duration.base, easing: easing.standard });
       translateY.value = withSpring(0, { damping: 18, stiffness: 180 });
     }
   }, [visible]);
 
+  /**
+   * Runs once the exit animation ends. `onCancel` is the only thing that
+   * actually flips `visible` and unmounts the Modal — without it the sheet
+   * animates out of sight but stays mounted as a full-screen, fully
+   * transparent Pressable that swallows every touch in the app.
+   */
+  function finishDismiss() {
+    const action = pendingAction.current;
+    pendingAction.current = undefined;
+    onCancel();
+    if (action) setTimeout(action, ACTION_DEFER_MS);
+  }
+
   function handleDismiss(action?: () => void) {
+    pendingAction.current = action;
     overlayOpacity.value = withTiming(0, { duration: duration.fast, easing: easing.standard });
-    translateY.value = withTiming(SCREEN_HEIGHT, { duration: duration.fast, easing: easing.standard }, (finished) => {
-      if (finished && action) runOnJS(action)();
+    translateY.value = withTiming(SCREEN_HEIGHT, { duration: duration.fast, easing: easing.standard }, () => {
+      // Deliberately not gated on `finished`: an interrupted exit still has to
+      // close the sheet. Gating it meant a cancelled animation left the Modal
+      // mounted and invisible with no way back.
+      runOnJS(finishDismiss)();
     });
   }
 
@@ -60,9 +98,9 @@ export function ActionSheet({ visible, title, message, options, onCancel, cancel
   if (!visible) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={() => handleDismiss(onCancel)}>
+    <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={() => handleDismiss()}>
       <Animated.View style={[styles.overlay, { backgroundColor: colors.overlay }, overlayStyle]}>
-        <Pressable style={StyleSheet.absoluteFillObject} onPress={() => handleDismiss(onCancel)} />
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={() => handleDismiss()} />
       </Animated.View>
 
       <Animated.View style={[styles.sheet, { backgroundColor: colors.surfaceHigh }, sheetStyle]}>
@@ -103,7 +141,7 @@ export function ActionSheet({ visible, title, message, options, onCancel, cancel
         </View>
 
         <Pressable
-          onPress={() => handleDismiss(onCancel)}
+          onPress={() => handleDismiss()}
           style={[styles.cancelButton, { backgroundColor: colors.surfaceElevated }]}
           accessibilityRole="button"
           accessibilityLabel={cancelLabel}
