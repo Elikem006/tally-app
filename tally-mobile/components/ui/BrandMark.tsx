@@ -160,7 +160,16 @@ export function BrandLockup({ size = 120, animate = false, delay = 0 }: BrandMar
     <View style={styles.lockup}>
       <BrandMark size={size} animate={animate} delay={delay} />
       <Animated.View style={[styles.wordmarkWrap, textStyle]}>
-        <Text style={[typography.display, { color: colors.text, letterSpacing: -0.5 }]}>Tally</Text>
+        {/* The cold-open screen's primary title. Carries the header role for
+            the same reason every other screen title does since Phase 5 — with
+            the mark itself now hidden, this is the only thing naming the
+            screen. */}
+        <Text
+          style={[typography.display, { color: colors.text, letterSpacing: -0.5 }]}
+          accessibilityRole="header"
+        >
+          Tally
+        </Text>
         <Text style={[typography.label, { color: colors.textSecondary }]}>Every cedi accounted for</Text>
       </Animated.View>
     </View>

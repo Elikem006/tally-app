@@ -192,7 +192,12 @@ export function SpendingRing({ categoryTotals }: SpendingRingProps) {
             </Text>
             <AmountText value={active ? active.amount : total} size="display" />
             {active && (
-              <Text style={[typography.caption, { color: active.color }]}>
+              // Was the category's own colour, which measured 1.86–2.79:1 on
+              // the light surface — every category failed AA. The category is
+              // already identified by the arc and the legend dot, so the text
+              // does not need to carry it. Same remedy Phase 5 applied to
+              // textTertiary: change the colour, keep the size.
+              <Text style={[typography.caption, { color: colors.textSecondary }]}>
                 {(active.fraction * 100).toFixed(0)}% of spending
               </Text>
             )}

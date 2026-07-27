@@ -14,7 +14,7 @@ import Animated, {
 import Svg, { Circle, Path } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../hooks/useTheme';
-import { getExtendedColors, getCategoryColor, typography, spacing, easing, duration, spring } from '../../theme';
+import { getExtendedColors, getCategoryColor, typography, spacing, radius, easing, duration, spring } from '../../theme';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const AnimatedPath = Animated.createAnimatedComponent(Path);
@@ -128,7 +128,17 @@ export function SuccessBurst({ visible, category, label, amountLabel, onDone }: 
       accessibilityLiveRegion="polite"
       accessibilityLabel={`${label}. ${amountLabel}`}
     >
-      <Animated.View style={[styles.stage, popStyle]}>
+      {/* Content sits on a solid surface rather than straight on the scrim,
+          matching ConfirmModal and ActionSheet. A translucent scrim makes the
+          effective background — and therefore the contrast — depend on the
+          screen underneath, which cannot be guaranteed. */}
+      <Animated.View
+        style={[
+          styles.stage,
+          { backgroundColor: colors.surfaceHigh, borderColor: colors.borderSubtle },
+          popStyle,
+        ]}
+      >
         <View style={styles.markWrap}>
           {RAYS.map((angle) => (
             <Ray key={angle} angle={angle} color={accent} progress={rays} />
@@ -162,7 +172,12 @@ export function SuccessBurst({ visible, category, label, amountLabel, onDone }: 
         </View>
 
         <Text style={[typography.headline, { color: colors.text, textAlign: 'center' }]}>{label}</Text>
-        <Text style={[typography.display, { color: accent, textAlign: 'center' }]}>{amountLabel}</Text>
+        {/* Was the category colour. On the 50% scrim every category measured
+            1.37–2.06:1 in light mode, and the scrim's effective colour depends
+            on whatever screen sits behind it, so no text colour was reliable.
+            The category is still carried by the ring and rays, which are
+            graphics and not held to text contrast. */}
+        <Text style={[typography.display, { color: colors.text, textAlign: 'center' }]}>{amountLabel}</Text>
       </Animated.View>
     </Animated.View>
   );
@@ -175,7 +190,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 999,
   },
-  stage: { alignItems: 'center', gap: spacing.sm },
+  stage: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    paddingHorizontal: spacing.xxl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xl,
+    marginHorizontal: spacing.xl,
+  },
   markWrap: {
     width: SIZE,
     height: SIZE,
