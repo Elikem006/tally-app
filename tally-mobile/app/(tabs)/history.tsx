@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import ExpenseDetailModal from '../../components/ExpenseDetailModal';
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator, TouchableOpacity, TextInput, RefreshControl, KeyboardAvoidingView, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -77,9 +77,14 @@ export default function HistoryScreen() {
   const { showConfirm, ConfirmModalComponent } = useConfirmModal();
   const { showActionSheet, ActionSheetComponent } = useActionSheet();
 
+  // Skeleton on the first load only. This screen refetches on every focus, so
+  // without the guard the skeleton replaced the whole list every time the tab
+  // was re-entered — a flash on content the user had already seen.
+  const hasLoadedOnce = useRef(false);
+
   useFocusEffect(
     useCallback(() => {
-      fetchData(true);
+      fetchData(!hasLoadedOnce.current);
     }, [])
   );
 
@@ -107,6 +112,7 @@ export default function HistoryScreen() {
     } catch (err: any) {
       setError('Failed to load history data. Please check your connection.');
     } finally {
+      hasLoadedOnce.current = true;
       setLoading(false);
     }
   }

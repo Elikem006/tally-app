@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, ScrollView } from 'react-native';
 import { useFocusEffect, router } from 'expo-router';
 import Feather from '@expo/vector-icons/Feather';
@@ -95,14 +95,26 @@ export default function NotificationHistoryScreen() {
     }
   }
 
+  // First load only. Reads from local storage, so a refocus resolves almost
+  // instantly — the spinner it used to show was a flicker, not information.
+  const hasLoadedOnce = useRef(false);
+
   useFocusEffect(
     useCallback(() => {
       let active = true;
       (async () => {
-        setLoading(true);
-        const list = await getHistory();
-        if (active) setItems(list);
-        setLoading(false);
+        if (!hasLoadedOnce.current) setLoading(true);
+        try {
+          const list = await getHistory();
+          if (active) setItems(list);
+        } finally {
+          // Guarded by `active` so a screen left mid-flight doesn't set state
+          // after unmount.
+          if (active) {
+            hasLoadedOnce.current = true;
+            setLoading(false);
+          }
+        }
         await markAllRead();
       })();
       return () => { active = false; };

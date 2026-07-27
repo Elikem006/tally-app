@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { categoriesAPI } from '../services/api';
@@ -24,13 +24,18 @@ export default function ManageCategoriesScreen() {
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
   const { showConfirm, ConfirmModalComponent } = useConfirmModal();
 
+  // First load only — returning from the add-category modal re-focuses this
+  // screen, and without the guard the list it just updated blinked away.
+  const hasLoadedOnce = useRef(false);
+
   useFocusEffect(
     useCallback(() => {
-      fetchCategories();
+      fetchCategories(!hasLoadedOnce.current);
     }, []),
   );
 
-  async function fetchCategories() {
+  async function fetchCategories(showLoading = true) {
+    if (showLoading) setLoading(true);
     try {
       setLoading(true);
       const res = await categoriesAPI.getUserCategories(getUserId());
@@ -38,6 +43,7 @@ export default function ManageCategoriesScreen() {
     } catch {
       showToast('Could not load categories', 'error');
     } finally {
+      hasLoadedOnce.current = true;
       setLoading(false);
     }
   }

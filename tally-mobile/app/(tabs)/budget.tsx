@@ -81,10 +81,15 @@ export default function BudgetScreen() {
 
   const notificationsSentRef = useRef(false);
 
+  // Skeleton on the first load only. This screen refetches on every focus and
+  // its loading branch replaces the entire screen, so without the guard every
+  // return to the Budget tab blanked it out and rebuilt it from scratch.
+  const hasLoadedOnce = useRef(false);
+
   useFocusEffect(
     useCallback(() => {
       notificationsSentRef.current = false;
-      fetchData(true);
+      fetchData(!hasLoadedOnce.current);
       // Reset tab and scroll back to Overview on screen focus
       setActiveTab(0);
       const timer = setTimeout(() => {
@@ -146,6 +151,7 @@ export default function BudgetScreen() {
     } catch (err: any) {
       setError(err?.message || 'Something went wrong. Pull down to refresh.');
     } finally {
+      hasLoadedOnce.current = true;
       if (showLoading) setFetching(false);
     }
   }
