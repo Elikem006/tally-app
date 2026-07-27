@@ -22,7 +22,7 @@ import { useToast } from '../../hooks/useToast';
 import { useConfirmModal } from '../../hooks/useConfirmModal';
 import { useTheme } from '../../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius } from '../../theme';
-import { Button, CategoryIcon, EmptyState, EmptyBudgetsArt } from '../../components/ui';
+import { Button, CategoryIcon, EmptyState, EmptyBudgetsArt, Skeleton } from '../../components/ui';
 import { BudgetCategoryCard } from '../../components/budget/BudgetCategoryCard';
 import { BudgetLimitRow } from '../../components/budget/BudgetLimitRow';
 
@@ -220,9 +220,20 @@ export default function BudgetScreen() {
   }
 
   if (fetching) {
+    // Mirrors the real layout below — segmented header, then the overview
+    // card — at the same sizes and positions, so nothing shifts when the
+    // data lands. Previously a bare spinner on an otherwise blank screen.
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <View style={[styles.flex, { backgroundColor: colors.background, paddingTop: Math.max(insets.top, spacing.md) }]}>
+        <View style={styles.headerContainer}>
+          <Skeleton height={48} borderRadius={radius.xl} style={{ marginHorizontal: spacing.lg }} />
+        </View>
+        <View style={styles.scrollContent}>
+          <Skeleton height={190} borderRadius={radius.xl} style={{ marginBottom: spacing.lg }} />
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} height={118} borderRadius={radius.lg} style={{ marginBottom: spacing.md }} />
+          ))}
+        </View>
       </View>
     );
   }

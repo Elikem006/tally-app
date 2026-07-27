@@ -6,7 +6,6 @@ import {
   FlatList,
   TouchableOpacity,
   TextInput,
-  ActivityIndicator,
   ScrollView,
   RefreshControl,
   KeyboardAvoidingView,
@@ -22,7 +21,7 @@ import { useToast } from '../../hooks/useToast';
 import { useConfirmModal } from '../../hooks/useConfirmModal';
 import { useTheme } from '../../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius } from '../../theme';
-import { Card, Button, Input, EmptyState } from '../../components/ui';
+import { Card, Button, Input, EmptyState, Skeleton } from '../../components/ui';
 
 const getUrgentStatus = (dueDateStr: string, isPaid: boolean, colors: ReturnType<typeof getExtendedColors>): { urgent: boolean; label: string; color: string } | null => {
   if (isPaid) return null;
@@ -201,14 +200,6 @@ export default function RemindersScreen() {
     });
   }
 
-  if (loading && !refreshing) {
-    return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
-
   if (error && reminders.length === 0) {
     return (
       <ScrollView
@@ -341,7 +332,16 @@ export default function RemindersScreen() {
           </ScrollView>
         )}
 
-        {reminders.length === 0 ? (
+        {/* Three genuinely distinct states. The loading arm has to come first:
+            without it, an in-flight fetch falls through to `length === 0` and
+            claims there are no reminders before that is actually known. */}
+        {loading && !refreshing ? (
+          <View style={styles.list}>
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} height={86} borderRadius={radius.lg} style={{ marginBottom: spacing.md }} />
+            ))}
+          </View>
+        ) : reminders.length === 0 ? (
           <EmptyState icon="bell" title="No reminders yet" body="Add bills to get notified when they're due" />
         ) : (
           <FlatList
