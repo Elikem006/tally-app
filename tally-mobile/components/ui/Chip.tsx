@@ -54,7 +54,7 @@ export function Chip({ label, selected = false, onPress, icon, style }: ChipProp
       ]}
     >
       {icon}
-      <Text style={[typography.label, { color: selected ? '#FFFFFF' : colors.textSecondary }]}>{label}</Text>
+      <Text style={[typography.label, { color: selected ? colors.onPrimary : colors.textSecondary }]}>{label}</Text>
     </AnimatedPressable>
   );
 }

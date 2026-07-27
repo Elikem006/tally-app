@@ -509,7 +509,7 @@ export default function GroupDetailScreen() {
 
           {!showAddMember && details?.members?.length > 1 && (
             <TouchableOpacity style={[styles.outlineBtn, { borderColor: colors.border }]} onPress={() => setShowAddMember(true)} activeOpacity={0.8}>
-              <Text style={[typography.bodyStrong, { color: colors.primary, fontSize: 13 }]}>+ Add Member</Text>
+              <Text style={[typography.labelStrong, { color: colors.primary }]}>+ Add Member</Text>
             </TouchableOpacity>
           )}
 
@@ -683,7 +683,7 @@ export default function GroupDetailScreen() {
                   {details?.members?.map((member: any) => (
                     <View key={member.userId} style={styles.ratioRow}>
                       <Avatar userId={member.userId} name={member.name || String(member.userId)} size={32} avatarData={member.avatarData} style={{ marginRight: spacing.sm + 2 }} />
-                      <Text style={[typography.bodyStrong, { color: colors.text, flex: 1, marginRight: spacing.sm + 2, fontSize: 14 }]} numberOfLines={1}>
+                      <Text style={[typography.bodyCompact, { color: colors.text, flex: 1, marginRight: spacing.sm + 2 }]} numberOfLines={1}>
                         {member.name || `User #${member.userId}`}
                       </Text>
                       <TextInput
@@ -743,7 +743,7 @@ export default function GroupDetailScreen() {
           <View style={[styles.actionSection, { borderTopColor: colors.borderSubtle }]}>
             <Button title="Delete Group" onPress={handleDeleteGroup} variant="danger" />
             <TouchableOpacity style={styles.backLink} onPress={() => router.back()} activeOpacity={0.7}>
-              <Text style={[typography.bodyStrong, { color: colors.textSecondary, fontSize: 13 }]}>← Back to Groups</Text>
+              <Text style={[typography.labelStrong, { color: colors.textSecondary }]}>← Back to Groups</Text>
             </TouchableOpacity>
           </View>
         </View>

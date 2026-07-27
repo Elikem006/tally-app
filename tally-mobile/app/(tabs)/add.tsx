@@ -23,7 +23,7 @@ import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import { useTheme } from '../../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius } from '../../theme';
-import { Button, Input, Chip, CategoryIcon } from '../../components/ui';
+import { Button, Input, Chip, CategoryIcon, SuccessBurst } from '../../components/ui';
 
 const CATEGORIES = ['Food', 'Transport', 'Entertainment', 'Utilities', 'Other'];
 
@@ -73,6 +73,14 @@ export default function AddScreen() {
   const [tagInput, setTagInput] = useState('');
   const [showHint, setShowHint] = useState(true);
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+
+  // Success confirmation — set on a successful save, cleared when the burst
+  // finishes, which is also what hands the user back to the dashboard.
+  const [successInfo, setSuccessInfo] = useState<{
+    category: string;
+    label: string;
+    amountLabel: string;
+  } | null>(null);
 
   // Custom categories
   const [customCategories, setCustomCategories] = useState<{ id: string; name: string; emoji: string }[]>([]);
@@ -299,8 +307,12 @@ export default function AddScreen() {
         data: { screen: 'history' },
       });
 
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      showToast(transactionType === 'income' ? 'Income added successfully!' : 'Expense added successfully!', 'success');
+      // The burst fires its own success haptic — no second one here.
+      setSuccessInfo({
+        category: selectedCategory,
+        label: transactionType === 'income' ? 'Income recorded' : `Added to ${selectedCategory}`,
+        amountLabel: `${transactionType === 'income' ? '+' : '-'}GHS ${parsed.toFixed(2)}`,
+      });
 
       // Update spent values locally for responsive UI feedback
       if (transactionType === 'expense') {
@@ -500,7 +512,7 @@ export default function AddScreen() {
               >
                 <CategoryIcon category={template.category} customEmoji={getCustomEmoji(template.category)} size={32} />
                 <View>
-                  <Text style={[typography.bodyStrong, { color: colors.text, fontSize: 13 }]} numberOfLines={1}>{template.name}</Text>
+                  <Text style={[typography.labelStrong, { color: colors.text }]} numberOfLines={1}>{template.name}</Text>
                   <Text style={[typography.label, { color: colors.textSecondary }]}>GHS {template.amount}</Text>
                 </View>
               </TouchableOpacity>
@@ -516,7 +528,7 @@ export default function AddScreen() {
               }}
               activeOpacity={0.75}
             >
-              <Text style={[typography.bodyStrong, { color: colors.primary, fontSize: 13 }]}>+ Save Template</Text>
+              <Text style={[typography.labelStrong, { color: colors.primary }]}>+ Save Template</Text>
             </TouchableOpacity>
           </ScrollView>
 
@@ -554,7 +566,7 @@ export default function AddScreen() {
                   <CategoryIcon category={cat} size={28} />
                   <Text style={[typography.bodyStrong, { color: colors.text }]}>{cat}</Text>
                 </View>
-                <Text style={[typography.bodyStrong, { color: colors.textSecondary, fontSize: 13 }]}>
+                <Text style={[typography.labelStrong, { color: colors.textSecondary }]}>
                   GHS {Math.abs(spent[cat] || 0).toFixed(2)}
                 </Text>
               </TouchableOpacity>
@@ -575,7 +587,7 @@ export default function AddScreen() {
                   <CategoryIcon category={cat.name} customEmoji={cat.emoji} size={28} />
                   <Text style={[typography.bodyStrong, { color: colors.text }]}>{cat.name}</Text>
                 </View>
-                <Text style={[typography.bodyStrong, { color: colors.textSecondary, fontSize: 13 }]}>
+                <Text style={[typography.labelStrong, { color: colors.textSecondary }]}>
                   GHS {Math.abs(spent[cat.name] || 0).toFixed(2)}
                 </Text>
               </TouchableOpacity>
@@ -586,7 +598,7 @@ export default function AddScreen() {
               onPress={() => router.push('/manage-categories')}
               activeOpacity={0.7}
             >
-              <Text style={[typography.bodyStrong, { color: colors.textSecondary, fontSize: 14 }]}>+ New Category</Text>
+              <Text style={[typography.bodyCompact, { color: colors.textSecondary }]}>+ New Category</Text>
             </TouchableOpacity>
           </View>
 
@@ -687,7 +699,7 @@ export default function AddScreen() {
               returnKeyType="done"
             />
             <TouchableOpacity style={[styles.tagAddButton, { backgroundColor: colors.text }]} onPress={handleAddTag}>
-              <Text style={[typography.bodyStrong, { color: colors.background, fontSize: 14 }]}>Add</Text>
+              <Text style={[typography.bodyCompact, { color: colors.background }]}>Add</Text>
             </TouchableOpacity>
           </View>
 
@@ -821,6 +833,21 @@ export default function AddScreen() {
       </Modal>
 
       <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
+
+      <SuccessBurst
+        visible={!!successInfo}
+        category={successInfo?.category}
+        label={successInfo?.label ?? ''}
+        amountLabel={successInfo?.amountLabel ?? ''}
+        onDone={() => {
+          setSuccessInfo(null);
+          // push, not replace: still lands on the dashboard so the expense is
+          // visible where it matters, but leaves Add on the stack so system
+          // back returns to it. replace() destroyed it, which made logging
+          // several expenses in one sitting a re-tap each time.
+          router.push('/(tabs)');
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }

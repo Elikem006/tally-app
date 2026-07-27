@@ -1,5 +1,6 @@
 import { memo } from "react";
 import { View, Text, Image, StyleProp, ViewStyle, ImageStyle } from "react-native";
+import { FONT_FAMILY } from "../theme";
 
 // Flat hue ramp, deliberately independent of the light/dark theme — avatar
 // background needs to stay legible with a white initial in either mode.
@@ -40,7 +41,7 @@ function Avatar({ userId, name, size = 40, avatarData, style }: AvatarProps) {
       alignItems: "center", justifyContent: "center",
       overflow: "hidden",
     }, style]}>
-      <Text style={{ color: "#ffffff", fontWeight: "bold", fontSize: size * 0.38 }}>
+      <Text style={{ color: "#ffffff", fontFamily: FONT_FAMILY.bold, fontSize: size * 0.38 }}>
         {initial}
       </Text>
     </View>

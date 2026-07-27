@@ -7,7 +7,7 @@ import { groupAPI } from '../../services/api';
 import { getUserId } from '../../services/storage';
 import { useTheme } from '../../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius } from '../../theme';
-import { Button, EmptyState, ListRow, Skeleton } from '../../components/ui';
+import { Button, EmptyState, EmptyGroupsArt, ListRow, Skeleton } from '../../components/ui';
 
 export default function GroupsScreen() {
   const insets = useSafeAreaInsets();
@@ -102,8 +102,11 @@ export default function GroupsScreen() {
         {groups.length === 0 ? (
           <EmptyState
             icon="users"
+            illustration={<EmptyGroupsArt />}
             title="No groups yet"
             body="Create a group to start splitting and tracking shared expenses with friends"
+            ctaLabel="Create a group"
+            onPressCta={() => router.push('/create-group')}
           />
         ) : (
           <View style={{ marginBottom: spacing.md }}>

@@ -58,7 +58,7 @@ export function QuickAddModal({
               <Chip
                 key={cat}
                 label={cat}
-                icon={<MaterialCommunityIcons name={getCategoryIconName(cat)} size={14} color={category === cat ? '#FFFFFF' : getCategoryColor(cat)} />}
+                icon={<MaterialCommunityIcons name={getCategoryIconName(cat)} size={14} color={category === cat ? colors.onPrimary : getCategoryColor(cat)} />}
                 selected={category === cat}
                 onPress={() => onCategoryChange(cat)}
               />

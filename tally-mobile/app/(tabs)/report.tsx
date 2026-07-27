@@ -4,7 +4,6 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  ActivityIndicator,
   TouchableOpacity,
   Dimensions,
   RefreshControl,
@@ -12,22 +11,56 @@ import {
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
+  useAnimatedProps,
   useAnimatedReaction,
   withTiming,
   withDelay,
+  withSpring,
   runOnJS,
-  Easing,
+  FadeInDown,
 } from "react-native-reanimated";
-import { Feather } from "@expo/vector-icons";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import * as Haptics from "expo-haptics";
+import { LinearGradient } from "expo-linear-gradient";
+import Feather from "@expo/vector-icons/Feather";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, router } from "expo-router";
-import Svg, { Circle } from "react-native-svg";
+import Svg, {
+  Circle,
+  Path,
+  Line,
+  Defs,
+  Stop,
+  LinearGradient as SvgGradient,
+} from "react-native-svg";
+
+const AnimatedPath = Animated.createAnimatedComponent(Path);
 import { expenseAPI, categoriesAPI, remindersAPI } from "../../services/api";
 import { getUserId } from "../../services/storage";
 import { useTheme } from "../../hooks/useTheme";
-import { getExtendedColors, getCategoryColor } from "../../theme";
-import { CategoryIcon, getCategoryIconName } from "../../components/ui";
+import {
+  getExtendedColors,
+  getCategoryColor,
+  typography,
+  spacing,
+  radius,
+  duration,
+  easing,
+  spring,
+  staggerDelay,
+} from "../../theme";
+import {
+  Screen,
+  Card,
+  SectionHeader,
+  EmptyState,
+  AmountText,
+  CategoryIcon,
+  getCategoryIconName,
+  ProgressBar,
+  Skeleton,
+  SkeletonCard,
+} from "../../components/ui";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -40,6 +73,10 @@ const MONTH_NAMES = [
 const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const SHORT_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+const TIMELINES = ["day", "week", "month", "year"] as const;
+type Timeline = (typeof TIMELINES)[number];
+const TIMELINE_LABEL: Record<Timeline, string> = { day: "D", week: "W", month: "M", year: "Y" };
+
 function formatGhs(n: number): string {
   if (Math.abs(n) >= 1000) return `GHS ${(n / 1000).toFixed(1)}k`;
   return `GHS ${n.toFixed(0)}`;
@@ -51,61 +88,136 @@ function spendOf(e: any): number {
   return Math.abs(parseFloat(e.amount) || 0);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Small animated building blocks
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Number that counts up from 0 to `value` on mount / value change */
-function CountUpText({ value, style }: { value: number; style?: any }) {
-  const progress = useSharedValue(0);
-  const [display, setDisplay] = useState("0.00");
-
-  useEffect(() => {
-    progress.value = 0;
-    progress.value = withTiming(1, { duration: 900, easing: Easing.out(Easing.cubic) });
-  }, [value]);
-
-  useAnimatedReaction(
-    () => progress.value,
-    (p) => {
-      const safeVal = (Number(value) || 0) * p;
-      runOnJS(setDisplay)(safeVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-    },
-    [value],
-  );
-
-  return <Text style={style}>GHS {display}</Text>;
+function parseLocalDate(dateStr: string) {
+  if (!dateStr) return new Date();
+  const parts = dateStr.split("-");
+  if (parts.length < 3) return new Date(dateStr);
+  return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
 }
 
-/** Progress bar that animates its fill, with an optional stagger delay */
-function AnimatedBar({ pct, color, delay, trackColor }: { pct: number; color: string; delay: number; trackColor: string }) {
-  const progress = useSharedValue(0);
-  const safePct = isNaN(pct) || !isFinite(pct) ? 0 : Math.min(Math.max(pct, 0), 100);
-
-  useEffect(() => {
-    progress.value = 0;
-    progress.value = withDelay(delay, withTiming(safePct, { duration: 600, easing: Easing.out(Easing.cubic) }));
-  }, [safePct, delay]);
-
-  const barStyle = useAnimatedStyle(() => ({ width: `${progress.value}%` }));
-
-  return (
-    <View style={[styles.barTrack, { backgroundColor: trackColor }]}>
-      <Animated.View style={[styles.barFill, { backgroundColor: color }, barStyle]} />
-    </View>
-  );
+export interface ChartBar {
+  day: string;
+  spend: number;
+  dateLabel: string;
 }
 
-/** Category breakdown row — fades in with stagger, bar animates after */
+/**
+ * Buckets spend into the timeline's windows, ending at `refDate`. Lifted out
+ * of the component so the current and previous periods are built by exactly
+ * the same code — the comparison is only honest if both series agree on how
+ * a bucket is defined.
+ */
+function buildBars(expenses: any[], timeline: Timeline, refDate: Date): ChartBar[] {
+  if (timeline === "day") {
+    const bars: ChartBar[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(refDate);
+      d.setDate(d.getDate() - i);
+      const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const spend = expenses.filter((e) => e.date === dateKey).reduce((s, e) => s + spendOf(e), 0);
+      bars.push({ day: SHORT_DAYS[d.getDay()], spend, dateLabel: `${SHORT_MONTHS[d.getMonth()]} ${d.getDate()}` });
+    }
+    return bars;
+  }
+
+  if (timeline === "week") {
+    const bars: ChartBar[] = [];
+    for (let i = 3; i >= 0; i--) {
+      const start = new Date(refDate);
+      start.setDate(refDate.getDate() - (i + 1) * 7 + 1);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(refDate);
+      end.setDate(refDate.getDate() - i * 7);
+      end.setHours(23, 59, 59, 999);
+      const spend = expenses.filter((e) => {
+        if (!e.date) return false;
+        const ed = parseLocalDate(e.date);
+        return ed >= start && ed <= end;
+      }).reduce((s, e) => s + spendOf(e), 0);
+      bars.push({ day: `W${4 - i}`, spend, dateLabel: `Week ${4 - i}` });
+    }
+    return bars;
+  }
+
+  if (timeline === "month") {
+    const bars: ChartBar[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(refDate.getFullYear(), refDate.getMonth() - i, 1);
+      const spend = expenses.filter((e) => {
+        if (!e.date) return false;
+        const ed = parseLocalDate(e.date);
+        return ed.getFullYear() === d.getFullYear() && ed.getMonth() === d.getMonth();
+      }).reduce((s, e) => s + spendOf(e), 0);
+      bars.push({ day: SHORT_MONTHS[d.getMonth()], spend, dateLabel: `${SHORT_MONTHS[d.getMonth()]} ${d.getFullYear()}` });
+    }
+    return bars;
+  }
+
+  const bars: ChartBar[] = [];
+  for (let i = 2; i >= 0; i--) {
+    const yr = refDate.getFullYear() - i;
+    const spend = expenses.filter((e) => {
+      if (!e.date) return false;
+      return parseLocalDate(e.date).getFullYear() === yr;
+    }).reduce((s, e) => s + spendOf(e), 0);
+    bars.push({ day: String(yr), spend, dateLabel: String(yr) });
+  }
+  return bars;
+}
+
+/** The reference date one full window earlier — the series we compare against. */
+function previousWindowRef(timeline: Timeline, refDate: Date): Date {
+  const d = new Date(refDate);
+  if (timeline === "day") d.setDate(d.getDate() - 7);
+  else if (timeline === "week") d.setDate(d.getDate() - 28);
+  else if (timeline === "month") d.setMonth(d.getMonth() - 6);
+  else d.setFullYear(d.getFullYear() - 3);
+  return d;
+}
+
+/**
+ * Cosine-interpolated polyline through the points, plus its own arc length so
+ * the line can draw itself in with strokeDashoffset.
+ */
+function buildCurve(pts: { x: number; y: number }[]) {
+  if (pts.length === 0) return { path: "", length: 0 };
+  const steps = 12;
+  let d = `M ${pts[0].x} ${pts[0].y}`;
+  let length = 0;
+  let prevX = pts[0].x;
+  let prevY = pts[0].y;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    for (let j = 1; j <= steps; j++) {
+      const tt = j / steps;
+      const mu = (1 - Math.cos(tt * Math.PI)) / 2;
+      const x = p1.x + tt * (p2.x - p1.x);
+      const y = p1.y + mu * (p2.y - p1.y);
+      d += ` L ${x.toFixed(2)} ${y.toFixed(2)}`;
+      length += Math.hypot(x - prevX, y - prevY);
+      prevX = x;
+      prevY = y;
+    }
+  }
+  return { path: d, length };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Small building blocks
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Category breakdown row — fades in on a capped stagger, bar animates after. */
 function CategoryRow({
-  cat, amount, pct, index, customEmoji, t,
-}: { cat: string; amount: number; pct: number; index: number; customEmoji?: string; t: any }) {
+  cat, amount, pct, index, customEmoji,
+}: { cat: string; amount: number; pct: number; index: number; customEmoji?: string }) {
+  const { theme, colors: baseColors } = useTheme();
+  const colors = getExtendedColors(theme, baseColors);
   const fade = useSharedValue(0);
-  const color = getCategoryColor(cat);
 
   useEffect(() => {
     fade.value = 0;
-    fade.value = withDelay(index * 100, withTiming(1, { duration: 350 }));
+    fade.value = withDelay(staggerDelay(index), withTiming(1, { duration: duration.slow }));
   }, [cat, index]);
 
   const rowStyle = useAnimatedStyle(() => ({
@@ -114,24 +226,30 @@ function CategoryRow({
   }));
 
   return (
-    <Animated.View style={[styles.catRow, rowStyle]}>
+    <Animated.View style={[{ marginBottom: spacing.lg }, rowStyle]}>
       <View style={styles.catHeader}>
         <View style={styles.catLeft}>
           <CategoryIcon category={cat} customEmoji={customEmoji} size={36} />
-          <Text style={[styles.catName, { color: t.text }]} numberOfLines={1}>{cat}</Text>
+          <Text style={[typography.bodyStrong, { color: colors.text, flexShrink: 1 }]} numberOfLines={1}>
+            {cat}
+          </Text>
         </View>
         <View style={{ alignItems: "flex-end" }}>
-          <Text style={[styles.catAmount, { color: t.text }]}>GHS {amount.toFixed(2)}</Text>
-          <Text style={[styles.catPct, { color: t.textSecondary }]}>{pct.toFixed(0)}% of total</Text>
+          <AmountText value={amount} size="numeric" />
+          <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 1 }]}>
+            {pct.toFixed(0)}% of total
+          </Text>
         </View>
       </View>
-      <AnimatedBar pct={pct} color={color} delay={index * 100 + 150} trackColor={t.segmentBg} />
+      <ProgressBar percentage={pct} />
     </Animated.View>
   );
 }
 
-/** SVG donut progress ring */
-function Donut({ pct, color, size, trackColor, t }: { pct: number; color: string; size: number; trackColor: string; t: any }) {
+/** SVG donut progress ring for one budget category. */
+function Donut({ pct, color, size, trackColor }: { pct: number; color: string; size: number; trackColor: string }) {
+  const { theme, colors: baseColors } = useTheme();
+  const colors = getExtendedColors(theme, baseColors);
   const stroke = 7;
   const r = (size - stroke) / 2;
   const circumference = 2 * Math.PI * r;
@@ -154,7 +272,7 @@ function Donut({ pct, color, size, trackColor, t }: { pct: number; color: string
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
         />
       </Svg>
-      <Text style={[styles.donutPct, { color: t.text, position: "absolute" }]}>{pct.toFixed(0)}%</Text>
+      <Text style={[typography.label, { color: colors.text, position: "absolute" }]}>{pct.toFixed(0)}%</Text>
     </View>
   );
 }
@@ -164,35 +282,8 @@ function Donut({ pct, color, size, trackColor, t }: { pct: number; color: string
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function ReportScreen() {
-  const insets = useSafeAreaInsets();
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
-  const isDark = theme === "dark";
-
-  // Comprehensive theme object applied to every element — sourced from the
-  // shared token palette so this screen can't drift out of sync with the
-  // rest of the app; only the decorative hero-card gradient (no shared
-  // equivalent) stays as a local literal.
-  const t = useMemo(() => ({
-    bg: colors.background,
-    card: colors.surfaceElevated,
-    cardBorder: colors.borderSubtle,
-    text: colors.text,
-    textSecondary: colors.textSecondary,
-    accent: colors.primary,
-    chartBg: colors.surfaceElevated,
-    segmentBg: colors.neutralBg,
-    segmentActive: colors.primary,
-    segmentActiveText: isDark ? "#000000" : "#FFFFFF",
-    segmentText: colors.textSecondary,
-    heroBase: isDark ? "#203A43" : "#E8F8F3",
-    heroCircleA: isDark ? "#0F2027" : "#F0FFF8",
-    heroCircleB: isDark ? "#2C5364" : "#D2F5E8",
-    heroText: isDark ? "#ffffff" : "#1A1A2E",
-    gridLine: colors.borderSubtle,
-    up: colors.negative,
-    down: colors.positive,
-  }), [colors, isDark]);
 
   const now = new Date();
   const todayMonth = now.getMonth();
@@ -206,7 +297,7 @@ export default function ReportScreen() {
   const [error, setError] = useState<string | null>(null);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [customCategories, setCustomCategories] = useState<any[]>([]);
-  const [chartTimeline, setChartTimeline] = useState<"day" | "week" | "month" | "year">("day");
+  const [chartTimeline, setChartTimeline] = useState<Timeline>("day");
   const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
   const [showAllCats, setShowAllCats] = useState(false);
   const [upcomingBills, setUpcomingBills] = useState<any[]>([]);
@@ -236,7 +327,7 @@ export default function ReportScreen() {
   useEffect(() => {
     if (!loading) {
       slideProgress.value = 0;
-      slideProgress.value = withTiming(1, { duration: 320, easing: Easing.out(Easing.cubic) });
+      slideProgress.value = withTiming(1, { duration: duration.base, easing: easing.decelerate });
     }
   }, [selectedMonth, selectedYear, loading]);
 
@@ -249,7 +340,7 @@ export default function ReportScreen() {
   useEffect(() => {
     chartProgress.value = 0;
     setSelectedPoint(null);
-    chartProgress.value = withTiming(1, { duration: 800, easing: Easing.out(Easing.cubic) });
+    chartProgress.value = withTiming(1, { duration: 800, easing: easing.decelerate });
   }, [chartTimeline, expenses, selectedMonth, selectedYear]);
 
   async function fetchReportAndExpenses(month: number, year: number, showSpinner = true) {
@@ -312,115 +403,59 @@ export default function ReportScreen() {
   }, [todayMonth, todayYear]);
 
   const selectedMonthName = MONTH_NAMES[selectedMonth];
-  const prevMonthName = MONTH_NAMES[(selectedMonth + 11) % 12];
 
   // ── Chart data (memoized) ─────────────────────────────────────────────────
-  const { chartBars } = useMemo(() => {
-    const parseLocalDate = (dateStr: string) => {
-      if (!dateStr) return new Date();
-      const parts = dateStr.split("-");
-      if (parts.length < 3) return new Date(dateStr);
-      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-    };
+  const chartBars = useMemo(
+    () => buildBars(expenses, chartTimeline, refDate),
+    [expenses, chartTimeline, refDate],
+  );
 
-    if (chartTimeline === "day") {
-      const bars = [];
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date(refDate);
-        d.setDate(d.getDate() - i);
-        const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-        const spend = expenses.filter((e) => e.date === dateKey).reduce((s, e) => s + spendOf(e), 0);
-        bars.push({ day: SHORT_DAYS[d.getDay()], spend, dateLabel: `${SHORT_MONTHS[d.getMonth()]} ${d.getDate()}` });
-      }
-      return { chartBars: bars };
-    }
-
-    if (chartTimeline === "week") {
-      const bars = [];
-      for (let i = 3; i >= 0; i--) {
-        const start = new Date(refDate);
-        start.setDate(refDate.getDate() - (i + 1) * 7 + 1);
-        start.setHours(0, 0, 0, 0);
-        const end = new Date(refDate);
-        end.setDate(refDate.getDate() - i * 7);
-        end.setHours(23, 59, 59, 999);
-        const spend = expenses.filter((e) => {
-          if (!e.date) return false;
-          const ed = parseLocalDate(e.date);
-          return ed >= start && ed <= end;
-        }).reduce((s, e) => s + spendOf(e), 0);
-        bars.push({ day: `W${4 - i}`, spend, dateLabel: `Week ${4 - i}` });
-      }
-      return { chartBars: bars };
-    }
-
-    if (chartTimeline === "month") {
-      const bars = [];
-      for (let i = 5; i >= 0; i--) {
-        const d = new Date(refDate.getFullYear(), refDate.getMonth() - i, 1);
-        const spend = expenses.filter((e) => {
-          if (!e.date) return false;
-          const ed = parseLocalDate(e.date);
-          return ed.getFullYear() === d.getFullYear() && ed.getMonth() === d.getMonth();
-        }).reduce((s, e) => s + spendOf(e), 0);
-        bars.push({ day: SHORT_MONTHS[d.getMonth()], spend, dateLabel: `${SHORT_MONTHS[d.getMonth()]} ${d.getFullYear()}` });
-      }
-      return { chartBars: bars };
-    }
-
-    const bars = [];
-    for (let i = 2; i >= 0; i--) {
-      const yr = refDate.getFullYear() - i;
-      const spend = expenses.filter((e) => {
-        if (!e.date) return false;
-        return parseLocalDate(e.date).getFullYear() === yr;
-      }).reduce((s, e) => s + spendOf(e), 0);
-      bars.push({ day: String(yr), spend, dateLabel: String(yr) });
-    }
-    return { chartBars: bars };
-  }, [expenses, chartTimeline, refDate]);
+  // The same window, one period earlier — drawn behind as a ghost line.
+  const prevBars = useMemo(
+    () => buildBars(expenses, chartTimeline, previousWindowRef(chartTimeline, refDate)),
+    [expenses, chartTimeline, refDate],
+  );
 
   // ── Chart geometry (memoized) ─────────────────────────────────────────────
+  // Screen pads by spacing.lg each side, the Card another spacing.lg each side.
   const { width: screenWidth } = Dimensions.get("window");
-  const chartWidth = screenWidth - 80;
+  const chartWidth = screenWidth - spacing.lg * 4;
   const chartHeight = 150;
   const padV = 25;
   const chartInset = 20;
   const plotWidth = chartWidth - 2 * chartInset;
   const plotHeight = chartHeight - 2 * padV;
-  const maxSpendVal = Math.max(...chartBars.map((b) => b.spend), 0);
+  // Both series share one scale — the comparison is meaningless otherwise.
+  const maxSpendVal = Math.max(...chartBars.map((b) => b.spend), ...prevBars.map((b) => b.spend), 0);
 
-  const { points, curveSegments } = useMemo(() => {
-    const pts = chartBars.map((bar, idx) => {
-      const x = chartBars.length > 1
-        ? chartInset + (plotWidth / (chartBars.length - 1)) * idx
-        : chartInset + plotWidth / 2;
-      const y = maxSpendVal > 0
-        ? chartHeight - (padV + (bar.spend / maxSpendVal) * plotHeight)
-        : chartHeight / 2;
-      return { x, y, ...bar };
-    });
+  const project = useCallback(
+    (bars: ChartBar[]) =>
+      bars.map((bar, idx) => {
+        const x = bars.length > 1
+          ? chartInset + (plotWidth / (bars.length - 1)) * idx
+          : chartInset + plotWidth / 2;
+        const y = maxSpendVal > 0
+          ? chartHeight - (padV + (bar.spend / maxSpendVal) * plotHeight)
+          : chartHeight / 2;
+        return { x, y, ...bar };
+      }),
+    [plotWidth, plotHeight, maxSpendVal],
+  );
 
-    const segs: { x1: number; y1: number; x2: number; y2: number }[] = [];
-    const steps = 12;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p1 = pts[i];
-      const p2 = pts[i + 1];
-      for (let j = 0; j < steps; j++) {
-        const t1 = j / steps;
-        const t2 = (j + 1) / steps;
-        const mu1 = (1 - Math.cos(t1 * Math.PI)) / 2;
-        const mu2 = (1 - Math.cos(t2 * Math.PI)) / 2;
-        segs.push({
-          x1: p1.x + t1 * (p2.x - p1.x),
-          x2: p1.x + t2 * (p2.x - p1.x),
-          y1: p1.y + mu1 * (p2.y - p1.y),
-          y2: p1.y + mu2 * (p2.y - p1.y),
-        });
-      }
-    }
-    return { points: pts, curveSegments: segs };
-  }, [chartBars, plotWidth, plotHeight, maxSpendVal]);
+  const { points, curvePath, curveLength, areaPath } = useMemo(() => {
+    const pts = project(chartBars);
+    const { path, length } = buildCurve(pts);
+    const area = pts.length
+      ? `${path} L ${pts[pts.length - 1].x} ${chartHeight - padV} L ${pts[0].x} ${chartHeight - padV} Z`
+      : "";
+    return { points: pts, curvePath: path, curveLength: length, areaPath: area };
+  }, [chartBars, project]);
+
+  const prevCurvePath = useMemo(() => {
+    // Only worth drawing if the previous window actually had spending.
+    if (!prevBars.some((b) => b.spend > 0)) return "";
+    return buildCurve(project(prevBars)).path;
+  }, [prevBars, project]);
 
   // min / max / average chips
   const chartStats = useMemo(() => {
@@ -433,10 +468,102 @@ export default function ReportScreen() {
     };
   }, [chartBars]);
 
-  // Reveal mask width: covers the chart from the right, shrinking to 0
-  const maskStyle = useAnimatedStyle(() => ({
-    width: (1 - chartProgress.value) * chartWidth,
+  // The line draws itself in; the fill, ghost and dots fade up behind it.
+  const drawProps = useAnimatedProps(() => ({
+    strokeDashoffset: curveLength * (1 - chartProgress.value),
   }));
+  const fadeUpStyle = useAnimatedStyle(() => ({
+    opacity: Math.max(0, chartProgress.value * 1.6 - 0.6),
+  }));
+
+  // ── Scrub ─────────────────────────────────────────────────────────────────
+  // Drag across the chart and the readout tracks your finger. Point geometry
+  // is flattened to two number arrays so the gesture worklet closes over
+  // plain values rather than objects.
+  const pointXs = useMemo(() => points.map((p) => p.x), [points]);
+  const pointYs = useMemo(() => points.map((p) => p.y), [points]);
+
+  const scrubOn = useSharedValue(0);
+  const activeIdx = useSharedValue(-1);
+  const trackerX = useSharedValue(0);
+  const trackerY = useSharedValue(0);
+
+  const onScrubMove = useCallback((idx: number) => {
+    // A tick per bucket crossed — the chart feels detented rather than smooth.
+    Haptics.selectionAsync().catch(() => {});
+    setSelectedPoint(idx);
+  }, []);
+
+  useAnimatedReaction(
+    () => activeIdx.value,
+    (idx, prev) => {
+      if (idx < 0 || idx >= pointXs.length) return;
+      trackerX.value = withSpring(pointXs[idx], spring.snappy);
+      trackerY.value = withSpring(pointYs[idx], spring.snappy);
+      if (prev !== null && prev !== idx) runOnJS(onScrubMove)(idx);
+    },
+    [pointXs, pointYs],
+  );
+
+  // Keep a tapped dot and a scrubbed point on the same tracker.
+  useEffect(() => {
+    if (selectedPoint === null || selectedPoint >= pointXs.length) return;
+    activeIdx.value = selectedPoint;
+  }, [selectedPoint, pointXs.length]);
+
+  const scrub = useMemo(
+    () =>
+      Gesture.Pan()
+        // Horizontal intent claims the scrub; vertical still scrolls the page.
+        .activeOffsetX([-8, 8])
+        .failOffsetY([-14, 14])
+        .onBegin((e) => {
+          scrubOn.value = withTiming(1, { duration: duration.fast });
+          let best = 0;
+          let bestD = Number.MAX_VALUE;
+          for (let i = 0; i < pointXs.length; i++) {
+            const d = Math.abs(pointXs[i] - e.x);
+            if (d < bestD) {
+              bestD = d;
+              best = i;
+            }
+          }
+          activeIdx.value = best;
+        })
+        .onUpdate((e) => {
+          let best = 0;
+          let bestD = Number.MAX_VALUE;
+          for (let i = 0; i < pointXs.length; i++) {
+            const d = Math.abs(pointXs[i] - e.x);
+            if (d < bestD) {
+              bestD = d;
+              best = i;
+            }
+          }
+          activeIdx.value = best;
+        })
+        .onFinalize(() => {
+          scrubOn.value = withTiming(0, { duration: duration.base });
+        }),
+    [pointXs],
+  );
+
+  const trackerStyle = useAnimatedStyle(() => ({
+    opacity: scrubOn.value,
+    transform: [{ translateX: trackerX.value }],
+  }));
+
+  const trackerDotStyle = useAnimatedStyle(() => ({
+    opacity: scrubOn.value,
+    transform: [
+      { translateX: trackerX.value - 8 },
+      { translateY: trackerY.value - 8 },
+      { scale: 0.6 + scrubOn.value * 0.4 },
+    ],
+  }));
+
+  const scrubReadoutStyle = useAnimatedStyle(() => ({ opacity: scrubOn.value }));
+  const staticHeaderStyle = useAnimatedStyle(() => ({ opacity: 1 - scrubOn.value }));
 
   // ── Hero card stats (memoized) ────────────────────────────────────────────
   const heroStats = useMemo(() => {
@@ -473,7 +600,7 @@ export default function ReportScreen() {
 
   // ── Spending insights (pure calculations, no AI API) ──────────────────────
   const insights = useMemo(() => {
-    const list: { icon: string; text: string }[] = [];
+    const list: { icon: keyof typeof Feather.glyphMap; text: string }[] = [];
     const monthPrefix = `${selectedYear}-${String(selectedMonth + 1).padStart(2, "0")}`;
     const prevDate = new Date(selectedYear, selectedMonth - 1, 1);
     const prevPrefix = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
@@ -492,7 +619,7 @@ export default function ReportScreen() {
       if (prev > 0 && cur > 0) {
         const change = ((cur - prev) / prev) * 100;
         list.push({
-          icon: change >= 0 ? "📈" : "📉",
+          icon: change >= 0 ? "trending-up" : "trending-down",
           text: `You spent ${Math.abs(change).toFixed(0)}% ${change >= 0 ? "more" : "less"} on ${cat} this month vs last month`,
         });
       }
@@ -503,7 +630,7 @@ export default function ReportScreen() {
       const biggest = monthExp.reduce((a, b) =>
         Math.abs(parseFloat(b.amount) || 0) > Math.abs(parseFloat(a.amount) || 0) ? b : a);
       list.push({
-        icon: "💸",
+        icon: "zap",
         text: `Your biggest single expense was GHS ${Math.abs(parseFloat(biggest.amount) || 0).toFixed(0)} on ${biggest.description || biggest.category}`,
       });
     }
@@ -512,7 +639,7 @@ export default function ReportScreen() {
     if (budgetPerformance.length > 0) {
       const onTrack = budgetPerformance.filter((b: any) => (parseFloat(b.percentage) || 0) < 100).length;
       list.push({
-        icon: onTrack === budgetPerformance.length ? "✅" : "🎯",
+        icon: onTrack === budgetPerformance.length ? "check-circle" : "target",
         text: `You are on track with ${onTrack} out of ${budgetPerformance.length} budget${budgetPerformance.length === 1 ? "" : "s"}`,
       });
     }
@@ -522,7 +649,7 @@ export default function ReportScreen() {
     if (momoExp.length > 0) {
       const momoTotal = momoExp.reduce((s, e) => s + Math.abs(parseFloat(e.amount) || 0), 0);
       list.push({
-        icon: "📱",
+        icon: "smartphone",
         text: `Your MoMo spending this month: GHS ${momoTotal.toFixed(0)} (${momoExp.length} transaction${momoExp.length === 1 ? "" : "s"})`,
       });
     }
@@ -531,7 +658,7 @@ export default function ReportScreen() {
     if (upcomingBills.length > 0) {
       const billTotal = upcomingBills.reduce((s, b) => s + (parseFloat(b.amount) || 0), 0);
       list.push({
-        icon: "🔔",
+        icon: "bell",
         text: `You have ${upcomingBills.length} bill${upcomingBills.length === 1 ? "" : "s"} due in the next 7 days${billTotal > 0 ? ` totalling GHS ${billTotal.toFixed(0)}` : ""}`,
       });
     }
@@ -545,46 +672,36 @@ export default function ReportScreen() {
     return colors.positive;
   }
 
-  // ── Error state ───────────────────────────────────────────────────────────
-  if (error && !report) {
-    return (
-      <ScrollView
-        style={[styles.container, { backgroundColor: t.bg }]}
-        contentContainerStyle={styles.centered}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={t.accent} colors={[t.accent]} />}
-      >
-        <Text style={[styles.errorText, { color: t.textSecondary }]}>{error}</Text>
-      </ScrollView>
-    );
-  }
+  const refreshControl = (
+    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />
+  );
 
-  return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: t.bg }]}
-      contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, 30) }]}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={t.accent} colors={[t.accent]} />}
-    >
-      {/* ── Section 1: Header with month navigation ── */}
+  // ── Month navigation header (shown in every state) ────────────────────────
+  const header = (
+    <>
       <View style={styles.headerRow}>
         <TouchableOpacity
           onPress={goToPreviousMonth}
-          style={[styles.navArrow, { backgroundColor: t.card, borderColor: t.cardBorder }]}
+          style={[styles.navArrow, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}
           activeOpacity={0.7}
           hitSlop={4}
           accessibilityRole="button"
           accessibilityLabel="Previous month"
         >
-          <Feather name="chevron-left" size={22} color={t.text} />
+          <Feather name="chevron-left" size={22} color={colors.text} />
         </TouchableOpacity>
 
         <View style={{ alignItems: "center" }} accessibilityRole="header">
-          <Text style={[styles.monthTitle, { color: t.text }]}>{selectedMonthName}</Text>
-          <Text style={[styles.yearSubtitle, { color: t.textSecondary }]}>{selectedYear}</Text>
+          <Text style={[typography.title, { color: colors.text }]}>{selectedMonthName}</Text>
+          <Text style={[typography.label, { color: colors.textSecondary, marginTop: 1 }]}>{selectedYear}</Text>
         </View>
 
         <TouchableOpacity
           onPress={goToNextMonth}
-          style={[styles.navArrow, { backgroundColor: t.card, borderColor: t.cardBorder, opacity: isCurrentMonth ? 0.35 : 1 }]}
+          style={[
+            styles.navArrow,
+            { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle, opacity: isCurrentMonth ? 0.35 : 1 },
+          ]}
           disabled={isCurrentMonth}
           activeOpacity={0.7}
           hitSlop={4}
@@ -592,7 +709,7 @@ export default function ReportScreen() {
           accessibilityLabel="Next month"
           accessibilityState={{ disabled: isCurrentMonth }}
         >
-          <Feather name="chevron-right" size={22} color={t.text} />
+          <Feather name="chevron-right" size={22} color={colors.text} />
         </TouchableOpacity>
       </View>
 
@@ -606,55 +723,104 @@ export default function ReportScreen() {
               style={styles.dotTap}
               onPress={() => { setSelectedMonth(d.month); setSelectedYear(d.year); }}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`Jump to ${MONTH_NAMES[d.month]} ${d.year}`}
+              accessibilityState={{ selected: active }}
             >
-              <View style={[styles.monthDot, { backgroundColor: active ? t.accent : t.segmentBg, borderColor: t.cardBorder }]} />
-              <Text style={[styles.dotLabel, { color: active ? t.accent : t.textSecondary, fontWeight: active ? "700" : "500" }]}>
+              <View
+                style={[
+                  styles.monthDot,
+                  { backgroundColor: active ? colors.primary : colors.neutralBg, borderColor: colors.borderSubtle },
+                ]}
+              />
+              <Text style={[typography.caption, { color: active ? colors.primary : colors.textSecondary }]}>
                 {d.label}
               </Text>
             </TouchableOpacity>
           );
         })}
       </View>
+    </>
+  );
+
+  // ── Error state ───────────────────────────────────────────────────────────
+  if (error && !report) {
+    return (
+      <Screen refreshControl={refreshControl}>
+        {header}
+        <EmptyState
+          icon="alert-circle"
+          title="Couldn't load your report"
+          body={error}
+          ctaLabel="Try again"
+          onPressCta={() => fetchReportAndExpenses(selectedMonth, selectedYear, true)}
+        />
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen refreshControl={refreshControl}>
+      {header}
 
       {loading && !refreshing ? (
-        <View style={styles.loadingBox}>
-          <ActivityIndicator size="large" color={t.accent} />
+        <View style={{ gap: spacing.lg }}>
+          <Skeleton height={168} borderRadius={radius.xl} />
+          <SkeletonCard height={180} />
+          <SkeletonCard height={140} />
         </View>
       ) : (
         <Animated.View style={contentStyle}>
           {/* ── Section 2: Hero spending card ── */}
-          <View style={[styles.heroCard, { backgroundColor: t.heroBase }]}>
-            {/* Layered circles simulate a gradient (expo-linear-gradient not installed) */}
-            <View style={[styles.heroCircleTop, { backgroundColor: t.heroCircleA }]} />
-            <View style={[styles.heroCircleBottom, { backgroundColor: t.heroCircleB }]} />
-
-            <Text style={[styles.heroLabel, { color: isDark ? "#A7C4C9" : "#4B7A6C" }]}>TOTAL SPENT</Text>
-            <CountUpText value={heroStats.currentTotal} style={[styles.heroAmount, { color: t.heroText }]} />
+          <LinearGradient
+            colors={[colors.heroGradientFrom, colors.heroGradientTo]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.heroCard}
+          >
+            <Text style={[typography.label, styles.heroLabel, { color: colors.onHeroDim }]}>TOTAL SPENT</Text>
+            <AmountText value={heroStats.currentTotal} size="displayLarge" color={colors.onHero} animate />
 
             {heroStats.previousTotal > 0 ? (
-              <Text style={[styles.heroCompare, { color: heroStats.pctChange > 0 ? t.up : t.down }]}>
-                {heroStats.pctChange > 0 ? "↑" : "↓"} {Math.abs(heroStats.pctChange).toFixed(0)}% vs last month
-              </Text>
+              <View style={styles.heroCompareRow}>
+                <Feather
+                  name={heroStats.pctChange > 0 ? "arrow-up-right" : "arrow-down-right"}
+                  size={14}
+                  color={colors.onHero}
+                />
+                <Text style={[typography.label, { color: colors.onHero }]}>
+                  {Math.abs(heroStats.pctChange).toFixed(0)}% vs last month
+                </Text>
+              </View>
             ) : (
-              <Text style={[styles.heroCompare, { color: isDark ? "#8890A0" : "#6B7280" }]}>
+              <Text style={[typography.label, { color: colors.onHeroDim, marginTop: spacing.sm }]}>
                 First month of tracking
               </Text>
             )}
 
             <View style={styles.heroChipsRow}>
-              <View style={[styles.heroChip, { backgroundColor: isDark ? "#ffffff14" : "#ffffffAA" }]}>
-                <Text style={[styles.heroChipText, { color: t.heroText }]}>📊 {heroStats.catCount} categor{heroStats.catCount === 1 ? "y" : "ies"}</Text>
+              <View style={[styles.heroChip, { backgroundColor: colors.heroChipBg }]}>
+                <Feather name="pie-chart" size={12} color={colors.onHero} />
+                <Text style={[typography.caption, { color: colors.onHero }]}>
+                  {heroStats.catCount} categor{heroStats.catCount === 1 ? "y" : "ies"}
+                </Text>
               </View>
-              <View style={[styles.heroChip, { backgroundColor: isDark ? "#ffffff14" : "#ffffffAA" }]}>
-                <Text style={[styles.heroChipText, { color: t.heroText }]}>🧾 {heroStats.monthTxCount} expense{heroStats.monthTxCount === 1 ? "" : "s"}</Text>
+              <View style={[styles.heroChip, { backgroundColor: colors.heroChipBg }]}>
+                <Feather name="file-text" size={12} color={colors.onHero} />
+                <Text style={[typography.caption, { color: colors.onHero }]}>
+                  {heroStats.monthTxCount} expense{heroStats.monthTxCount === 1 ? "" : "s"}
+                </Text>
               </View>
               {heroStats.topCat && (
-                <View style={[styles.heroChip, { backgroundColor: isDark ? "#ffffff14" : "#ffffffAA" }]}>
-                  <Text style={[styles.heroChipText, { color: t.heroText }]} numberOfLines={1}>💰 Top: {heroStats.topCat}</Text>
+                <View style={[styles.heroChip, { backgroundColor: colors.heroChipBg, maxWidth: 160 }]}>
+                  <Feather name="award" size={12} color={colors.onHero} />
+                  <Text style={[typography.caption, { color: colors.onHero }]} numberOfLines={1}>
+                    Top: {heroStats.topCat}
+                  </Text>
                 </View>
               )}
             </View>
-          </View>
+          </LinearGradient>
 
           {/* ── Spending insights (horizontal scroll) ── */}
           {insights.length > 0 && (
@@ -665,33 +831,57 @@ export default function ReportScreen() {
               contentContainerStyle={styles.insightsRow}
             >
               {insights.map((insight, idx) => (
-                <View key={idx} style={[styles.insightCard, { backgroundColor: t.card, borderColor: t.cardBorder }]}>
-                  <Text style={styles.insightIcon}>{insight.icon}</Text>
-                  <Text style={[styles.insightText, { color: t.text }]}>{insight.text}</Text>
-                </View>
+                <Animated.View
+                  key={insight.text}
+                  entering={FadeInDown.duration(duration.base).delay(staggerDelay(idx)).easing(easing.decelerate)}
+                >
+                  <Card elevation="raised" padded={false} style={styles.insightCard}>
+                    <Feather name={insight.icon} size={18} color={colors.primary} />
+                    <Text style={[typography.caption, { color: colors.text, lineHeight: 17 }]}>{insight.text}</Text>
+                  </Card>
+                </Animated.View>
               ))}
             </ScrollView>
           )}
 
           {/* ── Section 3: Interactive spending chart ── */}
-          <View style={[styles.card, { backgroundColor: t.chartBg, borderColor: t.cardBorder }]}>
+          <Card elevation="raised" style={styles.section}>
             <View style={styles.chartHeaderRow}>
-              <Text style={[styles.cardTitle, { color: t.textSecondary }]}>SPENDING TREND</Text>
+              <View style={{ flex: 1 }}>
+                <Animated.View style={staticHeaderStyle}>
+                  <SectionHeader title="Spending trend" style={{ marginBottom: 0 }} />
+                </Animated.View>
+                {/* Live readout — takes over the title while a finger is down */}
+                <Animated.View style={[StyleSheet.absoluteFill, scrubReadoutStyle]} pointerEvents="none">
+                  <Text style={[typography.caption, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {selectedPoint !== null && points[selectedPoint] ? points[selectedPoint].dateLabel : ""}
+                  </Text>
+                  <Text style={[typography.bodyStrong, { color: colors.primary }]} numberOfLines={1}>
+                    {selectedPoint !== null && points[selectedPoint]
+                      ? `GHS ${points[selectedPoint].spend.toFixed(2)}`
+                      : ""}
+                  </Text>
+                </Animated.View>
+              </View>
 
               {/* Segmented pill control */}
-              <View style={[styles.segment, { backgroundColor: t.segmentBg }]}>
-                {(["day", "week", "month", "year"] as const).map((f) => {
-                  const labelMap = { day: "D", week: "W", month: "M", year: "Y" };
+              <View style={[styles.segment, { backgroundColor: colors.neutralBg }]}>
+                {TIMELINES.map((f) => {
                   const active = chartTimeline === f;
                   return (
                     <TouchableOpacity
                       key={f}
-                      style={[styles.segmentBtn, active && { backgroundColor: t.segmentActive }]}
+                      style={[styles.segmentBtn, active && { backgroundColor: colors.primary }]}
                       onPress={() => setChartTimeline(f)}
                       activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Show by ${f}`}
+                      accessibilityState={{ selected: active }}
                     >
-                      <Text style={[styles.segmentText, { color: active ? t.segmentActiveText : t.segmentText }]}>
-                        {labelMap[f]}
+                      <Text
+                        style={[typography.caption, { color: active ? colors.onPrimary : colors.textSecondary }]}
+                      >
+                        {TIMELINE_LABEL[f]}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -699,113 +889,172 @@ export default function ReportScreen() {
               </View>
             </View>
 
-            <View style={[styles.chartContainer, { height: chartHeight }]}>
-              {/* Grid lines + Y labels */}
-              {[{ top: padV, val: maxSpendVal }, { top: chartHeight / 2, val: maxSpendVal / 2 }, { top: chartHeight - padV, val: 0 }].map((g, i) => (
-                <View key={`grid-${i}`} style={[styles.gridLine, { top: g.top, backgroundColor: t.gridLine }]}>
-                  <Text style={[styles.yLabel, { color: t.textSecondary }]}>{formatGhs(g.val)}</Text>
-                </View>
-              ))}
+            <GestureDetector gesture={scrub}>
+            <View style={{ height: chartHeight, position: "relative", marginTop: spacing.sm }}>
+              {/* Grid, area fill, ghost comparison and curve — one SVG */}
+              <Svg width={chartWidth} height={chartHeight}>
+                <Defs>
+                  <SvgGradient id="spendFill" x1="0" y1="0" x2="0" y2="1">
+                    <Stop offset="0" stopColor={colors.primary} stopOpacity={0.28} />
+                    <Stop offset="1" stopColor={colors.primary} stopOpacity={0} />
+                  </SvgGradient>
+                </Defs>
 
-              {/* Smooth curve */}
-              {curveSegments.map((seg, idx) => {
-                const dx = seg.x2 - seg.x1;
-                const dy = seg.y2 - seg.y1;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                const angle = Math.atan2(dy, dx);
-                return (
-                  <View
-                    key={`seg-${idx}`}
-                    style={{
-                      position: "absolute",
-                      left: seg.x1,
-                      top: seg.y1,
-                      width: dist + 0.6,
-                      height: 2.5,
-                      backgroundColor: t.accent,
-                      transform: [{ rotate: `${angle}rad` }],
-                      transformOrigin: ["0%", "50%", 0] as any,
-                    }}
+                {[padV, chartHeight / 2, chartHeight - padV].map((y, i) => (
+                  <Line
+                    key={`grid-${i}`}
+                    x1={0}
+                    y1={y}
+                    x2={chartWidth}
+                    y2={y}
+                    stroke={colors.borderSubtle}
+                    strokeWidth={1}
                   />
-                );
-              })}
+                ))}
 
-              {/* Tappable data points */}
-              {points.map((point, idx) => (
-                <TouchableOpacity
-                  key={`dot-${idx}`}
-                  style={[styles.dotTouch, { left: point.x - 14, top: point.y - 14 }]}
-                  onPress={() => setSelectedPoint(selectedPoint === idx ? null : idx)}
-                  activeOpacity={0.7}
+                {!!areaPath && <Path d={areaPath} fill="url(#spendFill)" />}
+
+                {/* Previous period, behind and dimmed */}
+                {!!prevCurvePath && (
+                  <Path
+                    d={prevCurvePath}
+                    stroke={colors.textTertiary}
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    strokeOpacity={0.65}
+                    fill="none"
+                    strokeLinecap="round"
+                  />
+                )}
+
+                {!!curvePath && (
+                  <AnimatedPath
+                    d={curvePath}
+                    stroke={colors.primary}
+                    strokeWidth={2.5}
+                    fill="none"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeDasharray={curveLength}
+                    animatedProps={drawProps}
+                  />
+                )}
+              </Svg>
+
+              {/* Y-axis labels */}
+              {[{ top: padV, val: maxSpendVal }, { top: chartHeight / 2, val: maxSpendVal / 2 }, { top: chartHeight - padV, val: 0 }].map((g, i) => (
+                <Text
+                  key={`y-${i}`}
+                  style={[typography.caption, styles.yLabel, { top: g.top - 14, color: colors.textSecondary }]}
                 >
-                  <View style={[
-                    styles.chartDot,
-                    { backgroundColor: t.chartBg, borderColor: t.accent },
-                    selectedPoint === idx && { backgroundColor: t.accent },
-                  ]} />
-                </TouchableOpacity>
+                  {formatGhs(g.val)}
+                </Text>
               ))}
 
-              {/* Tooltip */}
-              {selectedPoint !== null && points[selectedPoint] && (
-                <View
-                  style={[
-                    styles.tooltip,
-                    {
-                      backgroundColor: isDark ? "#000000E6" : "#1A1A2EE6",
-                      left: Math.min(Math.max(points[selectedPoint].x - 55, 0), chartWidth - 110),
-                      top: Math.max(points[selectedPoint].y - 52, 0),
-                    },
-                  ]}
-                  pointerEvents="none"
-                >
-                  <Text style={styles.tooltipTitle}>{points[selectedPoint].dateLabel}</Text>
-                  <Text style={[styles.tooltipValue, { color: t.accent }]}>
-                    GHS {points[selectedPoint].spend.toFixed(2)}
-                  </Text>
-                </View>
-              )}
+              {/* Tappable data points — fade up once the line has drawn */}
+              {points.map((point, idx) => (
+                <Animated.View key={`dot-${idx}`} style={[styles.dotTouch, { left: point.x - 14, top: point.y - 14 }, fadeUpStyle]}>
+                  <TouchableOpacity
+                    onPress={() => setSelectedPoint(selectedPoint === idx ? null : idx)}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${point.dateLabel}: GHS ${point.spend.toFixed(2)}`}
+                    hitSlop={6}
+                  >
+                    <View
+                      style={[
+                        styles.chartDot,
+                        { backgroundColor: colors.surfaceElevated, borderColor: colors.primary },
+                        selectedPoint === idx && { backgroundColor: colors.primary },
+                      ]}
+                    />
+                  </TouchableOpacity>
+                </Animated.View>
+              ))}
 
-              {/* Draw-in reveal mask (shrinks from the right) */}
+              {/* Scrub tracker — vertical rule plus a puck riding the curve */}
+              <Animated.View
+                style={[styles.trackerLine, { backgroundColor: colors.primary }, trackerStyle]}
+                pointerEvents="none"
+              />
               <Animated.View
                 style={[
-                  { position: "absolute", top: 0, bottom: 0, right: 0, backgroundColor: t.chartBg },
-                  maskStyle,
+                  styles.trackerDot,
+                  { backgroundColor: colors.primary, borderColor: colors.surfaceElevated },
+                  trackerDotStyle,
                 ]}
                 pointerEvents="none"
               />
+
+              {/* Tooltip — inverse surface so it reads in both themes. Shown for
+                  a tapped point; the scrub uses the header readout instead. */}
+              {selectedPoint !== null && points[selectedPoint] && (
+                <Animated.View
+                  style={[
+                    styles.tooltip,
+                    {
+                      backgroundColor: colors.text,
+                      left: Math.min(Math.max(points[selectedPoint].x - 55, 0), chartWidth - 110),
+                      top: Math.max(points[selectedPoint].y - 52, 0),
+                    },
+                    staticHeaderStyle,
+                  ]}
+                  pointerEvents="none"
+                >
+                  <Text style={[typography.caption, { color: colors.background }]}>
+                    {points[selectedPoint].dateLabel}
+                  </Text>
+                  <Text style={[typography.label, { color: colors.background }]}>
+                    GHS {points[selectedPoint].spend.toFixed(2)}
+                  </Text>
+                </Animated.View>
+              )}
+
             </View>
+            </GestureDetector>
+
+            {/* Legend — only shown when there's a comparison to explain */}
+            {!!prevCurvePath && (
+              <View style={styles.chartLegend}>
+                <View style={styles.chartLegendItem}>
+                  <View style={[styles.legendSwatch, { backgroundColor: colors.primary }]} />
+                  <Text style={[typography.caption, { color: colors.textSecondary }]}>This period</Text>
+                </View>
+                <View style={styles.chartLegendItem}>
+                  <View style={[styles.legendSwatchDashed, { borderColor: colors.textTertiary }]} />
+                  <Text style={[typography.caption, { color: colors.textSecondary }]}>Previous</Text>
+                </View>
+              </View>
+            )}
 
             {/* X labels */}
             <View style={styles.xLabelsRow}>
               {points.map((point, idx) => (
                 <View key={`x-${idx}`} style={[styles.xLabelCol, { left: point.x - 20 }]}>
-                  <Text style={[styles.xLabel, { color: t.textSecondary }]}>{point.day}</Text>
+                  <Text style={[typography.caption, { color: colors.textSecondary }]}>{point.day}</Text>
                 </View>
               ))}
             </View>
 
             {/* Min / Max / Avg chips */}
             <View style={styles.statChipsRow}>
-              <View style={[styles.statChip, { backgroundColor: t.segmentBg }]}>
-                <Text style={[styles.statChipLabel, { color: t.textSecondary }]}>MIN</Text>
-                <Text style={[styles.statChipValue, { color: t.text }]}>{formatGhs(chartStats.min)}</Text>
-              </View>
-              <View style={[styles.statChip, { backgroundColor: t.segmentBg }]}>
-                <Text style={[styles.statChipLabel, { color: t.textSecondary }]}>MAX</Text>
-                <Text style={[styles.statChipValue, { color: t.text }]}>{formatGhs(chartStats.max)}</Text>
-              </View>
-              <View style={[styles.statChip, { backgroundColor: t.segmentBg }]}>
-                <Text style={[styles.statChipLabel, { color: t.textSecondary }]}>AVG</Text>
-                <Text style={[styles.statChipValue, { color: t.text }]}>{formatGhs(chartStats.avg)}</Text>
-              </View>
+              {([
+                ["MIN", chartStats.min],
+                ["MAX", chartStats.max],
+                ["AVG", chartStats.avg],
+              ] as const).map(([label, val]) => (
+                <View key={label} style={[styles.statChip, { backgroundColor: colors.neutralBg }]}>
+                  <Text style={[typography.caption, { color: colors.textSecondary }]}>{label}</Text>
+                  <Text style={[typography.label, { color: colors.text }]}>{formatGhs(val)}</Text>
+                </View>
+              ))}
             </View>
-          </View>
+          </Card>
 
           {/* ── Section 4: Category breakdown ── */}
           {breakdown.entries.length > 0 && (
-            <View style={[styles.card, { backgroundColor: t.card, borderColor: t.cardBorder }]}>
-              <Text style={[styles.cardTitle, { color: t.textSecondary }]}>CATEGORY BREAKDOWN</Text>
+            <Card elevation="raised" style={styles.section}>
+              <SectionHeader title="Category breakdown" style={{ marginBottom: spacing.lg }} />
               {visibleCats.map((entry, index) => (
                 <CategoryRow
                   key={`${entry.cat}-${selectedMonth}-${selectedYear}`}
@@ -814,89 +1063,92 @@ export default function ReportScreen() {
                   pct={breakdown.total > 0 ? (entry.amount / breakdown.total) * 100 : 0}
                   index={index}
                   customEmoji={getCustomEmoji(entry.cat)}
-                  t={t}
                 />
               ))}
               {breakdown.entries.length > 5 && (
-                <TouchableOpacity onPress={() => setShowAllCats(!showAllCats)} activeOpacity={0.7} style={styles.showAllBtn}>
-                  <Text style={[styles.showAllText, { color: t.accent }]}>
-                    {showAllCats ? "Show less ▲" : `Show all (${breakdown.entries.length}) ▼`}
+                <TouchableOpacity
+                  onPress={() => setShowAllCats(!showAllCats)}
+                  activeOpacity={0.7}
+                  style={styles.showAllBtn}
+                  accessibilityRole="button"
+                >
+                  <Text style={[typography.label, { color: colors.primary }]}>
+                    {showAllCats ? "Show less" : `Show all (${breakdown.entries.length})`}
                   </Text>
+                  <Feather name={showAllCats ? "chevron-up" : "chevron-down"} size={15} color={colors.primary} />
                 </TouchableOpacity>
               )}
-            </View>
+            </Card>
           )}
 
           {/* ── Section 5: Budget performance grid ── */}
-          <View style={[styles.card, { backgroundColor: t.card, borderColor: t.cardBorder }]}>
-            <Text style={[styles.cardTitle, { color: t.textSecondary }]}>BUDGET PERFORMANCE</Text>
+          <Card elevation="raised" style={styles.section}>
+            <SectionHeader title="Budget performance" style={{ marginBottom: spacing.lg }} />
             {budgetPerformance.length === 0 ? (
-              <View style={styles.emptyBudget}>
-                <Text style={styles.emptyBudgetEmoji}>🎯</Text>
-                <Text style={[styles.emptyBudgetTitle, { color: t.text }]}>No budgets set yet</Text>
-                <Text style={[styles.emptyBudgetSub, { color: t.textSecondary }]}>
-                  Set monthly limits per category to track your spending against them here.
-                </Text>
-                <TouchableOpacity
-                  style={[styles.setBudgetBtn, { backgroundColor: t.accent }]}
-                  onPress={() => router.push("/(tabs)/budget")}
-                  activeOpacity={0.85}
-                >
-                  <Text style={[styles.setBudgetBtnText, { color: t.segmentActiveText }]}>Set Budgets</Text>
-                </TouchableOpacity>
-              </View>
+              <EmptyState
+                icon="target"
+                title="No budgets set yet"
+                body="Set monthly limits per category to track your spending against them here."
+                ctaLabel="Set budgets"
+                onPressCta={() => router.push("/(tabs)/budget")}
+              />
             ) : (
               <View style={styles.budgetGrid}>
-                {budgetPerformance.map((item: any) => {
+                {budgetPerformance.map((item: any, idx: number) => {
                   const pct = parseFloat(item.percentage) || 0;
                   const color = budgetColor(pct);
                   const status = pct >= 100
-                    ? { label: "Over Budget 🚨", color: colors.negative }
+                    ? { label: "Over budget", color: colors.negative }
                     : pct >= 80
-                    ? { label: "Near Limit ⚠️", color: colors.warning }
-                    : { label: "On Track ✓", color: colors.positive };
+                    ? { label: "Near limit", color: colors.warning }
+                    : { label: "On track", color: colors.positive };
                   return (
-                    <View key={item.category} style={[styles.budgetCard, { backgroundColor: t.segmentBg, borderColor: t.cardBorder }]}>
+                    <Animated.View
+                      key={item.category}
+                      entering={FadeInDown.duration(duration.base).delay(staggerDelay(idx)).easing(easing.decelerate)}
+                      style={[styles.budgetCard, { backgroundColor: colors.neutralBg, borderColor: colors.borderSubtle }]}
+                    >
                       <View style={styles.budgetCardTitleRow}>
-                        <MaterialCommunityIcons name={getCategoryIconName(item.category)} size={13} color={t.text} />
-                        <Text style={[styles.budgetCardTitle, { color: t.text }]} numberOfLines={1}>
+                        <MaterialCommunityIcons name={getCategoryIconName(item.category)} size={13} color={colors.text} />
+                        <Text style={[typography.label, { color: colors.text, flexShrink: 1 }]} numberOfLines={1}>
                           {item.category}
                         </Text>
                       </View>
-                      <Donut pct={pct} color={color} size={78} trackColor={isDark ? "#ffffff14" : "#00000010"} t={t} />
-                      <Text style={[styles.budgetAmounts, { color: t.textSecondary }]}>
+                      <Donut pct={pct} color={color} size={78} trackColor={colors.borderSubtle} />
+                      <Text style={[typography.caption, { color: colors.textSecondary }]}>
                         GHS {(parseFloat(item.spent) || 0).toFixed(0)} of GHS {(parseFloat(item.limit) || 0).toFixed(0)}
                       </Text>
-                      <View style={[styles.budgetStatusBadge, { backgroundColor: status.color + "1A", borderColor: status.color + "40" }]}>
-                        <Text style={[styles.budgetStatusText, { color: status.color }]}>{status.label}</Text>
+                      <View
+                        style={[
+                          styles.budgetStatusBadge,
+                          { backgroundColor: `${status.color}1A`, borderColor: `${status.color}40` },
+                        ]}
+                      >
+                        <Text style={[typography.caption, { color: status.color }]}>{status.label}</Text>
                       </View>
-                    </View>
+                    </Animated.View>
                   );
                 })}
               </View>
             )}
-          </View>
+          </Card>
         </Animated.View>
       )}
-    </ScrollView>
+    </Screen>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Styles (colors come from the theme object at render time)
+// Styles — layout only. Every color and type value comes from theme/ at render.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: 20 },
-  content: { paddingHorizontal: 20, paddingBottom: 40 },
-
-  // Section 1 — header
+  // Header
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 14,
+    marginBottom: spacing.md,
   },
   navArrow: {
     width: 40,
@@ -906,92 +1158,57 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  monthTitle: { fontSize: 22, fontWeight: "bold", letterSpacing: -0.3 },
-  yearSubtitle: { fontSize: 13, fontWeight: "600", marginTop: 1 },
   dotsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: 8,
-    marginBottom: 20,
+    paddingHorizontal: spacing.sm,
+    marginBottom: spacing.xl,
   },
-  dotTap: { alignItems: "center", gap: 4, paddingHorizontal: 6, paddingVertical: 2 },
+  dotTap: { alignItems: "center", gap: spacing.xs, paddingHorizontal: 6, paddingVertical: 2 },
   monthDot: { width: 8, height: 8, borderRadius: 4, borderWidth: StyleSheet.hairlineWidth },
-  dotLabel: { fontSize: 10 },
 
-  // Section 2 — hero card
+  // Hero card
   heroCard: {
-    borderRadius: 28,
-    padding: 24,
-    marginBottom: 16,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    marginBottom: spacing.lg,
     overflow: "hidden",
-    position: "relative",
   },
-  heroCircleTop: {
-    position: "absolute",
-    width: 260,
-    height: 260,
-    borderRadius: 130,
-    top: -130,
-    left: -60,
-    opacity: 0.55,
-  },
-  heroCircleBottom: {
-    position: "absolute",
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    bottom: -110,
-    right: -50,
-    opacity: 0.6,
-  },
-  heroLabel: { fontSize: 11, fontWeight: "bold", letterSpacing: 1.5, marginBottom: 8 },
-  heroAmount: { fontSize: 42, fontWeight: "bold", letterSpacing: -1, marginBottom: 6 },
-  heroCompare: { fontSize: 13, fontWeight: "700", marginBottom: 18 },
-  heroChipsRow: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
-  heroChip: { borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6, maxWidth: 160 },
-  heroChipText: { fontSize: 11, fontWeight: "600" },
-
-  // Generic card
-  card: {
-    borderRadius: 24,
-    padding: 20,
-    borderWidth: 1,
-    marginBottom: 16,
+  heroLabel: { letterSpacing: 1.5, marginBottom: spacing.sm },
+  heroCompareRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.sm },
+  heroChipsRow: { flexDirection: "row", gap: spacing.sm, flexWrap: "wrap", marginTop: spacing.lg },
+  heroChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 6,
   },
 
-  // Insights row
-  insightsScroll: { marginBottom: 16, marginHorizontal: -20 },
-  insightsRow: { paddingHorizontal: 20, gap: 10 },
-  insightCard: {
-    width: 230,
-    borderRadius: 18,
-    borderWidth: 1,
-    padding: 14,
-    gap: 6,
-  },
-  insightIcon: { fontSize: 20 },
-  insightText: { fontSize: 12, fontWeight: "600", lineHeight: 17 },
-  cardTitle: { fontSize: 11, fontWeight: "bold", letterSpacing: 1, marginBottom: 16 },
+  section: { marginBottom: spacing.lg },
 
-  // Section 3 — chart
+  // Insights
+  insightsScroll: { marginBottom: spacing.lg, marginHorizontal: -spacing.lg },
+  insightsRow: { paddingHorizontal: spacing.lg, gap: spacing.sm + 2 },
+  insightCard: { width: 230, padding: spacing.md, gap: spacing.sm },
+
+  // Chart
   chartHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 10,
+    gap: spacing.sm,
   },
-  segment: { flexDirection: "row", borderRadius: 18, padding: 3 },
+  segment: { flexDirection: "row", borderRadius: radius.md + 6, padding: 3 },
   segmentBtn: {
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing.md,
     paddingVertical: 6,
-    borderRadius: 15,
+    borderRadius: radius.md + 3,
     alignItems: "center",
     justifyContent: "center",
   },
-  segmentText: { fontSize: 11, fontWeight: "bold" },
-  chartContainer: { position: "relative" },
-  gridLine: { position: "absolute", left: 0, right: 0, height: 1 },
-  yLabel: { position: "absolute", right: 0, top: -14, fontSize: 9, fontWeight: "600" },
+  yLabel: { position: "absolute", right: 0 },
   dotTouch: {
     position: "absolute",
     width: 28,
@@ -1000,86 +1217,66 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     zIndex: 5,
   },
-  chartDot: {
-    width: 11,
-    height: 11,
-    borderRadius: 6,
-    borderWidth: 2.5,
+  chartDot: { width: 11, height: 11, borderRadius: 6, borderWidth: 2.5 },
+  trackerLine: { position: "absolute", top: 0, bottom: 0, width: 1.5, opacity: 0.45 },
+  trackerDot: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 3,
+    zIndex: 6,
   },
   tooltip: {
     position: "absolute",
     width: 110,
-    borderRadius: 10,
+    borderRadius: radius.sm,
     paddingVertical: 6,
-    paddingHorizontal: 8,
+    paddingHorizontal: spacing.sm,
     alignItems: "center",
     zIndex: 10,
   },
-  tooltipTitle: { color: "#ffffffB3", fontSize: 10, fontWeight: "600" },
-  tooltipValue: { fontSize: 12, fontWeight: "bold", marginTop: 1 },
-  xLabelsRow: { position: "relative", height: 18, marginTop: 8 },
+  chartLegend: { flexDirection: "row", gap: spacing.lg, marginTop: spacing.sm },
+  chartLegendItem: { flexDirection: "row", alignItems: "center", gap: spacing.xs + 2 },
+  legendSwatch: { width: 14, height: 3, borderRadius: 2 },
+  legendSwatchDashed: { width: 14, height: 0, borderTopWidth: 2, borderStyle: "dashed" },
+  xLabelsRow: { position: "relative", height: 18, marginTop: spacing.sm },
   xLabelCol: { position: "absolute", width: 40, alignItems: "center" },
-  xLabel: { fontSize: 10, fontWeight: "500" },
-  statChipsRow: { flexDirection: "row", gap: 8, marginTop: 14 },
-  statChip: { flex: 1, borderRadius: 14, paddingVertical: 8, alignItems: "center" },
-  statChipLabel: { fontSize: 9, fontWeight: "bold", letterSpacing: 0.5, marginBottom: 2 },
-  statChipValue: { fontSize: 13, fontWeight: "bold" },
+  statChipsRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.md },
+  statChip: { flex: 1, borderRadius: radius.md, paddingVertical: spacing.sm, alignItems: "center", gap: 2 },
 
-  // Section 4 — categories
-  catRow: { marginBottom: 16 },
+  // Categories
   catHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
-  catLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1, marginRight: 10 },
-  catName: { fontSize: 14, fontWeight: "700", flexShrink: 1 },
-  catAmount: { fontSize: 14, fontWeight: "bold" },
-  catPct: { fontSize: 10, fontWeight: "600", marginTop: 1 },
-  barTrack: { height: 8, borderRadius: 4, overflow: "hidden" },
-  barFill: { height: "100%", borderRadius: 4 },
-  showAllBtn: { alignItems: "center", paddingTop: 4 },
-  showAllText: { fontSize: 13, fontWeight: "bold" },
+  catLeft: { flexDirection: "row", alignItems: "center", gap: spacing.sm + 2, flex: 1, marginRight: spacing.sm + 2 },
+  showAllBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: spacing.xs, paddingTop: spacing.xs },
 
-  // Section 5 — budget grid
+  // Budget grid
   budgetGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    rowGap: 12,
+    rowGap: spacing.md,
   },
   budgetCard: {
     width: "48.5%",
-    borderRadius: 20,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    padding: 14,
+    padding: spacing.md + 2,
     alignItems: "center",
-    gap: 10,
+    gap: spacing.sm + 2,
   },
-  budgetCardTitleRow: { flexDirection: "row", alignItems: "center", gap: 4, maxWidth: "100%" },
-  budgetCardTitle: { fontSize: 13, fontWeight: "700", flexShrink: 1 },
-  donutPct: { fontSize: 13, fontWeight: "bold" },
-  budgetAmounts: { fontSize: 11, fontWeight: "600" },
+  budgetCardTitleRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, maxWidth: "100%" },
   budgetStatusBadge: {
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
-    paddingHorizontal: 8,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 3,
   },
-  budgetStatusText: { fontSize: 10, fontWeight: "bold" },
-  emptyBudget: { alignItems: "center", paddingVertical: 16, gap: 6 },
-  emptyBudgetEmoji: { fontSize: 34 },
-  emptyBudgetTitle: { fontSize: 15, fontWeight: "bold" },
-  emptyBudgetSub: { fontSize: 12, textAlign: "center", lineHeight: 17, paddingHorizontal: 12 },
-  setBudgetBtn: {
-    borderRadius: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 24,
-    marginTop: 8,
-  },
-  setBudgetBtnText: { fontSize: 13, fontWeight: "bold" },
-
-  loadingBox: { paddingVertical: 60, alignItems: "center", justifyContent: "center" },
-  errorText: { fontSize: 14, textAlign: "center" },
 });

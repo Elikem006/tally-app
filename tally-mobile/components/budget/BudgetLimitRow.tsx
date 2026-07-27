@@ -30,7 +30,7 @@ export function BudgetLimitRow({ category, customEmoji, spent, value, onChangeVa
       <View style={styles.left}>
         <CategoryIcon category={category} customEmoji={customEmoji} size={36} />
         <View style={{ flex: 1 }}>
-          <Text style={[typography.bodyStrong, { color: colors.text, fontSize: 14 }]}>{category}</Text>
+          <Text style={[typography.bodyCompact, { color: colors.text }]}>{category}</Text>
           <Text style={[typography.label, { color: colors.textSecondary, marginTop: 2 }]} numberOfLines={1}>
             Spent: GHS {spent.toFixed(2)}
           </Text>

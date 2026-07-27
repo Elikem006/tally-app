@@ -1,11 +1,10 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import ExpenseDetailModal from '../../components/ExpenseDetailModal';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  ActivityIndicator,
   TouchableOpacity,
   Image,
   RefreshControl,
@@ -16,11 +15,15 @@ import { expenseAPI, remindersAPI, budgetAPI, momoAPI, categoriesAPI, groupAPI }
 import { getUserId, getUserName, safeStorage } from '../../services/storage';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius } from '../../theme';
-import { Button, CategoryIcon } from '../../components/ui';
+import Animated, { FadeOut } from 'react-native-reanimated';
+import { getExtendedColors, typography, spacing, radius, duration, FONT_FAMILY } from '../../theme';
+import { Button, CategoryIcon, EmptyState, EmptyExpensesArt, Reveal } from '../../components/ui';
 import { ExpensesHeroCard } from '../../components/home/ExpensesHeroCard';
 import { MomoWalletCard } from '../../components/home/MomoWalletCard';
 import { SpendingChart, ChartTimeline } from '../../components/home/SpendingChart';
+import { SpendingRing } from '../../components/home/SpendingRing';
+import { HomeSkeleton } from '../../components/home/HomeSkeleton';
+import { HomeBackdrop } from '../../components/home/HomeBackdrop';
 import { TransactionRow } from '../../components/home/TransactionRow';
 import { QuickAddModal } from '../../components/home/QuickAddModal';
 import Toast from '../../components/Toast';
@@ -99,9 +102,16 @@ export default function HomeScreen() {
   const [quickDescription, setQuickDescription] = useState('');
   const [savingExpense, setSavingExpense] = useState(false);
 
+  // Skeleton on the very first load only. Home refetches on every focus, so
+  // without this guard every tab switch back — including the landing after
+  // adding an expense — would flash the skeleton and replay the whole
+  // opening sequence. Subsequent focuses refresh silently underneath the
+  // content that is already on screen.
+  const hasLoadedOnce = useRef(false);
+
   useFocusEffect(
     useCallback(() => {
-      fetchData(true);
+      fetchData(!hasLoadedOnce.current);
       loadProfileImage();
       consumeMomoRefresh();
       getUnreadCount().then(setUnreadCount);
@@ -184,6 +194,7 @@ export default function HomeScreen() {
     } catch (err: any) {
       setError('Failed to load dashboard data. Please check your connection.');
     } finally {
+      hasLoadedOnce.current = true;
       setLoading(false);
     }
 
@@ -361,6 +372,28 @@ export default function HomeScreen() {
   const projected = dailyAvg * daysInMonth;
   const paceOverBudget = totalBudget > 0 && projected > totalBudget;
 
+  // Greeting. The salutation is time-of-day; the line above it reports what
+  // has actually happened today, so the header says something rather than
+  // greeting the user twice — and reads as part of the same screen as the
+  // hero figure instead of unrelated decoration sitting above it.
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    const salutation = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+
+    // Same date construction the create path uses, so this matches what is stored.
+    const todayKey = new Date().toISOString().split('T')[0];
+    const loggedToday = expenses.filter(
+      (e) => e.date === todayKey && e.type !== 'income' && e.paymentMethod !== 'SETTLEMENT',
+    ).length;
+
+    const lead =
+      loggedToday === 0
+        ? 'Nothing logged today yet'
+        : `${loggedToday} expense${loggedToday === 1 ? '' : 's'} logged today`;
+
+    return { salutation, lead };
+  }, [expenses]);
+
   // Group expenses dynamically by Category (spending only)
   const categoryTotals = expenses.reduce((acc: { [key: string]: number }, e) => {
     const category = e.category || 'Other';
@@ -485,14 +518,6 @@ export default function HomeScreen() {
 
   const { chartBars, chartSum } = getChartData();
 
-  if (loading) {
-    return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
-  }
-
   if (error && expenses.length === 0) {
     return (
       <ScrollView
@@ -509,17 +534,25 @@ export default function HomeScreen() {
 
   return (
     <View style={[styles.wrapper, { backgroundColor: colors.background }]}>
+      <HomeBackdrop />
       <ScrollView
-        style={[styles.container, { backgroundColor: colors.background }]}
+        // Transparent so the backdrop shows through; the wrapper owns the fill.
+        style={styles.container}
         contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, spacing.xl) }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
         keyboardShouldPersistTaps="handled"
       >
         {/* Header Row */}
         <View style={styles.headerRow}>
-          <View>
-            <Text style={[typography.label, { color: colors.textSecondary }]}>Welcome back 👋</Text>
-            <Text style={[typography.headline, { color: colors.text, marginTop: 2 }]} accessibilityRole="header">Good day, {userName}</Text>
+          <View style={{ flex: 1, marginRight: spacing.sm }}>
+            <Text style={[typography.label, { color: colors.textSecondary }]}>{greeting.lead}</Text>
+            <Text
+              style={[typography.headline, { color: colors.text, marginTop: 2 }]}
+              accessibilityRole="header"
+              numberOfLines={1}
+            >
+              {greeting.salutation}, {userName}
+            </Text>
           </View>
           <View style={styles.headerRightActions}>
             <TouchableOpacity
@@ -567,6 +600,16 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* The header above stays put through loading; only the body below
+            swaps, so nothing on screen jumps when data lands. */}
+        {loading && (
+          <Animated.View exiting={FadeOut.duration(duration.fast)}>
+            <HomeSkeleton />
+          </Animated.View>
+        )}
+
+        {!loading && (
+        <>
         {/* Budget Alerts */}
         {budgetAlerts.length > 0 && (
           <View style={styles.alertsSection}>
@@ -603,13 +646,15 @@ export default function HomeScreen() {
           </View>
         )}
 
-        <ExpensesHeroCard
-          totalSpent={totalSpent}
-          totalIncome={totalIncome}
-          totalBudget={totalBudget}
-          remaining={remaining}
-          transactionCount={expenses.length}
-        />
+        <Reveal beat="hero">
+          <ExpensesHeroCard
+            totalSpent={totalSpent}
+            totalIncome={totalIncome}
+            totalBudget={totalBudget}
+            remaining={remaining}
+            transactionCount={expenses.length}
+          />
+        </Reveal>
 
         {/* Spending pace indicator — needs at least 3 days of data to project */}
         {monthSpent > 0 && dayOfMonth > 3 && (
@@ -645,30 +690,32 @@ export default function HomeScreen() {
           >
             <View style={styles.netCol}>
               <Text style={[typography.label, { color: colors.textSecondary }]}>YOU OWE</Text>
-              <Text style={[typography.bodyStrong, { color: groupNet.youOwe > 0 ? colors.negative : colors.textSecondary, fontSize: 17, marginTop: 3 }]}>
+              <Text style={[typography.headline, { color: groupNet.youOwe > 0 ? colors.negative : colors.textSecondary, marginTop: 3 }]}>
                 GHS {groupNet.youOwe.toFixed(2)}
               </Text>
             </View>
             <View style={[styles.netDivider, { backgroundColor: colors.border }]} />
             <View style={styles.netCol}>
               <Text style={[typography.label, { color: colors.textSecondary }]}>YOU ARE OWED</Text>
-              <Text style={[typography.bodyStrong, { color: groupNet.youAreOwed > 0 ? colors.positive : colors.textSecondary, fontSize: 17, marginTop: 3 }]}>
+              <Text style={[typography.headline, { color: groupNet.youAreOwed > 0 ? colors.positive : colors.textSecondary, marginTop: 3 }]}>
                 GHS {groupNet.youAreOwed.toFixed(2)}
               </Text>
             </View>
           </TouchableOpacity>
         )}
 
-        <MomoWalletCard
-          status={momoStatus}
-          balanceLoading={momoBalanceLoading}
-          balance={momoBalance}
-          hideBalance={hideMomoBalance}
-          monthlySpent={momoMonthlySpent}
-          onToggleHide={toggleHideMomoBalance}
-          onRefresh={() => fetchMomoBalance(true)}
-          onPayVendor={() => router.push('/pay-vendor')}
-        />
+        <Reveal beat="primary">
+          <MomoWalletCard
+            status={momoStatus}
+            balanceLoading={momoBalanceLoading}
+            balance={momoBalance}
+            hideBalance={hideMomoBalance}
+            monthlySpent={momoMonthlySpent}
+            onToggleHide={toggleHideMomoBalance}
+            onRefresh={() => fetchMomoBalance(true)}
+            onPayVendor={() => router.push('/pay-vendor')}
+          />
+        </Reveal>
 
         {/* Upcoming Bills / Reminders */}
         {upcomingReminders.length > 0 && (
@@ -737,26 +784,18 @@ export default function HomeScreen() {
           </View>
         )}
 
-        <SpendingChart bars={chartBars} sum={chartSum} timeline={chartTimeline} onTimelineChange={setChartTimeline} />
+        <Reveal beat="secondary">
+          <SpendingChart bars={chartBars} sum={chartSum} timeline={chartTimeline} onTimelineChange={setChartTimeline} />
+        </Reveal>
 
-        {/* By Category Section */}
+        {/* Where the money went — one ring, tap a segment to break it down */}
         {Object.keys(categoryTotals).length > 0 && (
-          <View style={styles.section}>
-            <Text style={[typography.headline, { color: colors.text, marginBottom: spacing.md }]}>By Category</Text>
-            {Object.entries(categoryTotals).map(([category, total]: any, idx: number) => {
-              const percentage = totalSpent > 0 ? (total / totalSpent) * 100 : 0;
-              return (
-                <TransactionRow
-                  key={category}
-                  index={idx}
-                  leading={<CategoryIcon category={category} customEmoji={getCustomEmoji(category)} size={44} />}
-                  title={category}
-                  subtitle={`GHS ${total.toFixed(2)} spent • ${percentage.toFixed(0)}%`}
-                  amount={`${percentage.toFixed(0)}%`}
-                />
-              );
-            })}
-          </View>
+          <Reveal beat="secondary" delay={80} style={styles.section}>
+            <Text style={[typography.headline, { color: colors.text, marginBottom: spacing.lg }]}>
+              Where it went
+            </Text>
+            <SpendingRing categoryTotals={categoryTotals} />
+          </Reveal>
         )}
 
         {/* Recent Expenses List */}
@@ -769,9 +808,14 @@ export default function HomeScreen() {
           </View>
 
           {recentExpenses.length === 0 ? (
-            <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', paddingVertical: spacing.xl }]}>
-              No expenses yet
-            </Text>
+            <EmptyState
+              icon="file-text"
+              illustration={<EmptyExpensesArt />}
+              title="No expenses yet"
+              body="Log your first one and it'll show up here, along with your spending breakdown."
+              ctaLabel="Add an expense"
+              onPressCta={() => setShowQuickAdd(true)}
+            />
           ) : (
             recentExpenses.map((item, idx) => {
               const isShared = item.isShared || item.type === 'shared';
@@ -826,6 +870,9 @@ export default function HomeScreen() {
             })
           )}
         </View>
+
+        </>
+        )}
 
         {/* Bottom padding so FAB doesn't cover last item */}
         <View style={{ height: 80 }} />
@@ -925,8 +972,11 @@ const styles = StyleSheet.create({
   },
   bellBadgeText: {
     color: '#ffffff',
+    // Deliberately below the type scale's smallest step — this is a count
+    // bubble, not running text. Family still comes from the scale so it
+    // renders in Inter rather than the OS font.
     fontSize: 9,
-    fontWeight: 'bold',
+    fontFamily: FONT_FAMILY.bold,
   },
   avatarButton: {
     width: 40,

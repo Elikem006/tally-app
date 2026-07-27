@@ -22,7 +22,7 @@ import { useToast } from '../../hooks/useToast';
 import { useConfirmModal } from '../../hooks/useConfirmModal';
 import { useTheme } from '../../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius } from '../../theme';
-import { Button, CategoryIcon } from '../../components/ui';
+import { Button, CategoryIcon, EmptyState, EmptyBudgetsArt } from '../../components/ui';
 import { BudgetCategoryCard } from '../../components/budget/BudgetCategoryCard';
 import { BudgetLimitRow } from '../../components/budget/BudgetLimitRow';
 
@@ -241,7 +241,7 @@ export default function BudgetScreen() {
             onPress={() => handleTabPress(0)}
             activeOpacity={0.7}
           >
-            <Text style={[typography.bodyStrong, { color: activeTab === 0 ? colors.text : colors.textSecondary, fontSize: 14 }]}>
+            <Text style={[typography.bodyCompact, { color: activeTab === 0 ? colors.text : colors.textSecondary }]}>
               Overview
             </Text>
           </TouchableOpacity>
@@ -250,7 +250,7 @@ export default function BudgetScreen() {
             onPress={() => handleTabPress(1)}
             activeOpacity={0.7}
           >
-            <Text style={[typography.bodyStrong, { color: activeTab === 1 ? colors.text : colors.textSecondary, fontSize: 14 }]}>
+            <Text style={[typography.bodyCompact, { color: activeTab === 1 ? colors.text : colors.textSecondary }]}>
               Setup
             </Text>
           </TouchableOpacity>
@@ -277,14 +277,14 @@ export default function BudgetScreen() {
           >
             {Object.keys(summary).length === 0 ? (
               <View style={[styles.emptyContainer, { backgroundColor: colors.surfaceElevated }]}>
-                <View style={[styles.emptyIconCircle, { backgroundColor: colors.neutralBg, borderColor: colors.borderSubtle }]}>
-                  <Feather name="pie-chart" size={32} color={colors.textSecondary} />
-                </View>
-                <Text style={[typography.headline, { color: colors.text, marginBottom: spacing.xs }]}>No budgets set yet</Text>
-                <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.xl }]}>
-                  Set your monthly limits first to track overview statistics
-                </Text>
-                <Button title="Set Up Budgets" onPress={() => handleTabPress(1)} fullWidth={false} />
+                <EmptyState
+                  icon="pie-chart"
+                  illustration={<EmptyBudgetsArt />}
+                  title="No budgets set yet"
+                  body="Set your monthly limits first to track overview statistics"
+                  ctaLabel="Set up budgets"
+                  onPressCta={() => handleTabPress(1)}
+                />
               </View>
             ) : (
               <View style={[styles.mainCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>
@@ -488,20 +488,10 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     borderWidth: 1,
   },
+  // EmptyState brings its own vertical rhythm — this only supplies the card.
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: spacing.lg,
     borderRadius: radius.xl,
-  },
-  emptyIconCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.lg,
-    borderWidth: 1,
   },
 });

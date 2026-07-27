@@ -446,7 +446,7 @@ export default function HistoryScreen() {
             disabled={exporting}
             activeOpacity={0.8}
           >
-            {exporting ? <ActivityIndicator size="small" color={colors.text} /> : <Text style={[typography.bodyStrong, { color: colors.text, fontSize: 13 }]}>📤 Export</Text>}
+            {exporting ? <ActivityIndicator size="small" color={colors.text} /> : <Text style={[typography.labelStrong, { color: colors.text }]}>📤 Export</Text>}
           </TouchableOpacity>
         </View>
 
@@ -461,7 +461,7 @@ export default function HistoryScreen() {
                 onPress={() => setActiveTimeFilter(filter)}
                 activeOpacity={0.8}
               >
-                <Text style={[typography.bodyStrong, { color: isActive ? colors.text : colors.textSecondary, fontSize: 13 }]}>{labelMap[filter]}</Text>
+                <Text style={[typography.labelStrong, { color: isActive ? colors.text : colors.textSecondary }]}>{labelMap[filter]}</Text>
               </TouchableOpacity>
             );
           })}
@@ -534,7 +534,7 @@ export default function HistoryScreen() {
             onPress={() => setMomoOnly(!momoOnly)}
             activeOpacity={0.8}
           >
-            <Text style={[typography.bodyStrong, { color: momoOnly ? colors.accent : colors.textSecondary, fontSize: 13 }]}>📱 MoMo Only</Text>
+            <Text style={[typography.labelStrong, { color: momoOnly ? colors.accent : colors.textSecondary }]}>📱 MoMo Only</Text>
           </TouchableOpacity>
         </View>
 

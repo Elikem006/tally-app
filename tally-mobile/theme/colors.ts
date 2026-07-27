@@ -27,6 +27,18 @@ export interface ExtendedThemeColors extends ThemeColors {
   warning: string;
   /** Warning at low opacity, for warning-state chip/card fills. */
   warningSubtle: string;
+  /** Text/icon color that sits legibly on a `primary` fill (filled buttons, selected chips). */
+  onPrimary: string;
+  /** Feature-card gradient, brand-violet family. Start color. */
+  heroGradientFrom: string;
+  /** Feature-card gradient, brand-violet family. End color. */
+  heroGradientTo: string;
+  /** Primary text on the hero gradient. */
+  onHero: string;
+  /** Secondary/label text on the hero gradient. */
+  onHeroDim: string;
+  /** Chip fill sitting on top of the hero gradient. */
+  heroChipBg: string;
 }
 
 const lightExtensions: Omit<ExtendedThemeColors, keyof ThemeColors> = {
@@ -43,6 +55,13 @@ const lightExtensions: Omit<ExtendedThemeColors, keyof ThemeColors> = {
   accentSubtle: 'rgba(245, 158, 11, 0.12)',
   warning: '#F59E0B',
   warningSubtle: 'rgba(245, 158, 11, 0.14)',
+  // light `primary` (#8B5CF6) is dark enough that white text clears AA on it.
+  onPrimary: '#FFFFFF',
+  heroGradientFrom: '#7C3AED',
+  heroGradientTo: '#5B21B6',
+  onHero: '#FFFFFF',
+  onHeroDim: 'rgba(255, 255, 255, 0.72)',
+  heroChipBg: 'rgba(255, 255, 255, 0.18)',
 };
 
 const darkExtensions: Omit<ExtendedThemeColors, keyof ThemeColors> = {
@@ -58,6 +77,14 @@ const darkExtensions: Omit<ExtendedThemeColors, keyof ThemeColors> = {
   accentSubtle: 'rgba(251, 191, 36, 0.16)',
   warning: '#FBBF24',
   warningSubtle: 'rgba(251, 191, 36, 0.16)',
+  // dark `primary` (#A78BFA) is a light violet — white text on it fails AA,
+  // so filled controls invert to near-black instead.
+  onPrimary: '#1A1523',
+  heroGradientFrom: '#5B21B6',
+  heroGradientTo: '#2E1065',
+  onHero: '#F5F3FF',
+  onHeroDim: 'rgba(245, 243, 255, 0.66)',
+  heroChipBg: 'rgba(255, 255, 255, 0.12)',
 };
 
 export function getExtendedColors(theme: ThemeType, base: ThemeColors): ExtendedThemeColors {

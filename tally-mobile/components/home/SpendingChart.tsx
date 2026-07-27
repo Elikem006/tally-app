@@ -1,6 +1,12 @@
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { useEffect, useMemo } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
+import Animated, { useSharedValue, useAnimatedProps, withDelay, withTiming } from 'react-native-reanimated';
+import Svg, { Path, Line, Circle, Defs, Stop, LinearGradient as SvgGradient } from 'react-native-svg';
 import { useTheme } from '../../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius } from '../../theme';
+import { getExtendedColors, typography, spacing, radius, easing, reveal } from '../../theme';
+
+const AnimatedPath = Animated.createAnimatedComponent(Path);
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 export type ChartTimeline = 'day' | 'week' | 'month' | 'year';
 
@@ -13,30 +19,24 @@ interface SpendingChartProps {
 
 const TIMELINE_LABELS: Record<ChartTimeline, string> = { day: 'D', week: 'W', month: 'M', year: 'Y' };
 
-function getLineStyle(x1: number, y1: number, x2: number, y2: number, lineColor: string) {
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const distance = Math.sqrt(dx * dx + dy * dy);
-  const angle = Math.atan2(dy, dx);
-
-  return {
-    position: 'absolute' as const,
-    left: x1,
-    top: y1,
-    width: distance + 0.6,
-    height: 3,
-    backgroundColor: lineColor,
-    transform: [{ rotate: `${angle}rad` }] as any,
-    transformOrigin: ['0%', '50%', 0] as any,
-  };
-}
-
-/** Spending activity card — cosine-smoothed line chart with a day/week/month/year switcher. */
+/**
+ * Spending activity card — cosine-smoothed line with a day/week/month/year
+ * switcher.
+ *
+ * The curve is one SVG path. It was previously ~240 absolutely-positioned,
+ * rotated Views (12 per segment), which is the implementation the report
+ * screen was moved off last round; Home kept the older one despite being the
+ * screen that renders first and most often. The interpolation is unchanged —
+ * same cosine easing between points — only how it is drawn.
+ *
+ * Deliberately not scrubbable: the report screen owns that interaction. Home
+ * is the glanceable read, the report is the one you interrogate.
+ */
 export function SpendingChart({ bars, sum, timeline, onTimelineChange }: SpendingChartProps) {
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
 
-  const { width: screenWidth } = Dimensions.get('window');
+  const { width: screenWidth } = useWindowDimensions();
   const chartWidth = screenWidth - 88;
   const chartHeight = 140;
   const paddingVertical = 25;
@@ -45,29 +45,55 @@ export function SpendingChart({ bars, sum, timeline, onTimelineChange }: Spendin
   const plotHeight = chartHeight - 2 * paddingVertical;
   const maxSpendVal = Math.max(...bars.map((b) => b.spend), 0);
 
-  const points = bars.map((bar, idx) => {
-    const x = bars.length > 1 ? chartInset + (plotWidth / (bars.length - 1)) * idx : chartInset + plotWidth / 2;
-    const y = maxSpendVal > 0 ? chartHeight - (paddingVertical + (bar.spend / maxSpendVal) * plotHeight) : chartHeight / 2;
-    return { x, y, ...bar };
-  });
+  const { points, curvePath, curveLength, areaPath } = useMemo(() => {
+    const pts = bars.map((bar, idx) => {
+      const x = bars.length > 1 ? chartInset + (plotWidth / (bars.length - 1)) * idx : chartInset + plotWidth / 2;
+      const y = maxSpendVal > 0 ? chartHeight - (paddingVertical + (bar.spend / maxSpendVal) * plotHeight) : chartHeight / 2;
+      return { x, y, ...bar };
+    });
 
-  const curveSegments: { x1: number; y1: number; x2: number; y2: number }[] = [];
-  const steps = 12;
-  for (let i = 0; i < points.length - 1; i++) {
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    for (let j = 0; j < steps; j++) {
-      const t1 = j / steps;
-      const t2 = (j + 1) / steps;
-      const mu1 = (1 - Math.cos(t1 * Math.PI)) / 2;
-      const mu2 = (1 - Math.cos(t2 * Math.PI)) / 2;
-      const x1 = p1.x + t1 * (p2.x - p1.x);
-      const x2 = p1.x + t2 * (p2.x - p1.x);
-      const y1 = p1.y + mu1 * (p2.y - p1.y);
-      const y2 = p1.y + mu2 * (p2.y - p1.y);
-      curveSegments.push({ x1, y1, x2, y2 });
+    if (pts.length === 0) return { points: pts, curvePath: '', curveLength: 0, areaPath: '' };
+
+    const steps = 12;
+    let d = `M ${pts[0].x} ${pts[0].y}`;
+    let length = 0;
+    let prevX = pts[0].x;
+    let prevY = pts[0].y;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      for (let j = 1; j <= steps; j++) {
+        const t = j / steps;
+        const mu = (1 - Math.cos(t * Math.PI)) / 2;
+        const x = p1.x + t * (p2.x - p1.x);
+        const y = p1.y + mu * (p2.y - p1.y);
+        d += ` L ${x.toFixed(2)} ${y.toFixed(2)}`;
+        length += Math.hypot(x - prevX, y - prevY);
+        prevX = x;
+        prevY = y;
+      }
     }
-  }
+
+    const area = `${d} L ${pts[pts.length - 1].x} ${chartHeight - paddingVertical} L ${pts[0].x} ${chartHeight - paddingVertical} Z`;
+    return { points: pts, curvePath: d, curveLength: length, areaPath: area };
+  }, [bars, plotWidth, plotHeight, maxSpendVal, chartInset, chartHeight, paddingVertical]);
+
+  // Draws itself in on the screen's secondary beat, so the card arrives and
+  // then the line is drawn rather than the whole thing appearing finished.
+  const draw = useSharedValue(0);
+
+  useEffect(() => {
+    draw.value = 0;
+    draw.value = withDelay(reveal.secondary, withTiming(1, { duration: 700, easing: easing.decelerate }));
+  }, [timeline, bars.length, maxSpendVal]);
+
+  const drawProps = useAnimatedProps(() => ({
+    strokeDashoffset: curveLength * (1 - draw.value),
+  }));
+
+  const fadeUpProps = useAnimatedProps(() => ({
+    opacity: Math.max(0, draw.value * 1.6 - 0.6),
+  }));
 
   return (
     <View style={[styles.card, { backgroundColor: colors.surfaceElevated }]}>
@@ -90,6 +116,7 @@ export function SpendingChart({ bars, sum, timeline, onTimelineChange }: Spendin
                 activeOpacity={0.8}
                 accessibilityRole="button"
                 accessibilityLabel={`View by ${filter}`}
+                accessibilityState={{ selected: isActive }}
               >
                 <Text style={[typography.label, { color: isActive ? colors.text : colors.textSecondary }]}>
                   {TIMELINE_LABELS[filter]}
@@ -101,29 +128,46 @@ export function SpendingChart({ bars, sum, timeline, onTimelineChange }: Spendin
       </View>
 
       <View style={styles.chartContainer}>
-        <View style={[styles.gridLine, { top: paddingVertical, backgroundColor: colors.borderSubtle }]} />
-        <View style={[styles.gridLine, { top: chartHeight / 2, backgroundColor: colors.borderSubtle }]} />
-        <View style={[styles.gridLine, { top: chartHeight - paddingVertical, backgroundColor: colors.borderSubtle }]} />
+        <Svg width={chartWidth} height={chartHeight}>
+          <Defs>
+            <SvgGradient id="homeSpendFill" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor={colors.primary} stopOpacity={0.26} />
+              <Stop offset="1" stopColor={colors.primary} stopOpacity={0} />
+            </SvgGradient>
+          </Defs>
 
-        {curveSegments.map((seg, idx) => (
-          <View key={`line-${idx}`} style={getLineStyle(seg.x1, seg.y1, seg.x2, seg.y2, colors.primary)} />
-        ))}
+          {[paddingVertical, chartHeight / 2, chartHeight - paddingVertical].map((y, i) => (
+            <Line key={`grid-${i}`} x1={0} y1={y} x2={chartWidth} y2={y} stroke={colors.borderSubtle} strokeWidth={1} />
+          ))}
 
-        {points.map((point, idx) => (
-          <View
-            key={`dot-${idx}`}
-            style={[
-              styles.chartDot,
-              {
-                left: point.x - 6,
-                top: point.y - 6,
-                backgroundColor: colors.primary,
-                borderColor: colors.surfaceElevated,
-                shadowColor: colors.primary,
-              },
-            ]}
-          />
-        ))}
+          {!!areaPath && <AnimatedPath d={areaPath} fill="url(#homeSpendFill)" animatedProps={fadeUpProps} />}
+
+          {!!curvePath && (
+            <AnimatedPath
+              d={curvePath}
+              stroke={colors.primary}
+              strokeWidth={3}
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={curveLength}
+              animatedProps={drawProps}
+            />
+          )}
+
+          {points.map((point, idx) => (
+            <AnimatedCircle
+              key={`dot-${idx}`}
+              cx={point.x}
+              cy={point.y}
+              r={5}
+              fill={colors.primary}
+              stroke={colors.surfaceElevated}
+              strokeWidth={2.5}
+              animatedProps={fadeUpProps}
+            />
+          ))}
+        </Svg>
       </View>
 
       <View style={styles.daysContainer}>
@@ -166,24 +210,6 @@ const styles = StyleSheet.create({
     height: 140,
     position: 'relative',
     marginTop: spacing.xs,
-  },
-  gridLine: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 1,
-  },
-  chartDot: {
-    position: 'absolute',
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2.5,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 2,
-    zIndex: 3,
   },
   daysContainer: {
     position: 'relative',

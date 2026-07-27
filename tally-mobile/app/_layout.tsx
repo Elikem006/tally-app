@@ -5,10 +5,11 @@ import { View, Text, StyleSheet } from "react-native";
 import * as Notifications from "expo-notifications";
 import * as SplashScreen from "expo-splash-screen";
 import NetInfo from "@react-native-community/netinfo";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ThemeProvider, useTheme } from "../hooks/useTheme";
-import { useAppFonts } from "../theme";
+import { useAppFonts, typography, FONT_FAMILY } from "../theme";
 import { StatusBar } from "expo-status-bar";
 
 // Must run at module scope, before the first render — holds the native
@@ -98,7 +99,7 @@ function RootLayoutContent() {
           headerShown: false,
           headerStyle: { backgroundColor: colors.background },
           headerTintColor: colors.text,
-          headerTitleStyle: { fontWeight: "bold" },
+          headerTitleStyle: { fontFamily: FONT_FAMILY.bold },
         }}
       >
         <Stack.Screen name="(auth)" />
@@ -157,11 +158,17 @@ export default function RootLayout() {
   }
 
   return (
-    <ThemeProvider>
-      <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
-        <RootLayoutContent />
-      </View>
-    </ThemeProvider>
+    // GestureHandlerRootView must wrap the whole tree — without it the
+    // react-native-gesture-handler Gesture API silently does nothing on
+    // Android rather than erroring, which is how the chart scrub in
+    // report.tsx would have failed.
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <View style={{ flex: 1 }} onLayout={onLayoutRootView}>
+          <RootLayoutContent />
+        </View>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
 
@@ -179,7 +186,6 @@ const styles = StyleSheet.create({
   },
   offlineText: {
     color: "#ffffff",
-    fontSize: 13,
-    fontWeight: "600",
+    ...typography.labelStrong,
   },
 });
