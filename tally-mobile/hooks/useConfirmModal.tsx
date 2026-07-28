@@ -24,11 +24,12 @@ interface ConfirmConfig {
  *
  *   // To trigger:
  *   showConfirm({
- *     icon: '🗑️',
+ *     icon: 'trash-2',            // a Feather glyph name, not an emoji
  *     title: 'Delete Expense',
  *     message: 'Are you sure? This cannot be undone.',
  *     confirmText: 'Delete',
- *     confirmColor: '#E05C5C',
+ *     confirmColor: colors.negative,
+ *     destructive: true,          // tints the mark red and weights the haptic
  *     onConfirm: () => handleDelete(item),
  *   });
  */

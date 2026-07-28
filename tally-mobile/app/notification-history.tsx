@@ -148,7 +148,7 @@ export default function NotificationHistoryScreen() {
 
   function handleClearAll() {
     showConfirm({
-      icon: '🗑️',
+      icon: 'trash-2',
       title: 'Clear All',
       message: 'Remove all notification history? This cannot be undone.',
       confirmText: 'Clear',

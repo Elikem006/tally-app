@@ -1,5 +1,6 @@
 import { ReactNode, useEffect } from 'react';
 import { Modal, View, Text, Pressable, StyleSheet } from 'react-native';
+import Feather from '@expo/vector-icons/Feather';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, runOnJS } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../hooks/useTheme';
@@ -18,12 +19,12 @@ interface ConfirmModalProps {
   onConfirm: () => void;
   onCancel: () => void;
   /**
-   * Accepts either a legacy emoji string (existing call sites) or a vector
-   * icon element — kept union-typed so screens can migrate to a proper icon
-   * incrementally without this component needing to change again. New call
-   * sites should pass a ReactNode (e.g. a Feather icon), not an emoji.
+   * A Feather glyph name ('trash-2'), which this component renders in the
+   * same 64px tinted-circle mark EmptyState uses, or a ReactNode for a fully
+   * custom mark. A bare emoji string still renders as legacy text — the union
+   * is kept so nothing breaks, but every call site in the app has migrated.
    */
-  icon?: string | ReactNode;
+  icon?: keyof typeof Feather.glyphMap | string | ReactNode;
   /** For single-action acknowledgements (e.g. a success notice) — hides the Cancel button so there's one clear action, not two identically-behaving buttons. */
   hideCancel?: boolean;
   /**
@@ -90,7 +91,30 @@ export default function ConfirmModal({
         <Pressable style={StyleSheet.absoluteFillObject} onPress={() => dismiss(onCancel)} />
 
         <Animated.View style={[styles.card, { backgroundColor: colors.surfaceHigh }, cardStyle]}>
-          {!!icon && (typeof icon === 'string' ? <Text style={styles.iconEmoji}>{icon}</Text> : <View style={styles.iconWrap}>{icon}</View>)}
+          {/* A Feather name resolves to the tinted-circle mark; the tint follows
+              the action's intent so a destructive confirm reads red rather than
+              brand violet. Anything else falls through to the legacy paths. */}
+          {!!icon &&
+            (typeof icon === 'string' && icon in Feather.glyphMap ? (
+              <View style={styles.iconWrap}>
+                <View
+                  style={[
+                    styles.iconBadge,
+                    { backgroundColor: destructive ? `${colors.negative}20` : colors.primarySubtle },
+                  ]}
+                >
+                  <Feather
+                    name={icon as keyof typeof Feather.glyphMap}
+                    size={28}
+                    color={destructive ? colors.negative : colors.primary}
+                  />
+                </View>
+              </View>
+            ) : typeof icon === 'string' ? (
+              <Text style={styles.iconEmoji}>{icon}</Text>
+            ) : (
+              <View style={styles.iconWrap}>{icon}</View>
+            ))}
 
           <Text style={[typography.title, { color: colors.text, textAlign: 'center', marginBottom: spacing.xs }]}>{title}</Text>
           <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.xl }]}>
@@ -146,6 +170,15 @@ const styles = StyleSheet.create({
   iconWrap: {
     alignItems: 'center',
     marginBottom: spacing.md,
+  },
+  // Same mark as EmptyState's: 64px circle, 28px glyph. Two components showing
+  // the same size mark keeps the icon language consistent between them.
+  iconBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   iconEmoji: {
     fontSize: 40,

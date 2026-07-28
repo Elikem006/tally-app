@@ -74,7 +74,7 @@ export default function ManageCategoriesScreen() {
 
   function confirmDelete(cat: CustomCategory) {
     showConfirm({
-      icon: '📦',
+      icon: 'trash-2',
       title: 'Delete Category',
       message: `Are you sure you want to delete the "${cat.name}" category? Existing expenses with this category will keep their category name.`,
       confirmText: 'Delete',

@@ -206,7 +206,7 @@ export default function GroupDetailScreen() {
   function handleSettleUp(userId: number, name: string, amount: number) {
     const absAmount = Math.abs(amount);
     showConfirm({
-      icon: '✅',
+      icon: 'check-circle',
       title: 'Settle Up',
       message: `${name} is settling up GHS ${absAmount.toFixed(2)}. This will clear all group expenses.`,
       confirmText: 'Settle Up',
@@ -333,7 +333,7 @@ export default function GroupDetailScreen() {
   function handleRemoveMember(member: any) {
     const memberName = member.name || `User #${member.userId}`;
     showConfirm({
-      icon: '👤',
+      icon: 'user-minus',
       title: 'Remove Member',
       message: `Are you sure you want to remove ${memberName} from this group?`,
       confirmText: 'Remove',
@@ -372,7 +372,7 @@ export default function GroupDetailScreen() {
 
   function handleDeleteGroup() {
     showConfirm({
-      icon: '🗑️',
+      icon: 'trash-2',
       title: 'Delete Group',
       message: 'This will permanently delete the group and all shared expenses. This cannot be undone.',
       confirmText: 'Delete Group',
