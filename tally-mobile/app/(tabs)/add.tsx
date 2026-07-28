@@ -810,7 +810,13 @@ export default function AddScreen() {
             {momoStatus !== 'idle' && (
               <View style={styles.momoStatusBox}>
                 {momoStatus !== 'done' && <ActivityIndicator color={colors.accent} size="large" style={{ marginBottom: spacing.md }} />}
-                {momoStatus === 'done' && <Text style={{ fontSize: 48, marginBottom: spacing.md }}>✅</Text>}
+                {momoStatus === 'done' && (
+                  // positive, not the box's amber: `positive` is the app's success
+                  // semantic and what SuccessBurst already uses for this moment.
+                  <View style={[styles.momoDoneMark, { backgroundColor: `${colors.positive}20` }]}>
+                    <Feather name="check-circle" size={28} color={colors.positive} />
+                  </View>
+                )}
                 <Text style={[typography.bodyStrong, { color: colors.accent, textAlign: 'center' }]}>
                   {momoStatus === 'sending' && (transactionType === 'income' ? 'Sending request to your MoMo number...' : 'Sending payment request to your MoMo number...')}
                   {momoStatus === 'confirming' && 'Confirming transaction...'}
@@ -1018,6 +1024,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.xl,
     borderWidth: 1,
+  },
+  momoDoneMark: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
   },
   momoStatusBox: {
     alignItems: 'center',

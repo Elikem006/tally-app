@@ -6,6 +6,7 @@ import { getUserId, safeStorage } from '../services/storage';
 import { addHistoryItem } from '../services/notificationHistory';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '../hooks/useTheme';
+import Feather from '@expo/vector-icons/Feather';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { getExtendedColors, getCategoryColor, typography, spacing, radius } from '../theme';
 import { Input, Button, Chip, getCategoryIconName } from '../components/ui';
@@ -297,7 +298,9 @@ export default function PayVendorScreen() {
           <View style={styles.centeredSection}>
             {transferStatus === 'SUCCESSFUL' && (
               <>
-                <Text style={{ fontSize: 56, marginBottom: spacing.sm }}>✅</Text>
+                <View style={[styles.outcomeMark, { backgroundColor: `${colors.positive}20` }]}>
+                  <Feather name="check-circle" size={28} color={colors.positive} />
+                </View>
                 <Text style={[typography.title, { color: colors.positive }]}>Payment Successful!</Text>
                 <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', lineHeight: 22, paddingHorizontal: spacing.lg }]}>
                   GHS {Number(amount).toFixed(2)} was sent to {vendorPhone}.{'\n'}Expense recorded in your history.
@@ -310,7 +313,9 @@ export default function PayVendorScreen() {
 
             {transferStatus === 'FAILED' && (
               <>
-                <Text style={{ fontSize: 56, marginBottom: spacing.sm }}>❌</Text>
+                <View style={[styles.outcomeMark, { backgroundColor: `${colors.negative}20` }]}>
+                  <Feather name="x-circle" size={28} color={colors.negative} />
+                </View>
                 <Text style={[typography.title, { color: colors.negative }]}>Payment Failed</Text>
                 <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', lineHeight: 22, paddingHorizontal: spacing.lg }]}>
                   {error || 'The transfer could not be completed. Please try again.'}
@@ -320,7 +325,9 @@ export default function PayVendorScreen() {
 
             {transferStatus === 'PENDING' && (
               <>
-                <Text style={{ fontSize: 56, marginBottom: spacing.sm }}>⏳</Text>
+                <View style={[styles.outcomeMark, { backgroundColor: `${colors.accent}20` }]}>
+                  <Feather name="clock" size={28} color={colors.accent} />
+                </View>
                 <Text style={[typography.title, { color: colors.accent }]}>Payment Pending</Text>
                 <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', lineHeight: 22, paddingHorizontal: spacing.lg }]}>
                   {pendingChecks >= 3
@@ -439,6 +446,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: spacing.sm + 2,
+  },
+  // Same mark as EmptyState/ConfirmModal. The tinted disc also lifts the
+  // glyph off the page background, which a bare glyph did not do.
+  outcomeMark: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
   },
   centeredSection: {
     alignItems: 'center',

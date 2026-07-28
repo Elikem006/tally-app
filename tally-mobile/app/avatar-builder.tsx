@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { router } from 'expo-router';
+import Feather from '@expo/vector-icons/Feather';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -118,7 +119,7 @@ export default function AvatarBuilderScreen() {
           <Image source={{ uri: displayUri }} style={styles.photo} />
         ) : (
           <View style={[styles.placeholder, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>
-            <Text style={{ fontSize: 38 }}>📷</Text>
+            <Feather name="camera" size={28} color={colors.textSecondary} />
             <Text style={[typography.label, { color: colors.textSecondary }]}>No photo yet</Text>
           </View>
         )}
