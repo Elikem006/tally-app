@@ -73,11 +73,20 @@ public class BudgetService {
                 Object categoryRaw = e.get("category");
                 if (dateRaw == null || amountRaw == null) continue;
                 LocalDate date = LocalDate.parse(String.valueOf(dateRaw));
-                if (date.getYear() == currentYear && date.getMonthValue() == currentMonth) {
-                    // Use absolute value so negative expense amounts are summed correctly
-                    BigDecimal amount = new BigDecimal(String.valueOf(amountRaw));
-                    spent.merge(String.valueOf(categoryRaw), amount.abs(), BigDecimal::add);
-                }
+                if (date.getYear() != currentYear || date.getMonthValue() != currentMonth) continue;
+
+                // Settlements are money back, not spending. Income is stored as a
+                // positive amount (except MoMo vendor transfers, which are money-out
+                // despite the positive sign) — same convention expense-service uses
+                // to flag income. Exclude both so a category's "spent" figure only
+                // ever reflects actual expenses.
+                String paymentMethod = String.valueOf(e.get("paymentMethod"));
+                if ("SETTLEMENT".equalsIgnoreCase(paymentMethod)) continue;
+                BigDecimal amount = new BigDecimal(String.valueOf(amountRaw));
+                boolean isIncome = amount.signum() > 0 && !"MOMO_TRANSFER".equalsIgnoreCase(paymentMethod);
+                if (isIncome) continue;
+
+                spent.merge(String.valueOf(categoryRaw), amount.abs(), BigDecimal::add);
             }
         }
 

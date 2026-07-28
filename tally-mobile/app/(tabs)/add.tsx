@@ -216,7 +216,14 @@ export default function AddScreen() {
       const totals: { [key: string]: number } = {};
       expensesRes.data.forEach((expense: any) => {
         const cat = expense.category || 'Other';
-        totals[cat] = (totals[cat] || 0) + parseFloat(expense.amount || '0');
+        const amt = parseFloat(expense.amount || '0');
+        const pm = expense.paymentMethod;
+        // Income is stored as a positive amount (MoMo vendor transfers are the
+        // exception — money-out despite the positive sign); settlements are
+        // money back. Neither counts toward a category's "spent" total.
+        const isIncome = amt > 0 && pm !== 'MOMO_TRANSFER' && pm !== 'SETTLEMENT';
+        if (isIncome) return;
+        totals[cat] = (totals[cat] || 0) + Math.abs(amt);
       });
       setSpent(totals);
 
@@ -319,9 +326,9 @@ export default function AddScreen() {
         const addedAmt = parseFloat(amount) || 0;
         setSpent(prev => ({
           ...prev,
-          // Expenses are stored as negative (money out); match that sign so the
-          // optimistic value agrees with what a re-fetch returns.
-          [selectedCategory]: (prev[selectedCategory] || 0) - addedAmt
+          // spent[category] is a positive "amount spent" total — match that so
+          // the optimistic value agrees with what a re-fetch returns.
+          [selectedCategory]: (prev[selectedCategory] || 0) + addedAmt
         }));
       }
 
@@ -411,9 +418,9 @@ export default function AddScreen() {
         const addedAmt = parseFloat(amount) || 0;
         setSpent(prev => ({
           ...prev,
-          // Expenses are stored as negative (money out); match that sign so the
-          // optimistic value agrees with what a re-fetch returns.
-          [selectedCategory]: (prev[selectedCategory] || 0) - addedAmt
+          // spent[category] is a positive "amount spent" total — match that so
+          // the optimistic value agrees with what a re-fetch returns.
+          [selectedCategory]: (prev[selectedCategory] || 0) + addedAmt
         }));
       }
 
