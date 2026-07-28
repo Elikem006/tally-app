@@ -39,8 +39,13 @@ services:
       interval: 3s
       timeout: 3s
       retries: 15
-    ports:
-      - "5432:5432"
+    # No host port mapping on purpose. Windows reserves large dynamic port
+    # ranges for Hyper-V/WSL2, and binding inside one fails with "an attempt
+    # was made to access a socket in a way forbidden by its access
+    # permissions" — 5432 and 5433 both hit it, so picking another number is
+    # guesswork. Nothing needs it: every service reaches Postgres over the
+    # Docker network as tally-db:5432, which host binding plays no part in.
+    # Re-add a mapping only to attach an external client like psql or DBeaver.
 
   auth-service:
     build: ./auth-service
