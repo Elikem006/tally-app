@@ -28,3 +28,17 @@ CREATE TABLE IF NOT EXISTS shared_expenses (
   version         BIGINT,
   created_at      TIMESTAMP
 );
+
+-- One row per (shared_expense, debtor) once that debtor has paid their share.
+-- shared_expenses.settled only flips true once every debtor on that expense
+-- has a row here — see group_service.service.GroupService#settleUp.
+CREATE TABLE IF NOT EXISTS shared_expense_settlements (
+  id                 BIGSERIAL PRIMARY KEY,
+  shared_expense_id  BIGINT NOT NULL,
+  user_id            BIGINT NOT NULL,
+  settled_at         TIMESTAMP NOT NULL,
+  UNIQUE (shared_expense_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_shared_expense_settlements_expense_id
+  ON shared_expense_settlements (shared_expense_id);
