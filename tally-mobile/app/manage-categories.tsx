@@ -143,7 +143,7 @@ export default function ManageCategoriesScreen() {
         )}
 
         <Modal visible={showAddModal} transparent animationType="fade" onRequestClose={() => setShowAddModal(false)}>
-          <View style={styles.modalOverlay}>
+          <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
             <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={() => setShowAddModal(false)} activeOpacity={1} />
             <View style={[styles.modalCard, { backgroundColor: colors.surfaceHigh, borderColor: colors.borderSubtle }]}>
               <Text style={[typography.headline, { color: colors.text, textAlign: 'center', marginBottom: spacing.lg }]}>New Category</Text>
@@ -202,7 +202,9 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: '#00000080',
+    // Colour comes from colors.overlay inline — the token is theme-aware
+    // (0.5 scrim in light, 0.72 in dark) and this was the last hardcoded
+    // scrim in the app.
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.xl,

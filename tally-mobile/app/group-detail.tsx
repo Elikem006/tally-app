@@ -791,7 +791,7 @@ export default function GroupDetailScreen() {
                 containerStyle={{ marginBottom: spacing.lg }}
               />
 
-              <Button title="💳  Pay Now" onPress={handleMomoPayment} loading={momoLoading} style={{ backgroundColor: colors.accent, marginBottom: spacing.sm }} />
+              <Button title="💳  Pay Now" onPress={handleMomoPayment} loading={momoLoading} variant="accent" style={{ marginBottom: spacing.sm }} />
               <Button title="Skip & Settle Manually" onPress={handleSkipAndSettle} variant="secondary" disabled={momoLoading} style={{ marginBottom: spacing.md }} />
 
               {!momoLoading && (

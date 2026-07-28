@@ -246,17 +246,17 @@ export default function PayVendorScreen() {
                 <Chip
                   key={cat}
                   label={cat}
-                  icon={<MaterialCommunityIcons name={getCategoryIconName(cat)} size={14} color={category === cat ? '#FFFFFF' : getCategoryColor(cat)} />}
+                  icon={<MaterialCommunityIcons name={getCategoryIconName(cat)} size={14} color={category === cat ? colors.onAccent : getCategoryColor(cat)} />}
                   selected={category === cat}
                   onPress={() => setCategory(cat)}
-                  style={category === cat ? { backgroundColor: colors.accent } : undefined}
+                  tone="accent"
                 />
               ))}
             </View>
 
             {!!error && <Text style={[typography.caption, { color: colors.negative, marginTop: spacing.sm + 2, textAlign: 'center' }]}>{error}</Text>}
 
-            <Button title="Continue →" onPress={handleProceedToConfirm} style={{ backgroundColor: colors.accent, marginTop: spacing.xl }} />
+            <Button title="Continue →" onPress={handleProceedToConfirm} variant="accent" style={{ marginTop: spacing.xl }} />
           </View>
         )}
 
@@ -274,7 +274,7 @@ export default function PayVendorScreen() {
               <Row label="Payment" value="MoMo Wallet" colors={colors} last />
             </View>
 
-            <Button title="Confirm & Send 📤" onPress={handleTransfer} style={{ backgroundColor: colors.accent, marginTop: spacing.xl }} />
+            <Button title="Confirm & Send 📤" onPress={handleTransfer} variant="accent" style={{ marginTop: spacing.xl }} />
             <Button title="← Edit Details" onPress={() => setStep(1)} variant="secondary" style={{ marginTop: spacing.md }} />
           </View>
         )}
@@ -347,7 +347,8 @@ export default function PayVendorScreen() {
                       }
                     }}
                     loading={loading}
-                    style={{ backgroundColor: colors.accent, marginTop: spacing.md }}
+                    variant="accent"
+                    style={{ marginTop: spacing.md }}
                   />
                 )}
               </>

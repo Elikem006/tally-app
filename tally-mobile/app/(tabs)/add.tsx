@@ -652,7 +652,8 @@ export default function AddScreen() {
               icon={<Text style={{ fontSize: 16 }}>📱</Text>}
               selected={paymentMethod === 'MOMO'}
               onPress={() => handlePaymentMethodSelect('MOMO')}
-              style={[{ flex: 1, justifyContent: 'center' }, paymentMethod === 'MOMO' && { backgroundColor: colors.accent }]}
+              tone="accent"
+              style={{ flex: 1, justifyContent: 'center' }}
             />
           </View>
 
@@ -729,7 +730,7 @@ export default function AddScreen() {
             }
             onPress={handleAddExpense}
             loading={loading}
-            style={paymentMethod === 'MOMO' ? { backgroundColor: colors.accent } : undefined}
+            variant={paymentMethod === 'MOMO' ? 'accent' : 'primary'}
           />
         </View>
       </ScrollView>
@@ -824,7 +825,8 @@ export default function AddScreen() {
                 <Button
                   title={transactionType === 'income' ? 'Request Money' : 'Pay Now'}
                   onPress={handleMomoPayment}
-                  style={{ flex: 2, backgroundColor: colors.accent }}
+                  variant="accent"
+                  style={{ flex: 2 }}
                 />
               </View>
             )}
