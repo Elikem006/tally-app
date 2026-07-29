@@ -5,11 +5,12 @@ import { TouchableOpacity, StyleSheet, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "../../hooks/useTheme";
-import { radius } from "../../theme";
+import { getExtendedColors, radius } from "../../theme";
 
 export default function TabLayout() {
   const isLoggedIn = currentUser.token !== "";
-  const { colors } = useTheme();
+  const { theme, colors: baseColors } = useTheme();
+  const colors = getExtendedColors(theme, baseColors);
 
   if (!isLoggedIn) {
     return <Redirect href="/(auth)/login" />;
@@ -73,7 +74,9 @@ export default function TabLayout() {
                 style={[styles.customAddButton, { backgroundColor: colors.primary, borderColor: colors.cardBg }]}
                 activeOpacity={0.85}
               >
-                <Feather name="plus" size={24} color="#ffffff" />
+                {/* onPrimary, not white: dark primary is #A78BFA, where white
+                    measures 2.72:1 — under the 3:1 minimum for a UI icon. */}
+                <Feather name="plus" size={24} color={colors.onPrimary} />
               </TouchableOpacity>
             );
           },

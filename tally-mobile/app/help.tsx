@@ -14,29 +14,31 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+// Feather names, not emoji: these render inside the same iconCircle badge
+// the rest of the app fills with a vector glyph.
 const QUICK_START = [
   {
-    icon: '➕',
+    icon: 'plus-circle',
     title: 'How to add an expense',
     desc: 'Tap the Add tab, fill in the amount, choose a category and an optional description, then tap Add Expense.',
   },
   {
-    icon: '📊',
+    icon: 'pie-chart',
     title: 'How to set a budget',
     desc: 'Tap the Budget tab, choose a category and enter a monthly spending limit, then tap Set Budget.',
   },
   {
-    icon: '👥',
+    icon: 'users',
     title: 'How to create a group',
     desc: 'Tap the Groups tab, then tap + Create Group, give it a name and confirm.',
   },
   {
-    icon: '🤝',
+    icon: 'share-2',
     title: 'How to split expenses',
     desc: 'Open a group, tap + Add Shared Expense, enter the amount and description — it splits equally among all members.',
   },
   {
-    icon: '📱',
+    icon: 'smartphone',
     title: 'How to pay with MoMo',
     desc: 'When adding an expense, select MoMo as the payment method, then enter your MTN MoMo number when prompted.',
   },
@@ -112,7 +114,9 @@ export default function HelpScreen() {
 
       <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Card elevation="raised" style={styles.introCard}>
-          <Text style={{ fontSize: 44, marginBottom: spacing.md }}>❓</Text>
+          <View style={[styles.introMark, { backgroundColor: colors.primarySubtle }]}>
+            <Feather name="help-circle" size={28} color={colors.primary} />
+          </View>
           <Text style={[typography.title, { color: colors.text, marginBottom: spacing.xs }]}>How can we help?</Text>
           <Text style={[typography.caption, { color: colors.textSecondary, textAlign: 'center' }]}>Everything you need to know about Tally app</Text>
         </Card>
@@ -122,7 +126,7 @@ export default function HelpScreen() {
           <Card key={item.title} style={styles.rowCard}>
             <View style={styles.quickRow}>
               <View style={[styles.iconCircle, { backgroundColor: colors.neutralBg }]}>
-                <Text style={{ fontSize: 18 }}>{item.icon}</Text>
+                <Feather name={item.icon as keyof typeof Feather.glyphMap} size={18} color={colors.primary} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[typography.bodyStrong, { color: colors.text, marginBottom: spacing.xs }]}>{item.title}</Text>
@@ -210,6 +214,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing.md,
+  },
+  // Matches EmptyState's and ConfirmModal's mark: 64px circle, 28px glyph.
+  introMark: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
   },
   iconCircle: {
     width: 36,

@@ -274,7 +274,7 @@ export default function HistoryScreen() {
       return;
     }
     showConfirm({
-      icon: '🗑️',
+      icon: 'trash-2',
       title: 'Delete Expense',
       message: 'Are you sure you want to delete this expense? This cannot be undone.',
       confirmText: 'Delete',

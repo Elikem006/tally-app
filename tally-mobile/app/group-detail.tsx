@@ -206,7 +206,7 @@ export default function GroupDetailScreen() {
   function handleSettleUp(userId: number, name: string, amount: number) {
     const absAmount = Math.abs(amount);
     showConfirm({
-      icon: '✅',
+      icon: 'check-circle',
       title: 'Settle Up',
       message: `${name} is settling up GHS ${absAmount.toFixed(2)}. This will clear all group expenses.`,
       confirmText: 'Settle Up',
@@ -333,7 +333,7 @@ export default function GroupDetailScreen() {
   function handleRemoveMember(member: any) {
     const memberName = member.name || `User #${member.userId}`;
     showConfirm({
-      icon: '👤',
+      icon: 'user-minus',
       title: 'Remove Member',
       message: `Are you sure you want to remove ${memberName} from this group?`,
       confirmText: 'Remove',
@@ -372,7 +372,7 @@ export default function GroupDetailScreen() {
 
   function handleDeleteGroup() {
     showConfirm({
-      icon: '🗑️',
+      icon: 'trash-2',
       title: 'Delete Group',
       message: 'This will permanently delete the group and all shared expenses. This cannot be undone.',
       confirmText: 'Delete Group',
@@ -500,7 +500,12 @@ export default function GroupDetailScreen() {
           {/* Solo empty state */}
           {details?.members?.length === 1 && (
             <View style={[styles.soloMemberCard, { backgroundColor: colors.inputBg, borderColor: colors.borderSubtle }]}>
-              <Text style={{ fontSize: 32, marginBottom: spacing.sm + 2 }}>👥</Text>
+              {/* The card wrapper stays (it is an inline section, not a
+                  full-screen empty state), but the mark now matches
+                  EmptyState's: 64px tinted circle, 28px glyph. */}
+              <View style={[styles.soloMark, { backgroundColor: colors.primarySubtle }]}>
+                <Feather name="user-plus" size={28} color={colors.primary} />
+              </View>
               <Text style={[typography.headline, { color: colors.text, marginBottom: spacing.xs }]}>You're the only member here</Text>
               <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.lg }]}>
                 Add members to start splitting expenses with friends.
@@ -791,7 +796,7 @@ export default function GroupDetailScreen() {
                 containerStyle={{ marginBottom: spacing.lg }}
               />
 
-              <Button title="💳  Pay Now" onPress={handleMomoPayment} loading={momoLoading} style={{ backgroundColor: colors.accent, marginBottom: spacing.sm }} />
+              <Button title="💳  Pay Now" onPress={handleMomoPayment} loading={momoLoading} variant="accent" style={{ marginBottom: spacing.sm }} />
               <Button title="Skip & Settle Manually" onPress={handleSkipAndSettle} variant="secondary" disabled={momoLoading} style={{ marginBottom: spacing.md }} />
 
               {!momoLoading && (
@@ -840,6 +845,14 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     paddingHorizontal: spacing.sm,
     alignSelf: 'center',
+  },
+  soloMark: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
   },
   soloMemberCard: {
     borderRadius: radius.xl,

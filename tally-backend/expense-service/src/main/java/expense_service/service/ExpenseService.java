@@ -47,6 +47,17 @@ public class ExpenseService {
 
     private static final ObjectMapper shareMapper = new ObjectMapper();
 
+    // Income is stored as a positive amount; expenses are stored negative.
+    // MoMo vendor transfers are money-out but stored positive, and settlements
+    // (money back from a group-mate) have their own handling — exclude both so
+    // only genuine income is flagged. Every "money spent" rollup in this class
+    // must exclude entries this returns true for.
+    private static boolean isIncomeEntry(BigDecimal amount, String paymentMethod) {
+        return amount != null && amount.signum() > 0
+                && !"MOMO_TRANSFER".equalsIgnoreCase(paymentMethod)
+                && !"SETTLEMENT".equalsIgnoreCase(paymentMethod);
+    }
+
     // ── JSON DTO helpers (values arrive from other services as Maps) ─────────
 
     private static Long asLong(Object v) {
@@ -250,6 +261,8 @@ public class ExpenseService {
         List<Expense> expenses = expenseRepository.findByUserIdOrderByDateDesc(userId);
 
         BigDecimal total = expenses.stream()
+                .filter(e -> !"SETTLEMENT".equalsIgnoreCase(e.getPaymentMethod()))
+                .filter(e -> !isIncomeEntry(e.getAmount(), e.getPaymentMethod()))
                 .map(e -> e.getAmount() != null ? e.getAmount().abs() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -321,14 +334,17 @@ public class ExpenseService {
                 .collect(Collectors.toList());
 
         // Totals — use absolute values so negative expense amounts sum correctly.
-        // Settlements are income (money back), not spending — exclude them.
+        // Settlements are money back (not spending) and genuine income entries
+        // aren't spending either — exclude both.
         BigDecimal currentTotal = currentMonthExpenses.stream()
                 .filter(e -> !"SETTLEMENT".equals(e.getPaymentMethod()))
+                .filter(e -> !isIncomeEntry(e.getAmount(), e.getPaymentMethod()))
                 .map(e -> e.getAmount().abs())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal previousTotal = previousMonthExpenses.stream()
                 .filter(e -> !"SETTLEMENT".equals(e.getPaymentMethod()))
+                .filter(e -> !isIncomeEntry(e.getAmount(), e.getPaymentMethod()))
                 .map(e -> e.getAmount().abs())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -371,6 +387,7 @@ public class ExpenseService {
         Map<String, BigDecimal> categoryBreakdown = new HashMap<>();
         for (Expense e : currentMonthExpenses) {
             if ("SETTLEMENT".equals(e.getPaymentMethod())) continue;
+            if (isIncomeEntry(e.getAmount(), e.getPaymentMethod())) continue;
             categoryBreakdown.merge(e.getCategory(), e.getAmount().abs(), BigDecimal::add);
         }
         if (currentShared.compareTo(BigDecimal.ZERO) > 0) {
@@ -479,16 +496,9 @@ public class ExpenseService {
             entry.put("category", e.getCategory());
             entry.put("description", e.getDescription());
             entry.put("date", e.getDate().toString());
-            // Income is stored as a positive amount; expenses are stored
-            // negative. MoMo vendor transfers are money-out but stored
-            // positive, and settlements have their own handling — exclude both
-            // so only genuine income is flagged. The app colours income green
-            // (+) and everything else red (-), keying off this type.
-            String personalPm = e.getPaymentMethod();
-            boolean isIncome = e.getAmount() != null
-                    && e.getAmount().signum() > 0
-                    && !"MOMO_TRANSFER".equalsIgnoreCase(personalPm)
-                    && !"SETTLEMENT".equalsIgnoreCase(personalPm);
+            // The app colours income green (+) and everything else red (-),
+            // keying off this type.
+            boolean isIncome = isIncomeEntry(e.getAmount(), e.getPaymentMethod());
             entry.put("type", isIncome ? "income" : "personal");
             entry.put("isExpense", !isIncome);
             entry.put("status", e.getStatus() != null ? e.getStatus() : "COMPLETED");

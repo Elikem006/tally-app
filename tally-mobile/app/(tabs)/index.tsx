@@ -28,6 +28,8 @@ import { TransactionRow } from '../../components/home/TransactionRow';
 import { QuickAddModal } from '../../components/home/QuickAddModal';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
+import { useActionSheet } from '../../hooks/useActionSheet';
+import { useConfirmModal } from '../../hooks/useConfirmModal';
 import {
   addHistoryItem,
   shouldFireBudgetAlert,
@@ -58,6 +60,8 @@ export default function HomeScreen() {
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
   const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+  const { showActionSheet, ActionSheetComponent } = useActionSheet();
+  const { showConfirm, ConfirmModalComponent } = useConfirmModal();
 
   const [expenses, setExpenses] = useState<any[]>([]);
   const [budgets, setBudgets] = useState<any[]>([]);
@@ -94,6 +98,50 @@ export default function HomeScreen() {
   // Expense detail modal state
   const [selectedExpense, setSelectedExpense] = useState<any | null>(null);
   const [showExpenseDetail, setShowExpenseDetail] = useState(false);
+
+  // Long-press-to-delete on a recent-transaction row. Mirrors history.tsx's
+  // handleLongPress/handleDelete exactly — same shared-expense guard, same
+  // ActionSheet → ConfirmModal chain, same local-state filter on success —
+  // rather than inventing a second delete flow. Home's recent-transactions
+  // list is a slice of the same `expenses` array History renders, so
+  // filtering it here updates the row, the hero total, the ring and the
+  // chart in one state update with no refetch needed.
+  function handleLongPress(item: any) {
+    if (item.isShared || item.type === 'shared') {
+      showToast('Shared expenses can only be managed from the group screen.', 'info');
+      return;
+    }
+    showActionSheet({
+      title: 'Expense Options',
+      message: item.description || item.category,
+      options: [
+        { label: 'Delete expense', icon: <Feather name="trash-2" size={18} color={colors.negative} />, destructive: true, onPress: () => handleDelete(item) },
+      ],
+    });
+  }
+
+  function handleDelete(item: any) {
+    if (item.isShared || item.type === 'shared') {
+      showToast('Shared expenses can only be deleted from the group screen.', 'info');
+      return;
+    }
+    showConfirm({
+      icon: 'trash-2',
+      title: 'Delete Expense',
+      message: 'Are you sure you want to delete this expense? This cannot be undone.',
+      confirmText: 'Delete',
+      confirmColor: colors.negative,
+      destructive: true,
+      onConfirm: async () => {
+        try {
+          await expenseAPI.deleteExpense(String(item.id), getUserId());
+          setExpenses((prev) => prev.filter((e) => !(e.id === item.id && !(e.isShared || e.type === 'shared'))));
+        } catch {
+          showToast('Failed to delete expense', 'error');
+        }
+      },
+    });
+  }
 
   // Quick add state
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -865,6 +913,7 @@ export default function HomeScreen() {
                   }
                   amountColor={isIncome ? colors.positive : colors.negative}
                   onPress={() => { setSelectedExpense(item); setShowExpenseDetail(true); }}
+                  onLongPress={() => handleLongPress(item)}
                 />
               );
             })
@@ -912,10 +961,22 @@ export default function HomeScreen() {
         visible={showExpenseDetail}
         expense={selectedExpense}
         onClose={() => { setShowExpenseDetail(false); setSelectedExpense(null); }}
-        onDelete={() => { setShowExpenseDetail(false); setSelectedExpense(null); }}
+        onDelete={(expenseId) => {
+          // This was the actual reported bug: the modal's own Delete button
+          // called onDelete(expense.id), but this handler never used the id —
+          // it just closed the modal. Tapping "Delete Expense" silently did
+          // nothing. Now mirrors history.tsx: close, look the item up, hand
+          // it to the same handleDelete used by long-press.
+          setShowExpenseDetail(false);
+          setSelectedExpense(null);
+          const item = expenses.find((e) => String(e.id) === String(expenseId));
+          if (item) handleDelete(item);
+        }}
         customCategories={customCategories}
       />
 
+      {ActionSheetComponent}
+      {ConfirmModalComponent}
       <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
     </View>
   );

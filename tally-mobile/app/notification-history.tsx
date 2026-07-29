@@ -11,20 +11,27 @@ import {
 } from '../services/notificationHistory';
 import { useTheme } from '../hooks/useTheme';
 import { getExtendedColors, typography, spacing, radius } from '../theme';
-import { Skeleton } from '../components/ui';
+import { EmptyState, Skeleton } from '../components/ui';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 
 // ── Config per notification type (deliberately theme-independent — these are
 // stable category colors, not affected by light/dark) ─────────────────────
-const TYPE_CONFIG: Record<HistoryNotif['type'], { icon: string; color: string; bg: string }> = {
-  budget_over: { icon: '🚨', color: '#E05C5C', bg: '#E05C5C18' },
-  budget_near: { icon: '⚠️', color: '#F7A84F', bg: '#F7A84F18' },
-  expense_added: { icon: '💰', color: '#EC4899', bg: '#EC489918' },
-  income_added: { icon: '📈', color: '#10B981', bg: '#10B98118' },
-  reminder_due: { icon: '⏰', color: '#60A5FA', bg: '#60A5FA18' },
-  shared_expense: { icon: '💸', color: '#A78BFA', bg: '#A78BFA18' },
-  settle_up: { icon: '✅', color: '#06B6D4', bg: '#06B6D418' },
-  monthly_report: { icon: '📊', color: '#FFC107', bg: '#FFC10718' },
+// Icons are Feather names, not emoji: each row already renders a Feather
+// chevron and a Feather dismiss X, so an emoji in the badge between them was
+// two icon languages in one row. Pairings follow the ones 4aeef2d already
+// established on the dashboard for these same states.
+const TYPE_CONFIG: Record<
+  HistoryNotif['type'],
+  { icon: keyof typeof Feather.glyphMap; color: string; bg: string }
+> = {
+  budget_over: { icon: 'alert-octagon', color: '#E05C5C', bg: '#E05C5C18' },
+  budget_near: { icon: 'alert-triangle', color: '#F7A84F', bg: '#F7A84F18' },
+  expense_added: { icon: 'dollar-sign', color: '#EC4899', bg: '#EC489918' },
+  income_added: { icon: 'trending-up', color: '#10B981', bg: '#10B98118' },
+  reminder_due: { icon: 'clock', color: '#60A5FA', bg: '#60A5FA18' },
+  shared_expense: { icon: 'users', color: '#A78BFA', bg: '#A78BFA18' },
+  settle_up: { icon: 'check-circle', color: '#06B6D4', bg: '#06B6D418' },
+  monthly_report: { icon: 'bar-chart-2', color: '#FFC107', bg: '#FFC10718' },
 };
 
 function relativeTime(ts: number): string {
@@ -148,7 +155,7 @@ export default function NotificationHistoryScreen() {
 
   function handleClearAll() {
     showConfirm({
-      icon: '🗑️',
+      icon: 'trash-2',
       title: 'Clear All',
       message: 'Remove all notification history? This cannot be undone.',
       confirmText: 'Clear',
@@ -206,11 +213,14 @@ export default function NotificationHistoryScreen() {
           contentContainerStyle={styles.empty}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
         >
-          <Text style={{ fontSize: 52 }}>🔔</Text>
-          <Text style={[typography.headline, { color: colors.text }]}>All caught up</Text>
-          <Text style={[typography.body, { color: colors.textSecondary, textAlign: 'center' }]}>
-            Budget alerts, expense saves, and reminders will appear here.
-          </Text>
+          {/* Was a hand-rolled mark + headline + body — the exact shape
+              EmptyState already provides, but with a bare 52px emoji instead of
+              the 64px tinted-circle mark the other seven screens show. */}
+          <EmptyState
+            icon="bell"
+            title="All caught up"
+            body="Budget alerts, expense saves, and reminders will appear here."
+          />
         </ScrollView>
       ) : (
         <FlatList
@@ -233,7 +243,7 @@ export default function NotificationHistoryScreen() {
                 ]}
               >
                 <View style={[styles.iconCircle, { backgroundColor: `${cfg.color}25` }]}>
-                  <Text style={{ fontSize: 20 }}>{cfg.icon}</Text>
+                  <Feather name={cfg.icon} size={18} color={cfg.color} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={styles.cardTop}>
@@ -310,9 +320,9 @@ const styles = StyleSheet.create({
   },
   empty: {
     flexGrow: 1,
-    alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 40,
-    gap: spacing.md,
+    // No padding or gap of its own any more: EmptyState brings the app's
+    // standard ones. The old paddingHorizontal: 40 was off the 4pt scale and
+    // would have stacked on top of EmptyState's.
   },
 });

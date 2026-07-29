@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Dimensions,
@@ -199,7 +198,7 @@ export default function BudgetScreen() {
 
   function resetAll() {
     showConfirm({
-      icon: '🗑️',
+      icon: 'trash-2',
       title: 'Reset All Budgets',
       message: 'Clear all budget limits? This cannot be undone.',
       confirmText: 'Reset',

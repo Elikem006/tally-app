@@ -20,7 +20,14 @@ export function EmptyExpensesArt({ size = 132 }: IllustrationProps) {
   const colors = getExtendedColors(theme, baseColors);
 
   return (
-    <Svg width={size} height={size} viewBox="0 0 120 120" fill="none">
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 120 120"
+      fill="none"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
       {/* Receipt body, torn along the bottom */}
       <Path
         d="M34 20 h48 q5 0 5 5 v72 l-6.5-5 l-6.5 5 l-6.5-5 l-6.5 5 l-6.5-5 l-6.5 5 l-6.5-5 l-6.5 5 V25 q0-5 5-5 z"
@@ -49,7 +56,14 @@ export function EmptyBudgetsArt({ size = 132 }: IllustrationProps) {
   const colors = getExtendedColors(theme, baseColors);
 
   return (
-    <Svg width={size} height={size} viewBox="0 0 120 120" fill="none">
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 120 120"
+      fill="none"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
       {/* Unallocated remainder */}
       <Circle
         cx={60}
@@ -84,7 +98,14 @@ export function EmptyGroupsArt({ size = 132 }: IllustrationProps) {
   const side = colors.textTertiary;
 
   return (
-    <Svg width={size} height={size} viewBox="0 0 120 120" fill="none">
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 120 120"
+      fill="none"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
       {/* Left figure */}
       <G opacity={0.85}>
         <Circle cx={31} cy={54} r={11} stroke={side} strokeWidth={2.5} fill={colors.surfaceElevated} />

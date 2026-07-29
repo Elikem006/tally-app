@@ -17,6 +17,7 @@ import group_service.repository.SharedExpenseRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.*;
 
 /**
@@ -40,6 +41,9 @@ public class GroupService {
 
     @Autowired
     private SharedExpenseRepository sharedExpenseRepository;
+
+    @Autowired
+    private group_service.repository.SharedExpenseSettlementRepository settlementRepository;
 
     @Autowired
     private AuthClient authClient;
@@ -463,6 +467,13 @@ public class GroupService {
      * Pure balance math for a group: userId → net balance. Local tables only,
      * no user lookups — used by every caller that doesn't need display names
      * (net balance, remove-member guard, settle-up).
+     *
+     * Settlement is tracked PER DEBTOR via shared_expense_settlements, not as
+     * a single settled flag on the expense — a shared expense with several
+     * debtors must let one of them pay their share without wiping the others'
+     * still-outstanding debt. expense.settled stays a derived summary (true
+     * once every debtor has a settlement row) and is only used here as a
+     * fast skip for expenses fully wound down.
      */
     private Map<Long, BigDecimal> rawBalances(Long groupId) {
         List<GroupMember> members = groupMemberRepository.findByGroupId(groupId);
@@ -474,23 +485,31 @@ public class GroupService {
             balances.put(m.getUserId(), BigDecimal.ZERO);
         }
 
+        Set<Long> expenseIds = new HashSet<>();
+        for (SharedExpense expense : expenses) if (expense.getId() != null) expenseIds.add(expense.getId());
+        Set<String> settledPairs = new HashSet<>();
+        for (group_service.model.SharedExpenseSettlement s : settlementRepository.findBySharedExpenseIdIn(new ArrayList<>(expenseIds))) {
+            settledPairs.add(s.getSharedExpenseId() + ":" + s.getUserId());
+        }
+
         for (SharedExpense expense : expenses) {
-            // Settled expenses stay in history but no longer affect balances
+            // Fully settled expenses (every debtor paid) stay in history but no longer affect balances
             if (Boolean.TRUE.equals(expense.getSettled())) continue;
             if ("SETTLED".equals(expense.getDescription())) continue; // legacy marker
             if (expense.getAmount() == null) continue;
 
-            // Payer is credited the full amount…
-            balances.merge(expense.getPaidBy(), expense.getAmount(), BigDecimal::add);
-
-            // …and every PARTICIPANT (payer included) is debited their share:
-            // percentage-based for CUSTOM splits, equal among participants otherwise.
-            // Members who joined after this expense was created owe nothing for it.
+            // Every PARTICIPANT other than the payer owes their share — unless
+            // they already have a settlement row for THIS expense, in which
+            // case their portion is resolved and shouldn't move anyone's balance.
             for (GroupMember m : members) {
-                BigDecimal share = shareFor(expense, m.getUserId(), members);
-                if (share.compareTo(BigDecimal.ZERO) != 0) {
-                    balances.merge(m.getUserId(), share.negate(), BigDecimal::add);
-                }
+                Long participantId = m.getUserId();
+                if (participantId.equals(expense.getPaidBy())) continue; // payer owes nothing to themselves
+                BigDecimal share = shareFor(expense, participantId, members);
+                if (share.compareTo(BigDecimal.ZERO) == 0) continue;
+                if (settledPairs.contains(expense.getId() + ":" + participantId)) continue;
+
+                balances.merge(participantId, share.negate(), BigDecimal::add);
+                balances.merge(expense.getPaidBy(), share, BigDecimal::add);
             }
         }
         return balances;
@@ -542,22 +561,30 @@ public class GroupService {
         String momoReferenceId = null;
         String momoStatus = null;
 
-        // Calculate total owed by the settling user across UNSETTLED expenses
+        // Calculate total owed by the settling user across expenses where
+        // THEY are still a debtor — i.e. not fully settled AND this user
+        // doesn't already have their own settlement row on it (double-settle
+        // guard: a repeat call for an expense this user already paid finds
+        // nothing left to owe on it, same as if it were fully settled).
         List<GroupMember> members = groupMemberRepository.findByGroupId(groupId);
         List<SharedExpense> expenses = sharedExpenseRepository.findByGroupId(groupId);
 
+        List<SharedExpense> owedExpenses = new ArrayList<>();
         BigDecimal owedAmount = BigDecimal.ZERO;
         for (SharedExpense se : expenses) {
             if (Boolean.TRUE.equals(se.getSettled())) continue;
             if ("SETTLED".equals(se.getDescription())) continue; // legacy marker
             if (se.getAmount() == null || se.getPaidBy() == null) continue;
-            if (!se.getPaidBy().equals(userId)) {
-                // Respect participant snapshot + custom split ratios
-                owedAmount = owedAmount.add(shareFor(se, userId, members));
-            }
+            if (se.getPaidBy().equals(userId)) continue; // payer owes nothing to themselves
+            BigDecimal share = shareFor(se, userId, members);
+            if (share.compareTo(BigDecimal.ZERO) <= 0) continue;
+            if (settlementRepository.existsBySharedExpenseIdAndUserId(se.getId(), userId)) continue;
+            owedExpenses.add(se);
+            owedAmount = owedAmount.add(share);
         }
 
-        // Nothing to settle — return early without touching any records
+        // Nothing to settle — return early without touching any records.
+        // Also what a repeat settle-up call for an already-settled debt hits.
         if (owedAmount.compareTo(new BigDecimal("0.01")) < 0) {
             Map<String, Object> nothing = new HashMap<>();
             nothing.put("message", "No outstanding balance to settle.");
@@ -580,23 +607,43 @@ public class GroupService {
             }
         }
 
-        // Mark expenses as settled FIRST — history is preserved, balances
-        // reset. @Version on SharedExpense guards against concurrent
-        // settle-ups: a simultaneous update throws OptimisticLockException
-        // here and rolls back, before anything below (including the MoMo
-        // request) ever runs. This ordering matters: with the MoMo call
-        // ahead of this write, two racing requests could both pass the
-        // owedAmount check and both fire a real request-to-pay for the same
-        // money before either learned it lost the race on the DB write —
-        // confirmed live (three separate MoMo referenceIds dispatched for
-        // one eventual settlement) before this was reordered. Now only the
-        // request that actually wins the write ever reaches the MoMo call.
-        for (SharedExpense se : expenses) {
-            if (!Boolean.TRUE.equals(se.getSettled())) {
+        // Record ONE settlement row per expense this user owed on — scopes the
+        // effect to this user's own debts, unlike the old single settled flag
+        // which wiped every debtor's balance on the whole expense at once. The
+        // UNIQUE(shared_expense_id, user_id) constraint is the backstop against
+        // a genuine concurrent double-tap slipping past the check above.
+        LocalDateTime settledAt = LocalDateTime.now();
+        for (SharedExpense se : owedExpenses) {
+            group_service.model.SharedExpenseSettlement settlement = new group_service.model.SharedExpenseSettlement();
+            settlement.setSharedExpenseId(se.getId());
+            settlement.setUserId(userId);
+            settlement.setSettledAt(settledAt);
+            settlementRepository.save(settlement);
+        }
+
+        // An expense only moves to fully-settled once EVERY debtor (every
+        // participant but the payer with a nonzero share) has a settlement
+        // row. @Version on SharedExpense still guards this specific write
+        // against a concurrent settle-up racing to flip the same expense —
+        // see the historical note this replaced: two racing requests used to
+        // both fire a real MoMo request-to-pay before either learned it lost
+        // the race; that ordering (write before MoMo call) is preserved below.
+        for (SharedExpense se : owedExpenses) {
+            Set<Long> participants = participantsOf(se, members);
+            boolean allDebtorsSettled = true;
+            for (Long participantId : participants) {
+                if (participantId.equals(se.getPaidBy())) continue;
+                if (shareFor(se, participantId, members).compareTo(BigDecimal.ZERO) == 0) continue;
+                if (!settlementRepository.existsBySharedExpenseIdAndUserId(se.getId(), participantId)) {
+                    allDebtorsSettled = false;
+                    break;
+                }
+            }
+            if (allDebtorsSettled) {
                 se.setSettled(true);
+                sharedExpenseRepository.save(se);
             }
         }
-        sharedExpenseRepository.saveAll(expenses);
 
         // If a phone number is provided, fire the MoMo request — via
         // expense-service's /api/momo/pay (the single MoMo implementation).

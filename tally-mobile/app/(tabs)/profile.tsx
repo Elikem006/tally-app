@@ -97,19 +97,27 @@ export default function ProfileScreen() {
       const report = reportRes.data || {};
 
       const isSettlement = (e: any) => e.paymentMethod === 'SETTLEMENT';
-      const totalExpenses = expenses.filter((e) => !isSettlement(e)).length;
+      // Income is stored as a positive amount (MoMo vendor transfers are the
+      // exception — money-out despite the positive sign); settlements are
+      // money back, not spending or income. Neither belongs in "spent" stats.
+      const isIncomeEntry = (e: any) => {
+        const amt = parseFloat(e.amount || '0');
+        return amt > 0 && e.paymentMethod !== 'MOMO_TRANSFER' && !isSettlement(e);
+      };
+      const isSpend = (e: any) => !isSettlement(e) && !isIncomeEntry(e);
+      const totalExpenses = expenses.filter(isSpend).length;
       const totalSpent = expenses
-        .filter((e) => !isSettlement(e))
+        .filter(isSpend)
         .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || '0')), 0);
 
       const now = new Date();
       const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
       const monthIncome = expenses
-        .filter((e) => isSettlement(e) && e.date?.startsWith(monthPrefix))
+        .filter((e) => isIncomeEntry(e) && e.date?.startsWith(monthPrefix))
         .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || '0')), 0);
 
-      const dateSet = new Set(expenses.filter((e) => !isSettlement(e)).map((e) => e.date));
+      const dateSet = new Set(expenses.filter(isSpend).map((e) => e.date));
       const key = (dt: Date) =>
         `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
       let streak = 0;
@@ -233,7 +241,7 @@ export default function ProfileScreen() {
 
   function handleLogout() {
     showConfirm({
-      icon: '👋',
+      icon: 'log-out',
       title: 'Log Out',
       message: 'Are you sure you want to log out of Tally?',
       confirmText: 'Log Out',
@@ -249,7 +257,7 @@ export default function ProfileScreen() {
 
   function handleRemovePhone() {
     showConfirm({
-      icon: '📱',
+      icon: 'smartphone',
       title: 'Remove MoMo Number',
       message: 'Are you sure you want to remove your MoMo number? You will need to re-enter it to make MoMo payments.',
       confirmText: 'Remove',
