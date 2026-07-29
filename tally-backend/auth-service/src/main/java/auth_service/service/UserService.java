@@ -1,6 +1,7 @@
 package auth_service.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import auth_service.JwtUtil;
@@ -19,6 +20,13 @@ public class UserService {
 
     @Autowired
     private JwtUtil jwtUtil;
+
+    @Autowired
+    private MailService mailService;
+
+    // Must stay false in production — see application.properties for why.
+    @Value("${otp.debug-expose:false}")
+    private boolean otpDebugExpose;
 
     private BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -109,10 +117,12 @@ public class UserService {
     }
 
     /**
-     * Generates a 6-digit OTP for password reset and stores it on the user record.
-     * In production this OTP would be emailed; in sandbox it is returned directly.
+     * Generates a 6-digit OTP for password reset, stores it on the user record,
+     * and emails it. The OTP is only returned to the caller when
+     * otp.debug-expose is on (local dev / a demo without SMTP configured yet)
+     * — see application.properties. In production, email is the only channel.
      *
-     * @return the generated OTP (so the controller can include it in the sandbox response)
+     * @return the generated OTP if otp.debug-expose is on, otherwise null
      */
     public String generatePasswordResetOtp(String email) {
         email = email.toLowerCase().trim();
@@ -123,7 +133,19 @@ public class UserService {
         user.setResetOtp(otp);
         user.setResetOtpExpiry(LocalDateTime.now().plusMinutes(15));
         userRepository.save(user);
-        return otp;
+
+        try {
+            mailService.sendPasswordResetOtp(user.getEmail(), otp);
+        } catch (Exception e) {
+            if (!otpDebugExpose) {
+                throw new RuntimeException("Failed to send the reset email. Please try again shortly.");
+            }
+            // Debug mode: SMTP isn't configured yet (or is down) — don't block
+            // local dev/demo, the OTP is still returned to the caller below.
+            System.err.println("Password reset email failed to send (debug mode, continuing): " + e.getMessage());
+        }
+
+        return otpDebugExpose ? otp : null;
     }
 
     /**

@@ -203,12 +203,16 @@ public class AuthController {
                         .body(Map.of("error", "Email is required", "success", false));
             }
             String otp = userService.generatePasswordResetOtp(email);
-            return ResponseEntity.ok(Map.of(
-                    "message", "OTP sent to your email",
-                    "otp", otp,
-                    "note", "In production the OTP would be sent via email. For testing it is returned here.",
-                    "success", true
-            ));
+
+            // Map.of rejects null — otp is only non-null when otp.debug-expose is on
+            Map<String, Object> response = new java.util.HashMap<>();
+            response.put("message", "OTP sent to your email");
+            response.put("success", true);
+            if (otp != null) {
+                response.put("otp", otp);
+                response.put("note", "Debug mode is on for this environment — the OTP is included here in addition to being emailed.");
+            }
+            return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", errorMessage(e), "success", false));
