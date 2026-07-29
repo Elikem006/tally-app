@@ -13,15 +13,16 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { remindersAPI } from '../../services/api';
-import { getUserId } from '../../services/storage';
-import { addHistoryItem } from '../../services/notificationHistory';
-import Toast from '../../components/Toast';
-import { useToast } from '../../hooks/useToast';
-import { useConfirmModal } from '../../hooks/useConfirmModal';
-import { useTheme } from '../../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius } from '../../theme';
-import { Card, Button, Input, EmptyState, Skeleton } from '../../components/ui';
+import { router } from 'expo-router';
+import { remindersAPI } from '../services/api';
+import { getUserId } from '../services/storage';
+import { addHistoryItem } from '../services/notificationHistory';
+import Toast from '../components/Toast';
+import { useToast } from '../hooks/useToast';
+import { useConfirmModal } from '../hooks/useConfirmModal';
+import { useTheme } from '../hooks/useTheme';
+import { getExtendedColors, typography, spacing, radius } from '../theme';
+import { Card, Button, Input, EmptyState, Skeleton } from '../components/ui';
 
 const getUrgentStatus = (dueDateStr: string, isPaid: boolean, colors: ReturnType<typeof getExtendedColors>): { urgent: boolean; label: string; color: string } | null => {
   if (isPaid) return null;
@@ -217,7 +218,17 @@ export default function RemindersScreen() {
     <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={[styles.flex, { paddingTop: Math.max(insets.top, spacing.lg) }]}>
         <View style={styles.header}>
-          <Text style={[typography.display, { color: colors.text }]} accessibilityRole="header">Bill Reminders</Text>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={{ marginRight: spacing.sm, padding: spacing.xs }}
+            hitSlop={8}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
+            <Feather name="arrow-left" size={22} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={[typography.display, { color: colors.text, flex: 1 }]} accessibilityRole="header">Bill Reminders</Text>
           <TouchableOpacity
             style={[styles.addBtn, { backgroundColor: colors.primary }]}
             onPress={() => setShowAddForm(!showAddForm)}

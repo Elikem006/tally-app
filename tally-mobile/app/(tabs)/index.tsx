@@ -347,8 +347,15 @@ export default function HomeScreen() {
   }
 
   // Calculate Dynamic Spending & Budget sums.
-  // Every transaction is money going OUT (personal AND shared) unless it is
-  // explicitly an income transaction — never infer income from a positive sign.
+  const paceNow = new Date();
+  const dayOfMonth = paceNow.getDate();
+  const monthPrefix = `${paceNow.getFullYear()}-${String(paceNow.getMonth() + 1).padStart(2, '0')}`;
+  const daysInMonth = new Date(paceNow.getFullYear(), paceNow.getMonth() + 1, 0).getDate();
+  const monthSpent = expenses
+    .filter(e => e.date && e.date.startsWith(monthPrefix)
+      && e.type !== 'income' && e.paymentMethod !== 'SETTLEMENT')
+    .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || '0')), 0);
+
   const totalSpent = expenses
     .filter(e => e.type !== 'income' && e.paymentMethod !== 'SETTLEMENT')
     .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || '0')), 0);
@@ -358,16 +365,6 @@ export default function HomeScreen() {
   const totalBudget = budgets.reduce((sum, b) => sum + parseFloat(b.monthlyLimit || '0'), 0);
   const remaining = totalBudget - totalSpent;
 
-  // ── Spending pace (Upgrade: expense velocity tracking) ────────────────────
-  // Daily average this month → projected end-of-month total, colored vs budget.
-  const paceNow = new Date();
-  const dayOfMonth = paceNow.getDate();
-  const monthPrefix = `${paceNow.getFullYear()}-${String(paceNow.getMonth() + 1).padStart(2, '0')}`;
-  const daysInMonth = new Date(paceNow.getFullYear(), paceNow.getMonth() + 1, 0).getDate();
-  const monthSpent = expenses
-    .filter(e => e.date && e.date.startsWith(monthPrefix)
-      && e.type !== 'income' && e.paymentMethod !== 'SETTLEMENT')
-    .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || '0')), 0);
   const dailyAvg = dayOfMonth > 0 ? monthSpent / dayOfMonth : 0;
   const projected = dailyAvg * daysInMonth;
   const paceOverBudget = totalBudget > 0 && projected > totalBudget;
@@ -572,7 +569,7 @@ export default function HomeScreen() {
 
             <TouchableOpacity
               style={[styles.headerActionButton, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}
-              onPress={() => router.push('/(tabs)/reminders')}
+              onPress={() => router.push('/reminders')}
               activeOpacity={0.8}
               accessibilityRole="button"
               accessibilityLabel="Reminders"
@@ -582,7 +579,7 @@ export default function HomeScreen() {
 
             <TouchableOpacity
               style={[styles.avatarButton, { borderColor: colors.borderSubtle }]}
-              onPress={() => router.push('/(tabs)/profile')}
+              onPress={() => router.push('/profile')}
               activeOpacity={0.8}
               accessibilityRole="button"
               accessibilityLabel="Profile"
@@ -734,11 +731,11 @@ export default function HomeScreen() {
                 subtitle={`Due: ${reminder.dueDate || reminder.date || 'Soon'}`}
                 amount={reminder.amount ? `GHS ${parseFloat(reminder.amount || '0').toFixed(2)}` : ''}
                 amountColor={colors.negative}
-                onPress={() => router.push('/(tabs)/reminders')}
+                onPress={() => router.push('/reminders')}
               />
             ))}
             {upcomingReminders.length > 3 && (
-              <TouchableOpacity onPress={() => router.push('/(tabs)/reminders')} activeOpacity={0.7}>
+              <TouchableOpacity onPress={() => router.push('/reminders')} activeOpacity={0.7}>
                 <Text style={[typography.bodyStrong, { color: colors.primary, textAlign: 'center', paddingVertical: spacing.sm }]}>
                   +{upcomingReminders.length - 3} more →
                 </Text>

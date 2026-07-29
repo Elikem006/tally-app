@@ -17,16 +17,16 @@ import { router, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import { expenseAPI, authAPI } from '../../services/api';
-import { getUserId, safeStorage, currentUser, resetCurrentUser, clearRememberedUser } from '../../services/storage';
-import Avatar from '../../components/Avatar';
-import Toast from '../../components/Toast';
-import { useToast } from '../../hooks/useToast';
-import { useConfirmModal } from '../../hooks/useConfirmModal';
-import { useActionSheet } from '../../hooks/useActionSheet';
-import { useTheme } from '../../hooks/useTheme';
-import { getExtendedColors, typography, spacing, radius } from '../../theme';
-import { Card, Button, Input, CategoryIcon, Skeleton } from '../../components/ui';
+import { expenseAPI, authAPI } from '../services/api';
+import { getUserId, safeStorage, currentUser, resetCurrentUser, clearRememberedUser } from '../services/storage';
+import Avatar from '../components/Avatar';
+import Toast from '../components/Toast';
+import { useToast } from '../hooks/useToast';
+import { useConfirmModal } from '../hooks/useConfirmModal';
+import { useActionSheet } from '../hooks/useActionSheet';
+import { useTheme } from '../hooks/useTheme';
+import { getExtendedColors, typography, spacing, radius } from '../theme';
+import { Card, Button, Input, CategoryIcon, Skeleton } from '../components/ui';
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
@@ -335,7 +335,19 @@ export default function ProfileScreen() {
         automaticallyAdjustKeyboardInsets={true}
       >
         <Card elevation="raised">
-          <Text style={[typography.display, { color: colors.text, marginBottom: spacing.lg }]} accessibilityRole="header">My Profile</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing.lg }}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={{ marginRight: spacing.sm, padding: spacing.xs }}
+              hitSlop={8}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+            >
+              <Feather name="arrow-left" size={22} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={[typography.display, { color: colors.text, flex: 1 }]} accessibilityRole="header">My Profile</Text>
+          </View>
 
           <View style={styles.avatarSection}>
             <TouchableOpacity
@@ -448,7 +460,7 @@ export default function ProfileScreen() {
           ) : null}
 
           <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm + 2 }]}>Actions</Text>
-          <TouchableOpacity style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]} onPress={() => router.push('/(tabs)/reminders')} activeOpacity={0.8}>
+          <TouchableOpacity style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]} onPress={() => router.push('/reminders')} activeOpacity={0.8}>
             <View style={styles.actionLeft}>
               <Feather name="bell" size={16} color={colors.text} style={{ marginRight: spacing.sm }} />
               <Text style={[typography.labelStrong, { color: colors.text }]}>Bill Reminders</Text>
@@ -456,7 +468,7 @@ export default function ProfileScreen() {
             <Feather name="chevron-right" size={16} color={colors.textSecondary} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]} onPress={() => router.push('/(tabs)/report')} activeOpacity={0.8}>
+          <TouchableOpacity style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]} onPress={() => router.push('/report')} activeOpacity={0.8}>
             <View style={styles.actionLeft}>
               <Feather name="trending-up" size={16} color={colors.text} style={{ marginRight: spacing.sm }} />
               <Text style={[typography.labelStrong, { color: colors.text }]}>Financial Reports</Text>

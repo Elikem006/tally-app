@@ -136,9 +136,9 @@ export default function NotificationHistoryScreen() {
     } else if (screen === 'budget-overview' || screen === 'budget') {
       router.push('/(tabs)/budget');
     } else if (screen === 'reminders') {
-      router.push('/(tabs)/reminders');
+      router.push('/reminders');
     } else if (screen === 'report') {
-      router.push('/(tabs)/report');
+      router.push('/report');
     } else if (screen === 'groups') {
       router.push('/(tabs)/groups');
     } else if (screen === 'history') {

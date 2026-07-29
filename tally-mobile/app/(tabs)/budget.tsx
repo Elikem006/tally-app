@@ -397,7 +397,7 @@ export default function BudgetScreen() {
 
                 <TouchableOpacity
                   style={[styles.reportButton, { borderColor: colors.border }]}
-                  onPress={() => router.push('/(tabs)/report')}
+                  onPress={() => router.push('/report')}
                   activeOpacity={0.8}
                 >
                   <Text style={[typography.bodyStrong, { color: colors.primary }]}>📈 View Monthly Report</Text>
