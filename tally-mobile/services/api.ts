@@ -1,12 +1,12 @@
 import axios from "axios";
 
+// Set to true to use the local client-side mock backend, false to use the live Spring Boot server
+const USE_MOCK = true;
+
 // ─── Backend URL ─────────────────────────────────────────────────────────────
 // Comes from EXPO_PUBLIC_API_URL in .env.local (local dev — the hotspot/LAN IP
 // of the machine running docker-compose) or .env.production (Railway gateway).
-// To switch: edit the value in the env file, then restart Expo with
-// `npx expo start --clear` — env vars are inlined at build time, so a plain
-// reload/hot-refresh will NOT pick up the change.
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL;
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || (USE_MOCK ? "http://mock-api.local" : undefined);
 if (!BASE_URL) {
   throw new Error(
     "EXPO_PUBLIC_API_URL is not set. Create tally-mobile/.env.local from " +
@@ -62,9 +62,6 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Set to true to use the local client-side mock backend, false to use the live Spring Boot server
-const USE_MOCK = false;
-
 // Mock database states
 let mockUsers = [
   {
@@ -88,7 +85,18 @@ const getRelativeDateStr = (daysAgo: number) => {
   return `${year}-${month}-${day}`;
 };
 
-let mockExpenses = [
+interface MockExpense {
+  id: number;
+  userId: string;
+  amount: string;
+  category: string;
+  description: string;
+  date: string;
+  paymentMethod: string;
+  type?: string;
+}
+
+let mockExpenses: MockExpense[] = [
   {
     id: 1,
     userId: "1",
@@ -404,6 +412,7 @@ export const expenseAPI = {
 
     const userExpenses = mockExpenses.filter((e) => {
       if (String(e.userId) !== String(userId)) return false;
+      if (e.type === 'income' || e.paymentMethod === 'SETTLEMENT') return false;
       const d = new Date(e.date);
       return d.getMonth() + 1 === targetMonth && d.getFullYear() === targetYear;
     });
@@ -412,16 +421,17 @@ export const expenseAPI = {
     const prevYear = targetMonth === 1 ? targetYear - 1 : targetYear;
     const prevExpenses = mockExpenses.filter((e) => {
       if (String(e.userId) !== String(userId)) return false;
+      if (e.type === 'income' || e.paymentMethod === 'SETTLEMENT') return false;
       const d = new Date(e.date);
       return d.getMonth() + 1 === prevMonth && d.getFullYear() === prevYear;
     });
 
     const currentTotal = userExpenses.reduce(
-      (sum, e) => sum + parseFloat(e.amount),
+      (sum, e) => sum + Math.abs(parseFloat(e.amount)),
       0,
     );
     const previousTotal = prevExpenses.reduce(
-      (sum, e) => sum + parseFloat(e.amount),
+      (sum, e) => sum + Math.abs(parseFloat(e.amount)),
       0,
     );
     const percentageChange =
@@ -432,7 +442,7 @@ export const expenseAPI = {
     const categoryBreakdown: { [key: string]: number } = {};
     userExpenses.forEach((e) => {
       categoryBreakdown[e.category] =
-        (categoryBreakdown[e.category] || 0) + parseFloat(e.amount);
+        (categoryBreakdown[e.category] || 0) + Math.abs(parseFloat(e.amount));
     });
 
     let highestCategory = { category: "", amount: "0.00" };
@@ -576,8 +586,8 @@ export const budgetAPI = {
       const limit = budget ? parseFloat(budget.monthlyLimit) : 0;
 
       const spent = userExpenses
-        .filter((e) => e.category === category)
-        .reduce((sum, e) => sum + parseFloat(e.amount), 0);
+        .filter((e) => e.category === category && e.type !== 'income' && e.paymentMethod !== 'SETTLEMENT')
+        .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount)), 0);
 
       const percentage = limit > 0 ? (spent / limit) * 100 : 0;
       const isOverBudget = limit > 0 && spent > limit;
