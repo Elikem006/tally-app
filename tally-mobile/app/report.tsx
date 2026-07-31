@@ -35,9 +35,9 @@ import Svg, {
 } from "react-native-svg";
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
-import { expenseAPI, categoriesAPI, remindersAPI } from "../../services/api";
-import { getUserId } from "../../services/storage";
-import { useTheme } from "../../hooks/useTheme";
+import { expenseAPI, categoriesAPI, remindersAPI } from "../services/api";
+import { getUserId } from "../services/storage";
+import { useTheme } from "../hooks/useTheme";
 import {
   getExtendedColors,
   getCategoryColor,
@@ -48,7 +48,7 @@ import {
   easing,
   spring,
   staggerDelay,
-} from "../../theme";
+} from "../theme";
 import {
   Screen,
   Card,
@@ -60,7 +60,7 @@ import {
   ProgressBar,
   Skeleton,
   SkeletonCard,
-} from "../../components/ui";
+} from "../components/ui";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -499,7 +499,7 @@ export default function ReportScreen() {
 
   const onScrubMove = useCallback((idx: number) => {
     // A tick per bucket crossed — the chart feels detented rather than smooth.
-    Haptics.selectionAsync().catch(() => {});
+    Haptics.selectionAsync().catch(() => { });
     setSelectedPoint(idx);
   }, []);
 
@@ -689,6 +689,17 @@ export default function ReportScreen() {
   const header = (
     <>
       <View style={styles.headerRow}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={[styles.navArrow, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}
+          activeOpacity={0.7}
+          hitSlop={4}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <Feather name="arrow-left" size={20} color={colors.text} />
+        </TouchableOpacity>
+
         <TouchableOpacity
           onPress={goToPreviousMonth}
           style={[styles.navArrow, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}
@@ -899,127 +910,127 @@ export default function ReportScreen() {
             </View>
 
             <GestureDetector gesture={scrub}>
-            <View style={{ height: chartHeight, position: "relative", marginTop: spacing.sm }}>
-              {/* Grid, area fill, ghost comparison and curve — one SVG */}
-              <Svg width={chartWidth} height={chartHeight}>
-                <Defs>
-                  <SvgGradient id="spendFill" x1="0" y1="0" x2="0" y2="1">
-                    <Stop offset="0" stopColor={colors.primary} stopOpacity={0.28} />
-                    <Stop offset="1" stopColor={colors.primary} stopOpacity={0} />
-                  </SvgGradient>
-                </Defs>
+              <View style={{ height: chartHeight, position: "relative", marginTop: spacing.sm }}>
+                {/* Grid, area fill, ghost comparison and curve — one SVG */}
+                <Svg width={chartWidth} height={chartHeight}>
+                  <Defs>
+                    <SvgGradient id="spendFill" x1="0" y1="0" x2="0" y2="1">
+                      <Stop offset="0" stopColor={colors.primary} stopOpacity={0.28} />
+                      <Stop offset="1" stopColor={colors.primary} stopOpacity={0} />
+                    </SvgGradient>
+                  </Defs>
 
-                {[padV, chartHeight / 2, chartHeight - padV].map((y, i) => (
-                  <Line
-                    key={`grid-${i}`}
-                    x1={0}
-                    y1={y}
-                    x2={chartWidth}
-                    y2={y}
-                    stroke={colors.borderSubtle}
-                    strokeWidth={1}
-                  />
+                  {[padV, chartHeight / 2, chartHeight - padV].map((y, i) => (
+                    <Line
+                      key={`grid-${i}`}
+                      x1={0}
+                      y1={y}
+                      x2={chartWidth}
+                      y2={y}
+                      stroke={colors.borderSubtle}
+                      strokeWidth={1}
+                    />
+                  ))}
+
+                  {!!areaPath && <Path d={areaPath} fill="url(#spendFill)" />}
+
+                  {/* Previous period, behind and dimmed */}
+                  {!!prevCurvePath && (
+                    <Path
+                      d={prevCurvePath}
+                      stroke={colors.textTertiary}
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      strokeOpacity={0.65}
+                      fill="none"
+                      strokeLinecap="round"
+                    />
+                  )}
+
+                  {!!curvePath && (
+                    <AnimatedPath
+                      d={curvePath}
+                      stroke={colors.primary}
+                      strokeWidth={2.5}
+                      fill="none"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeDasharray={curveLength}
+                      animatedProps={drawProps}
+                    />
+                  )}
+                </Svg>
+
+                {/* Y-axis labels */}
+                {[{ top: padV, val: maxSpendVal }, { top: chartHeight / 2, val: maxSpendVal / 2 }, { top: chartHeight - padV, val: 0 }].map((g, i) => (
+                  <Text
+                    key={`y-${i}`}
+                    style={[typography.caption, styles.yLabel, { top: g.top - 14, color: colors.textSecondary }]}
+                  >
+                    {formatGhs(g.val)}
+                  </Text>
                 ))}
 
-                {!!areaPath && <Path d={areaPath} fill="url(#spendFill)" />}
+                {/* Tappable data points — fade up once the line has drawn */}
+                {points.map((point, idx) => (
+                  <Animated.View key={`dot-${idx}`} style={[styles.dotTouch, { left: point.x - 14, top: point.y - 14 }, fadeUpStyle]}>
+                    <TouchableOpacity
+                      onPress={() => setSelectedPoint(selectedPoint === idx ? null : idx)}
+                      activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${point.dateLabel}: GHS ${point.spend.toFixed(2)}`}
+                      hitSlop={6}
+                    >
+                      <View
+                        style={[
+                          styles.chartDot,
+                          { backgroundColor: colors.surfaceElevated, borderColor: colors.primary },
+                          selectedPoint === idx && { backgroundColor: colors.primary },
+                        ]}
+                      />
+                    </TouchableOpacity>
+                  </Animated.View>
+                ))}
 
-                {/* Previous period, behind and dimmed */}
-                {!!prevCurvePath && (
-                  <Path
-                    d={prevCurvePath}
-                    stroke={colors.textTertiary}
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
-                    strokeOpacity={0.65}
-                    fill="none"
-                    strokeLinecap="round"
-                  />
-                )}
-
-                {!!curvePath && (
-                  <AnimatedPath
-                    d={curvePath}
-                    stroke={colors.primary}
-                    strokeWidth={2.5}
-                    fill="none"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeDasharray={curveLength}
-                    animatedProps={drawProps}
-                  />
-                )}
-              </Svg>
-
-              {/* Y-axis labels */}
-              {[{ top: padV, val: maxSpendVal }, { top: chartHeight / 2, val: maxSpendVal / 2 }, { top: chartHeight - padV, val: 0 }].map((g, i) => (
-                <Text
-                  key={`y-${i}`}
-                  style={[typography.caption, styles.yLabel, { top: g.top - 14, color: colors.textSecondary }]}
-                >
-                  {formatGhs(g.val)}
-                </Text>
-              ))}
-
-              {/* Tappable data points — fade up once the line has drawn */}
-              {points.map((point, idx) => (
-                <Animated.View key={`dot-${idx}`} style={[styles.dotTouch, { left: point.x - 14, top: point.y - 14 }, fadeUpStyle]}>
-                  <TouchableOpacity
-                    onPress={() => setSelectedPoint(selectedPoint === idx ? null : idx)}
-                    activeOpacity={0.7}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${point.dateLabel}: GHS ${point.spend.toFixed(2)}`}
-                    hitSlop={6}
-                  >
-                    <View
-                      style={[
-                        styles.chartDot,
-                        { backgroundColor: colors.surfaceElevated, borderColor: colors.primary },
-                        selectedPoint === idx && { backgroundColor: colors.primary },
-                      ]}
-                    />
-                  </TouchableOpacity>
-                </Animated.View>
-              ))}
-
-              {/* Scrub tracker — vertical rule plus a puck riding the curve */}
-              <Animated.View
-                style={[styles.trackerLine, { backgroundColor: colors.primary }, trackerStyle]}
-                pointerEvents="none"
-              />
-              <Animated.View
-                style={[
-                  styles.trackerDot,
-                  { backgroundColor: colors.primary, borderColor: colors.surfaceElevated },
-                  trackerDotStyle,
-                ]}
-                pointerEvents="none"
-              />
-
-              {/* Tooltip — inverse surface so it reads in both themes. Shown for
-                  a tapped point; the scrub uses the header readout instead. */}
-              {selectedPoint !== null && points[selectedPoint] && (
+                {/* Scrub tracker — vertical rule plus a puck riding the curve */}
+                <Animated.View
+                  style={[styles.trackerLine, { backgroundColor: colors.primary }, trackerStyle]}
+                  pointerEvents="none"
+                />
                 <Animated.View
                   style={[
-                    styles.tooltip,
-                    {
-                      backgroundColor: colors.text,
-                      left: Math.min(Math.max(points[selectedPoint].x - 55, 0), chartWidth - 110),
-                      top: Math.max(points[selectedPoint].y - 52, 0),
-                    },
-                    staticHeaderStyle,
+                    styles.trackerDot,
+                    { backgroundColor: colors.primary, borderColor: colors.surfaceElevated },
+                    trackerDotStyle,
                   ]}
                   pointerEvents="none"
-                >
-                  <Text style={[typography.caption, { color: colors.background }]}>
-                    {points[selectedPoint].dateLabel}
-                  </Text>
-                  <Text style={[typography.label, { color: colors.background }]}>
-                    GHS {points[selectedPoint].spend.toFixed(2)}
-                  </Text>
-                </Animated.View>
-              )}
+                />
 
-            </View>
+                {/* Tooltip — inverse surface so it reads in both themes. Shown for
+                  a tapped point; the scrub uses the header readout instead. */}
+                {selectedPoint !== null && points[selectedPoint] && (
+                  <Animated.View
+                    style={[
+                      styles.tooltip,
+                      {
+                        backgroundColor: colors.text,
+                        left: Math.min(Math.max(points[selectedPoint].x - 55, 0), chartWidth - 110),
+                        top: Math.max(points[selectedPoint].y - 52, 0),
+                      },
+                      staticHeaderStyle,
+                    ]}
+                    pointerEvents="none"
+                  >
+                    <Text style={[typography.caption, { color: colors.background }]}>
+                      {points[selectedPoint].dateLabel}
+                    </Text>
+                    <Text style={[typography.label, { color: colors.background }]}>
+                      GHS {points[selectedPoint].spend.toFixed(2)}
+                    </Text>
+                  </Animated.View>
+                )}
+
+              </View>
             </GestureDetector>
 
             {/* Legend — only shown when there's a comparison to explain */}
@@ -1109,8 +1120,8 @@ export default function ReportScreen() {
                   const status = pct >= 100
                     ? { label: "Over budget", color: colors.negative }
                     : pct >= 80
-                    ? { label: "Near limit", color: colors.warning }
-                    : { label: "On track", color: colors.positive };
+                      ? { label: "Near limit", color: colors.warning }
+                      : { label: "On track", color: colors.positive };
                   return (
                     <Animated.View
                       key={item.category}

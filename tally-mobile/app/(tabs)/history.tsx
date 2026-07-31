@@ -136,33 +136,46 @@ export default function HistoryScreen() {
   }
 
   const [exporting, setExporting] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
 
-  function handleExportPress() {
-    showActionSheet({
-      title: 'Export Expenses',
-      message: 'Choose a format',
-      options: [
-        { label: 'Export CSV', icon: <Feather name="file-text" size={18} color={colors.text} />, onPress: exportCsv },
-        { label: 'Export PDF', icon: <Feather name="file" size={18} color={colors.text} />, onPress: exportPdf },
-      ],
-    });
+  function handleDropdownExport(type: 'csv' | 'pdf') {
+    setShowDropdown(false);
+    if (type === 'csv') {
+      exportCsv();
+    } else {
+      exportPdf();
+    }
   }
 
   async function exportCsv() {
     if (exporting) return;
     setExporting(true);
     try {
-      const res = await expenseAPI.exportExpenses(getUserId(), 'csv');
-      const csv = typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
+      let csvContent = '';
+      try {
+        const res = await expenseAPI.exportExpenses(getUserId(), 'csv');
+        csvContent = typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
+      } catch {
+        const header = 'Date,Category,Description,Amount,Payment Method\n';
+        const rows = expenses
+          .map((e) => {
+            const cleanDesc = (e.description || '').replace(/"/g, '""');
+            const amt = e.type === 'income' ? `+${Math.abs(parseFloat(e.amount || '0')).toFixed(2)}` : `-${Math.abs(parseFloat(e.amount || '0')).toFixed(2)}`;
+            return `"${e.date || ''}","${e.category || ''}","${cleanDesc}","${amt}","${e.paymentMethod || 'CASH'}"`;
+          })
+          .join('\n');
+        csvContent = header + rows;
+      }
+
       const fileUri = `${FileSystem.cacheDirectory}tally-expenses.csv`;
-      await FileSystem.writeAsStringAsync(fileUri, csv);
+      await FileSystem.writeAsStringAsync(fileUri, csvContent);
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', dialogTitle: 'Export Tally expenses' });
       } else {
         showToast('Sharing is not supported on this device.', 'error');
       }
     } catch (e: any) {
-      showToast(e?.response?.data?.error || 'Could not export CSV. Please try again.', 'error');
+      showToast('Could not export CSV. Please try again.', 'error');
     } finally {
       setExporting(false);
     }
@@ -373,11 +386,25 @@ export default function HistoryScreen() {
     }, 0);
   }, [filteredExpenses]);
 
+  // Total expenses spent
+  const allSpent = useMemo(() => {
+    return expenses.reduce((sum, e) => {
+      if (e.type === 'income' || e.paymentMethod === 'SETTLEMENT') return sum;
+      return sum + Math.abs(parseFloat(e.amount || '0'));
+    }, 0);
+  }, [expenses]);
+
+  const remainingBalance = useMemo(() => {
+    return totalBudget - allSpent;
+  }, [totalBudget, allSpent]);
+
   const spendProgress = useMemo(() => {
     return scaledBudget > 0 ? Math.min(totalSpent / scaledBudget, 1.0) : 0;
   }, [totalSpent, scaledBudget]);
 
-  const balanceProgress = 1.0;
+  const balanceProgress = useMemo(() => {
+    return totalBudget > 0 ? Math.max(0, Math.min(remainingBalance / totalBudget, 1.0)) : 0;
+  }, [remainingBalance, totalBudget]);
 
   const groupExpensesByDate = (list: any[]) => {
     const groups: { [key: string]: any[] } = {};
@@ -439,202 +466,243 @@ export default function HistoryScreen() {
   return (
     <>
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView
-        style={[styles.container, { backgroundColor: colors.background }]}
-        contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, spacing.xl) }]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.headerRow}>
-          <Text style={[typography.display, { color: colors.text }]} accessibilityRole="header">Analytics & History</Text>
-          <TouchableOpacity
-            style={[styles.exportBtn, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }, exporting && { opacity: 0.5 }]}
-            onPress={handleExportPress}
-            disabled={exporting}
-            activeOpacity={0.8}
-          >
-            {exporting ? <ActivityIndicator size="small" color={colors.text} /> : <Text style={[typography.labelStrong, { color: colors.text }]}>📤 Export</Text>}
-          </TouchableOpacity>
-        </View>
-
-        <View style={[styles.timeFilterContainer, { backgroundColor: colors.neutralBg }]}>
-          {(['today', 'week', 'month', 'year'] as const).map((filter) => {
-            const labelMap = { today: 'Today', week: 'This Week', month: 'This Month', year: 'This Year' };
-            const isActive = activeTimeFilter === filter;
-            return (
+        <ScrollView
+          style={[styles.container, { backgroundColor: colors.background }]}
+          contentContainerStyle={[styles.content, { paddingTop: Math.max(insets.top, spacing.xl) }]}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={[styles.headerRow, { zIndex: 100 }]}>
+            <View style={{ width: 40 }} />
+            <Text style={[typography.title, { fontSize: 25, lineHeight: 30, color: colors.text, textAlign: 'center', flex: 1 }]} numberOfLines={1} adjustsFontSizeToFit accessibilityRole="header">Analytics & History</Text>
+            <View style={{ position: 'relative', width: 40, alignItems: 'flex-end' }}>
               <TouchableOpacity
-                key={filter}
-                style={[styles.timeFilterBtn, isActive && { backgroundColor: colors.surfaceElevated }]}
-                onPress={() => setActiveTimeFilter(filter)}
+                style={[styles.moreBtn, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }, exporting && { opacity: 0.5 }]}
+                onPress={() => setShowDropdown(!showDropdown)}
+                disabled={exporting}
                 activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Options menu"
               >
-                <Text style={[typography.labelStrong, { color: isActive ? colors.text : colors.textSecondary }]}>{labelMap[filter]}</Text>
+                {exporting ? (
+                  <ActivityIndicator size="small" color={colors.text} />
+                ) : (
+                  <Feather name="more-vertical" size={20} color={colors.text} />
+                )}
               </TouchableOpacity>
-            );
-          })}
-        </View>
 
-        <View style={styles.gaugesRow}>
-          <View style={[styles.gaugeCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>
-            <View style={styles.gaugeWrapper}>
-              <Svg width={72} height={72} viewBox="0 0 72 72">
-                <Path d={getGaugePath(36, 36, 28, 1.0)} fill="none" stroke={colors.border} strokeWidth="5.5" strokeLinecap="round" />
-                {totalSpent > 0 && scaledBudget > 0 && (
-                  <Path d={getGaugePath(36, 36, 28, spendProgress)} fill="none" stroke={colors.warning} strokeWidth="5.5" strokeLinecap="round" />
-                )}
-              </Svg>
-              <View style={[styles.gaugeIconContainer, { backgroundColor: colors.neutralBg }]}>
-                <Feather name="upload" size={14} color={colors.warning} />
-              </View>
+              {showDropdown && (
+                <View style={[styles.dropdownMenu, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>
+                  <TouchableOpacity
+                    style={styles.dropdownItem}
+                    onPress={() => handleDropdownExport('csv')}
+                    activeOpacity={0.7}
+                  >
+                    <Feather name="file-text" size={16} color={colors.text} style={{ marginRight: spacing.sm }} />
+                    <Text style={[typography.bodyStrong, { color: colors.text }]}>Export CSV</Text>
+                  </TouchableOpacity>
+
+                  <View style={[styles.dropdownDivider, { backgroundColor: colors.borderSubtle }]} />
+
+                  <TouchableOpacity
+                    style={styles.dropdownItem}
+                    onPress={() => handleDropdownExport('pdf')}
+                    activeOpacity={0.7}
+                  >
+                    <Feather name="file" size={16} color={colors.text} style={{ marginRight: spacing.sm }} />
+                    <Text style={[typography.bodyStrong, { color: colors.text }]}>Export PDF</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
-            <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.xs }]}>Total Spent</Text>
-            <Text style={[typography.bodyStrong, { color: colors.text }]}>GHS {totalSpent.toFixed(0)}</Text>
           </View>
 
-          <View style={[styles.gaugeCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>
-            <View style={styles.gaugeWrapper}>
-              <Svg width={72} height={72} viewBox="0 0 72 72">
-                <Path d={getGaugePath(36, 36, 28, 1.0)} fill="none" stroke={colors.border} strokeWidth="5.5" strokeLinecap="round" />
-                {totalBudget > 0 && (
-                  <Path d={getGaugePath(36, 36, 28, balanceProgress)} fill="none" stroke={colors.positive} strokeWidth="5.5" strokeLinecap="round" />
-                )}
-              </Svg>
-              <View style={[styles.gaugeIconContainer, { backgroundColor: colors.neutralBg }]}>
-                <Feather name="pie-chart" size={14} color={colors.positive} />
-              </View>
-            </View>
-            <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.xs }]}>Balance</Text>
-            <Text style={[typography.bodyStrong, { color: colors.text }]}>GHS {totalBudget.toFixed(0)}</Text>
-          </View>
-        </View>
-
-        <View style={[styles.searchContainer, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-          <Feather name="search" size={18} color={colors.textSecondary} style={{ marginRight: spacing.sm + 2 }} />
-          <TextInput
-            style={[typography.body, { flex: 1, color: colors.text, height: '100%' }]}
-            placeholder="Search filtered list..."
-            placeholderTextColor={colors.textTertiary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {searchQuery !== '' && (
-            <TouchableOpacity
-              onPress={() => setSearchQuery('')}
-              activeOpacity={0.7}
-              style={{ padding: spacing.xs }}
-              hitSlop={10}
-              accessibilityRole="button"
-              accessibilityLabel="Clear search"
-            >
-              <Feather name="x" size={16} color={colors.textSecondary} />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <View style={styles.filterOptionsRow}>
-          <TouchableOpacity
-            style={[
-              styles.momoFilterBtn,
-              { backgroundColor: colors.neutralBg, borderColor: colors.border },
-              momoOnly && { backgroundColor: colors.accentSubtle, borderColor: colors.accent },
-            ]}
-            onPress={() => setMomoOnly(!momoOnly)}
-            activeOpacity={0.8}
-          >
-            <Text style={[typography.labelStrong, { color: momoOnly ? colors.accent : colors.textSecondary }]}>📱 MoMo Only</Text>
-          </TouchableOpacity>
-        </View>
-
-        {groupedExpenses.map((group) => (
-          <View key={group.date} style={styles.dateGroup}>
-            <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm + 2 }]}>{group.date}</Text>
-            {group.items.map((item, idx) => {
-              const isShared = item.isShared || item.type === 'shared';
-              const isMomo = item.paymentMethod === 'MOMO';
-              const isMomoTransfer = item.paymentMethod === 'MOMO_TRANSFER';
-              const isSettlement = item.paymentMethod === 'SETTLEMENT';
-              const { cleanDescription, tags } = parseTagsFromDescription(item.description);
-
+          <View style={[styles.timeFilterContainer, { backgroundColor: colors.neutralBg }]}>
+            {(['today', 'week', 'month', 'year'] as const).map((filter) => {
+              const labelMap = { today: 'Today', week: 'This Week', month: 'This Month', year: 'This Year' };
+              const isActive = activeTimeFilter === filter;
               return (
-                <TransactionRow
-                  key={`${item.type ?? (isShared ? 'shared' : 'personal')}-${item.id}`}
-                  index={idx}
-                  leading={
-                    <CategoryIcon
-                      category={isShared ? 'Shared' : item.category}
-                      customEmoji={isShared ? undefined : getCustomEmoji(item.category)}
-                      size={44}
-                    />
-                  }
-                  title={cleanDescription || item.category}
-                  subtitle={item.category}
-                  accentBorder={isShared}
-                  tags={tags}
-                  badges={
-                    <View style={styles.badgeRow}>
-                      {isSettlement && (
-                        <View style={[styles.badgePill, { backgroundColor: `${colors.positive}15`, borderColor: `${colors.positive}30` }]}>
-                          <Text style={[typography.label, { color: colors.positive }]}>💚 Settlement</Text>
-                        </View>
-                      )}
-                      {isShared && (
-                        <View style={[styles.badgePill, { backgroundColor: colors.primarySubtle }]}>
-                          <Text style={[typography.label, { color: colors.primary }]}>👥 Shared</Text>
-                        </View>
-                      )}
-                      {isShared && item.settled && (
-                        <View style={[styles.badgePill, { backgroundColor: `${colors.positive}15`, borderColor: `${colors.positive}30` }]}>
-                          <Text style={[typography.label, { color: colors.positive }]}>Settled ✓</Text>
-                        </View>
-                      )}
-                      {item.status === 'PENDING' && (
-                        <View style={[styles.badgePill, { backgroundColor: colors.accentSubtle, borderColor: `${colors.accent}40` }]}>
-                          <Text style={[typography.label, { color: colors.accent }]}>⏳ Pending</Text>
-                        </View>
-                      )}
-                      {item.status === 'FAILED' && (
-                        <View style={[styles.badgePill, { backgroundColor: `${colors.negative}15`, borderColor: `${colors.negative}30` }]}>
-                          <Text style={[typography.label, { color: colors.negative }]}>✕ Failed</Text>
-                        </View>
-                      )}
-                      {!isSettlement && (
-                        <View style={[styles.badgePill, { backgroundColor: isMomoTransfer ? colors.accentSubtle : colors.neutralBg }]}>
-                          <Text style={[typography.label, { color: isMomoTransfer ? colors.accent : colors.textSecondary }]}>
-                            {isMomoTransfer ? '📤 Transfer' : isMomo ? '📱 MoMo' : '💵 Cash'}
-                          </Text>
-                        </View>
-                      )}
-                      {item.isRecurring && (
-                        <View style={[styles.badgePill, { backgroundColor: colors.primarySubtle }]}>
-                          <Text style={[typography.label, { color: colors.primary }]}>
-                            🔄 {item.recurrenceType ? item.recurrenceType.charAt(0) + item.recurrenceType.slice(1).toLowerCase() : 'Recurring'}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  }
-                  amount={
-                    (item.type === 'income' || isSettlement)
-                      ? `+GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`
-                      : `-GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`
-                  }
-                  amountColor={(item.type === 'income' || isSettlement) ? colors.positive : colors.negative}
-                  onPress={() => openDetail(item)}
-                  onLongPress={() => handleLongPress(item)}
-                />
+                <TouchableOpacity
+                  key={filter}
+                  style={[styles.timeFilterBtn, isActive && { backgroundColor: colors.surfaceElevated }]}
+                  onPress={() => setActiveTimeFilter(filter)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[typography.labelStrong, { color: isActive ? colors.text : colors.textSecondary }]}>{labelMap[filter]}</Text>
+                </TouchableOpacity>
               );
             })}
           </View>
-        ))}
 
-        {filteredExpenses.length === 0 && (
-          <EmptyState icon="search" title="No transactions found" body="Try changing your filter settings or search query" />
-        )}
+          <View style={styles.gaugesRow}>
+            <View style={[styles.gaugeCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>
+              <View style={styles.gaugeWrapper}>
+                <Svg width={72} height={72} viewBox="0 0 72 72">
+                  <Path d={getGaugePath(36, 36, 28, 1.0)} fill="none" stroke={colors.border} strokeWidth="5.5" strokeLinecap="round" />
+                  {totalSpent > 0 && scaledBudget > 0 && (
+                    <Path d={getGaugePath(36, 36, 28, spendProgress)} fill="none" stroke={spendProgress >= 1 ? colors.negative : colors.warning} strokeWidth="5.5" strokeLinecap="round" />
+                  )}
+                </Svg>
+                <View style={[styles.gaugeIconContainer, { backgroundColor: colors.neutralBg }]}>
+                  <Feather name="upload" size={14} color={spendProgress >= 1 ? colors.negative : colors.warning} />
+                </View>
+              </View>
+              <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.xs }]}>Total Spent</Text>
+              <Text style={[typography.bodyStrong, { color: colors.text }]}>GHS {totalSpent.toFixed(2)}</Text>
+              <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
+                {activeTimeFilter === 'today' ? 'Today' : activeTimeFilter === 'week' ? 'This Week' : activeTimeFilter === 'month' ? 'This Month' : 'This Year'}
+              </Text>
+            </View>
 
-        <Text style={[typography.label, { color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm, fontStyle: 'italic' }]}>
-          Tip: You can also long press a transaction to delete it
-        </Text>
-      </ScrollView>
+            <View style={[styles.gaugeCard, { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle }]}>
+              <View style={styles.gaugeWrapper}>
+                <Svg width={72} height={72} viewBox="0 0 72 72">
+                  <Path d={getGaugePath(36, 36, 28, 1.0)} fill="none" stroke={colors.border} strokeWidth="5.5" strokeLinecap="round" />
+                  {totalBudget > 0 && (
+                    <Path d={getGaugePath(36, 36, 28, balanceProgress)} fill="none" stroke={remainingBalance < 0 ? colors.negative : colors.positive} strokeWidth="5.5" strokeLinecap="round" />
+                  )}
+                </Svg>
+                <View style={[styles.gaugeIconContainer, { backgroundColor: colors.neutralBg }]}>
+                  <Feather name="pie-chart" size={14} color={remainingBalance < 0 ? colors.negative : colors.positive} />
+                </View>
+              </View>
+              <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.xs }]}>Remaining Budget</Text>
+              <Text style={[typography.bodyStrong, { color: remainingBalance < 0 ? colors.negative : colors.text }]}>
+                {remainingBalance >= 0 ? `GHS ${remainingBalance.toFixed(2)}` : `-GHS ${Math.abs(remainingBalance).toFixed(2)}`}
+              </Text>
+              <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
+                of GHS {totalBudget.toFixed(0)} budget
+              </Text>
+            </View>
+          </View>
+
+          <View style={[styles.searchContainer, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
+            <Feather name="search" size={18} color={colors.textSecondary} style={{ marginRight: spacing.sm + 2 }} />
+            <TextInput
+              style={[typography.body, { flex: 1, color: colors.text, height: '100%' }]}
+              placeholder="Search filtered list..."
+              placeholderTextColor={colors.textTertiary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery !== '' && (
+              <TouchableOpacity
+                onPress={() => setSearchQuery('')}
+                activeOpacity={0.7}
+                style={{ padding: spacing.xs }}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+              >
+                <Feather name="x" size={16} color={colors.textSecondary} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={styles.filterOptionsRow}>
+            <TouchableOpacity
+              style={[
+                styles.momoFilterBtn,
+                { backgroundColor: colors.neutralBg, borderColor: colors.border },
+                momoOnly && { backgroundColor: colors.accentSubtle, borderColor: colors.accent },
+              ]}
+              onPress={() => setMomoOnly(!momoOnly)}
+              activeOpacity={0.8}
+            >
+              <Text style={[typography.labelStrong, { color: momoOnly ? colors.accent : colors.textSecondary }]}>📱 MoMo Only</Text>
+            </TouchableOpacity>
+          </View>
+
+          {groupedExpenses.map((group) => (
+            <View key={group.date} style={styles.dateGroup}>
+              <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm + 2 }]}>{group.date}</Text>
+              {group.items.map((item, idx) => {
+                const isShared = item.isShared || item.type === 'shared';
+                const isMomo = item.paymentMethod === 'MOMO';
+                const isMomoTransfer = item.paymentMethod === 'MOMO_TRANSFER';
+                const isSettlement = item.paymentMethod === 'SETTLEMENT';
+                const { cleanDescription, tags } = parseTagsFromDescription(item.description);
+
+                return (
+                  <TransactionRow
+                    key={`${item.type ?? (isShared ? 'shared' : 'personal')}-${item.id}`}
+                    index={idx}
+                    leading={
+                      <CategoryIcon
+                        category={isShared ? 'Shared' : item.category}
+                        customEmoji={isShared ? undefined : getCustomEmoji(item.category)}
+                        size={44}
+                      />
+                    }
+                    title={cleanDescription || item.category}
+                    subtitle={item.category}
+                    accentBorder={isShared}
+                    tags={tags}
+                    badges={
+                      <View style={styles.badgeRow}>
+                        {isSettlement && (
+                          <View style={[styles.badgePill, { backgroundColor: `${colors.positive}15`, borderColor: `${colors.positive}30` }]}>
+                            <Text style={[typography.label, { color: colors.positive }]}>💚 Settlement</Text>
+                          </View>
+                        )}
+                        {isShared && (
+                          <View style={[styles.badgePill, { backgroundColor: colors.primarySubtle }]}>
+                            <Text style={[typography.label, { color: colors.primary }]}>👥 Shared</Text>
+                          </View>
+                        )}
+                        {isShared && item.settled && (
+                          <View style={[styles.badgePill, { backgroundColor: `${colors.positive}15`, borderColor: `${colors.positive}30` }]}>
+                            <Text style={[typography.label, { color: colors.positive }]}>Settled ✓</Text>
+                          </View>
+                        )}
+                        {item.status === 'PENDING' && (
+                          <View style={[styles.badgePill, { backgroundColor: colors.accentSubtle, borderColor: `${colors.accent}40` }]}>
+                            <Text style={[typography.label, { color: colors.accent }]}>⏳ Pending</Text>
+                          </View>
+                        )}
+                        {item.status === 'FAILED' && (
+                          <View style={[styles.badgePill, { backgroundColor: `${colors.negative}15`, borderColor: `${colors.negative}30` }]}>
+                            <Text style={[typography.label, { color: colors.negative }]}>✕ Failed</Text>
+                          </View>
+                        )}
+                        {!isSettlement && (
+                          <View style={[styles.badgePill, { backgroundColor: isMomoTransfer ? colors.accentSubtle : colors.neutralBg }]}>
+                            <Text style={[typography.label, { color: isMomoTransfer ? colors.accent : colors.textSecondary }]}>
+                              {isMomoTransfer ? '📤 Transfer' : isMomo ? '📱 MoMo' : '💵 Cash'}
+                            </Text>
+                          </View>
+                        )}
+                        {item.isRecurring && (
+                          <View style={[styles.badgePill, { backgroundColor: colors.primarySubtle }]}>
+                            <Text style={[typography.label, { color: colors.primary }]}>
+                              🔄 {item.recurrenceType ? item.recurrenceType.charAt(0) + item.recurrenceType.slice(1).toLowerCase() : 'Recurring'}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    }
+                    amount={
+                      (item.type === 'income' || isSettlement)
+                        ? `+GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`
+                        : `-GHS ${Math.abs(parseFloat(item.amount || '0')).toFixed(2)}`
+                    }
+                    amountColor={(item.type === 'income' || isSettlement) ? colors.positive : colors.negative}
+                    onPress={() => openDetail(item)}
+                    onLongPress={() => handleLongPress(item)}
+                  />
+                );
+              })}
+            </View>
+          ))}
+
+          {filteredExpenses.length === 0 && (
+            <EmptyState icon="search" title="No transactions found" body="Try changing your filter settings or search query" />
+          )}
+
+          <Text style={[typography.label, { color: colors.textSecondary, textAlign: 'center', marginTop: spacing.sm, fontStyle: 'italic' }]}>
+            Tip: You can also long press a transaction to delete it
+          </Text>
+        </ScrollView>
       </KeyboardAvoidingView>
       {ConfirmModalComponent}
       {ActionSheetComponent}
@@ -667,13 +735,38 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.xl,
   },
-  exportBtn: {
+  moreBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dropdownMenu: {
+    position: 'absolute',
+    top: 46,
+    right: 0,
+    minWidth: 160,
     borderRadius: radius.lg,
     borderWidth: 1,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    minWidth: 92,
+    paddingVertical: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 1000,
+  },
+  dropdownItem: {
+    flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+  },
+  dropdownDivider: {
+    height: 1,
+    marginVertical: 2,
   },
   timeFilterContainer: {
     flexDirection: 'row',

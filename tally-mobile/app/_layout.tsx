@@ -73,9 +73,9 @@ function RootLayoutContent() {
         } else if (data.screen === "budget-overview" || data.screen === "budget") {
           router.push("/(tabs)/budget");
         } else if (data.screen === "reminders") {
-          router.push("/(tabs)/reminders");
+          router.push("/reminders");
         } else if (data.screen === "report") {
-          router.push("/(tabs)/report");
+          router.push("/report");
         } else if (data.screen === "groups") {
           router.push("/(tabs)/groups");
         } else if (data.screen === "history") {
@@ -127,6 +127,18 @@ function RootLayoutContent() {
         <Stack.Screen
           name="pay-vendor"
           options={{ headerShown: false, title: "Pay Vendor" }}
+        />
+        <Stack.Screen
+          name="reminders"
+          options={{ headerShown: false, title: "Reminders", gestureEnabled: true }}
+        />
+        <Stack.Screen
+          name="profile"
+          options={{ headerShown: false, title: "Profile", gestureEnabled: true }}
+        />
+        <Stack.Screen
+          name="report"
+          options={{ headerShown: false, title: "Financial Report", gestureEnabled: true }}
         />
         <Stack.Screen
           name="onboarding"

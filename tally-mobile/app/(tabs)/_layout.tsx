@@ -97,25 +97,6 @@ export default function TabLayout() {
         }}
       />
       
-      {/* Hidden Screens accessible via navigation links in the app */}
-      <Tabs.Screen
-        name="profile"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="reminders"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="report"
-        options={{
-          href: null,
-        }}
-      />
     </Tabs>
   );
 }
