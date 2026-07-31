@@ -216,7 +216,14 @@ export default function AddScreen() {
       const totals: { [key: string]: number } = {};
       expensesRes.data.forEach((expense: any) => {
         const cat = expense.category || 'Other';
-        totals[cat] = (totals[cat] || 0) + parseFloat(expense.amount || '0');
+        const amt = parseFloat(expense.amount || '0');
+        const pm = expense.paymentMethod;
+        // Income is stored as a positive amount (MoMo vendor transfers are the
+        // exception — money-out despite the positive sign); settlements are
+        // money back. Neither counts toward a category's "spent" total.
+        const isIncome = amt > 0 && pm !== 'MOMO_TRANSFER' && pm !== 'SETTLEMENT';
+        if (isIncome) return;
+        totals[cat] = (totals[cat] || 0) + Math.abs(amt);
       });
       setSpent(totals);
 
@@ -319,9 +326,9 @@ export default function AddScreen() {
         const addedAmt = parseFloat(amount) || 0;
         setSpent(prev => ({
           ...prev,
-          // Expenses are stored as negative (money out); match that sign so the
-          // optimistic value agrees with what a re-fetch returns.
-          [selectedCategory]: (prev[selectedCategory] || 0) - addedAmt
+          // spent[category] is a positive "amount spent" total — match that so
+          // the optimistic value agrees with what a re-fetch returns.
+          [selectedCategory]: (prev[selectedCategory] || 0) + addedAmt
         }));
       }
 
@@ -411,9 +418,9 @@ export default function AddScreen() {
         const addedAmt = parseFloat(amount) || 0;
         setSpent(prev => ({
           ...prev,
-          // Expenses are stored as negative (money out); match that sign so the
-          // optimistic value agrees with what a re-fetch returns.
-          [selectedCategory]: (prev[selectedCategory] || 0) - addedAmt
+          // spent[category] is a positive "amount spent" total — match that so
+          // the optimistic value agrees with what a re-fetch returns.
+          [selectedCategory]: (prev[selectedCategory] || 0) + addedAmt
         }));
       }
 
@@ -652,7 +659,8 @@ export default function AddScreen() {
               icon={<Text style={{ fontSize: 16 }}>📱</Text>}
               selected={paymentMethod === 'MOMO'}
               onPress={() => handlePaymentMethodSelect('MOMO')}
-              style={[{ flex: 1, justifyContent: 'center' }, paymentMethod === 'MOMO' && { backgroundColor: colors.accent }]}
+              tone="accent"
+              style={{ flex: 1, justifyContent: 'center' }}
             />
           </View>
 
@@ -729,7 +737,7 @@ export default function AddScreen() {
             }
             onPress={handleAddExpense}
             loading={loading}
-            style={paymentMethod === 'MOMO' ? { backgroundColor: colors.accent } : undefined}
+            variant={paymentMethod === 'MOMO' ? 'accent' : 'primary'}
           />
         </View>
       </ScrollView>
@@ -809,7 +817,13 @@ export default function AddScreen() {
             {momoStatus !== 'idle' && (
               <View style={styles.momoStatusBox}>
                 {momoStatus !== 'done' && <ActivityIndicator color={colors.accent} size="large" style={{ marginBottom: spacing.md }} />}
-                {momoStatus === 'done' && <Text style={{ fontSize: 48, marginBottom: spacing.md }}>✅</Text>}
+                {momoStatus === 'done' && (
+                  // positive, not the box's amber: `positive` is the app's success
+                  // semantic and what SuccessBurst already uses for this moment.
+                  <View style={[styles.momoDoneMark, { backgroundColor: `${colors.positive}20` }]}>
+                    <Feather name="check-circle" size={28} color={colors.positive} />
+                  </View>
+                )}
                 <Text style={[typography.bodyStrong, { color: colors.accent, textAlign: 'center' }]}>
                   {momoStatus === 'sending' && (transactionType === 'income' ? 'Sending request to your MoMo number...' : 'Sending payment request to your MoMo number...')}
                   {momoStatus === 'confirming' && 'Confirming transaction...'}
@@ -824,7 +838,8 @@ export default function AddScreen() {
                 <Button
                   title={transactionType === 'income' ? 'Request Money' : 'Pay Now'}
                   onPress={handleMomoPayment}
-                  style={{ flex: 2, backgroundColor: colors.accent }}
+                  variant="accent"
+                  style={{ flex: 2 }}
                 />
               </View>
             )}
@@ -1016,6 +1031,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.xl,
     borderWidth: 1,
+  },
+  momoDoneMark: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
   },
   momoStatusBox: {
     alignItems: 'center',

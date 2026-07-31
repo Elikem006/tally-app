@@ -12,7 +12,7 @@ import { typography } from '../../theme/typography';
 import { spacing, radius } from '../../theme/spacing';
 import { duration, easing, pressScale } from '../../theme/motion';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'accent';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 interface ButtonProps {
@@ -126,6 +126,12 @@ function getVariantStyle(
       return { backgroundColor: 'transparent', borderColor: withOpacity(colors.border, opacity), borderWidth: 1, textColor: colors.text };
     case 'danger':
       return { backgroundColor: withOpacity(colors.negative, opacity), borderColor: 'transparent', borderWidth: 0, textColor: '#FFFFFF' };
+    // The amber MoMo controls. Six call sites used to override only the
+    // background via `style`, which left the label on `primary`'s text colour
+    // — white in light mode, 2.15:1 on amber. A variant keeps the fill and its
+    // legible pairing together so they cannot drift apart again.
+    case 'accent':
+      return { backgroundColor: withOpacity(colors.accent, opacity), borderColor: 'transparent', borderWidth: 0, textColor: colors.onAccent };
   }
 }
 

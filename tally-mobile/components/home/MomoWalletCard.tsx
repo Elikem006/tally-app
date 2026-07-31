@@ -16,7 +16,7 @@ interface MomoWalletCardProps {
   onPayVendor: () => void;
 }
 
-const EyelashClosedIcon = ({ size = 18, color = '#D97706' }: { size?: number; color?: string }) => (
+const EyelashClosedIcon = ({ size = 18, color }: { size?: number; color: string }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path d="M2 10C6 15 18 15 22 10" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
     <Path d="M4 12L2 14.5" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
@@ -27,7 +27,7 @@ const EyelashClosedIcon = ({ size = 18, color = '#D97706' }: { size?: number; co
   </Svg>
 );
 
-const EyelashOpenIcon = ({ size = 18, color = '#D97706' }: { size?: number; color?: string }) => (
+const EyelashOpenIcon = ({ size = 18, color }: { size?: number; color: string }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path
       d="M2 12C6 6 18 6 22 12C18 18 6 18 2 12Z"

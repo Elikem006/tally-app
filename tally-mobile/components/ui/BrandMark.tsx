@@ -95,7 +95,15 @@ export function BrandMark({ size = 120, animate = false, delay = 0 }: BrandMarkP
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
 
   return (
-    <Animated.View style={[{ width: size, height: size }, popStyle]}>
+    // The mark carries no information a screen-reader user needs — the
+    // wordmark beneath it in BrandLockup, and each screen's own heading,
+    // already say what this is. Hidden rather than announced as an unlabeled
+    // graphic, matching how the empty-state illustrations are treated.
+    <Animated.View
+      style={[{ width: size, height: size }, popStyle]}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
       <Svg width={size} height={size} viewBox="0 0 120 120" fill="none">
         <Defs>
           <SvgGradient id="brandStroke" x1="0" y1="0" x2="1" y2="1">
@@ -152,7 +160,16 @@ export function BrandLockup({ size = 120, animate = false, delay = 0 }: BrandMar
     <View style={styles.lockup}>
       <BrandMark size={size} animate={animate} delay={delay} />
       <Animated.View style={[styles.wordmarkWrap, textStyle]}>
-        <Text style={[typography.display, { color: colors.text, letterSpacing: -0.5 }]}>Tally</Text>
+        {/* The cold-open screen's primary title. Carries the header role for
+            the same reason every other screen title does since Phase 5 — with
+            the mark itself now hidden, this is the only thing naming the
+            screen. */}
+        <Text
+          style={[typography.display, { color: colors.text, letterSpacing: -0.5 }]}
+          accessibilityRole="header"
+        >
+          Tally
+        </Text>
         <Text style={[typography.label, { color: colors.textSecondary }]}>Every cedi accounted for</Text>
       </Animated.View>
     </View>

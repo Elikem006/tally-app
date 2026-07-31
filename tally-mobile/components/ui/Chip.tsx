@@ -12,16 +12,24 @@ interface ChipProps {
   selected?: boolean;
   onPress?: () => void;
   icon?: ReactNode;
+  /**
+   * Which fill the selected state uses. 'accent' is the amber MoMo treatment —
+   * call sites used to get it by overriding backgroundColor via `style`, which
+   * left the label on onPrimary (white in light mode, 2.15:1 on amber).
+   */
+  tone?: 'primary' | 'accent';
   style?: StyleProp<ViewStyle>;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 /** Filter/selection chip — category filters, date-range picks, quick-add category row. */
-export function Chip({ label, selected = false, onPress, icon, style }: ChipProps) {
+export function Chip({ label, selected = false, onPress, icon, tone = 'primary', style }: ChipProps) {
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
   const scale = useSharedValue(1);
+  const selectedFill = tone === 'accent' ? colors.accent : colors.primary;
+  const selectedText = tone === 'accent' ? colors.onAccent : colors.onPrimary;
 
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
@@ -45,7 +53,7 @@ export function Chip({ label, selected = false, onPress, icon, style }: ChipProp
           paddingVertical: spacing.sm,
           paddingHorizontal: spacing.md,
           borderRadius: radius.pill,
-          backgroundColor: selected ? colors.primary : colors.surfaceElevated,
+          backgroundColor: selected ? selectedFill : colors.surfaceElevated,
           borderWidth: selected ? 0 : 1,
           borderColor: colors.border,
         },
@@ -54,7 +62,7 @@ export function Chip({ label, selected = false, onPress, icon, style }: ChipProp
       ]}
     >
       {icon}
-      <Text style={[typography.label, { color: selected ? colors.onPrimary : colors.textSecondary }]}>{label}</Text>
+      <Text style={[typography.label, { color: selected ? selectedText : colors.textSecondary }]}>{label}</Text>
     </AnimatedPressable>
   );
 }

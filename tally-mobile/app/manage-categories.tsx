@@ -17,6 +17,7 @@ export default function ManageCategoriesScreen() {
   const colors = getExtendedColors(theme, baseColors);
   const [categories, setCategories] = useState<CustomCategory[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [newEmoji, setNewEmoji] = useState('');
@@ -36,12 +37,15 @@ export default function ManageCategoriesScreen() {
 
   async function fetchCategories(showLoading = true) {
     if (showLoading) setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
       const res = await categoriesAPI.getUserCategories(getUserId());
       setCategories(res.data || []);
     } catch {
-      showToast('Could not load categories', 'error');
+      // Persistent, not a toast — a failed fetch must not fall through to
+      // the "No custom categories yet" empty state below, which would tell
+      // the user they have zero categories when the request just failed.
+      setError('Could not load your categories.');
     } finally {
       hasLoadedOnce.current = true;
       setLoading(false);
@@ -70,7 +74,7 @@ export default function ManageCategoriesScreen() {
 
   function confirmDelete(cat: CustomCategory) {
     showConfirm({
-      icon: '📦',
+      icon: 'trash-2',
       title: 'Delete Category',
       message: `Are you sure you want to delete the "${cat.name}" category? Existing expenses with this category will keep their category name.`,
       confirmText: 'Delete',
@@ -106,6 +110,14 @@ export default function ManageCategoriesScreen() {
               <Skeleton key={i} height={62} borderRadius={radius.lg} style={{ marginBottom: spacing.sm }} />
             ))}
           </View>
+        ) : error && categories.length === 0 ? (
+          <EmptyState
+            icon="alert-circle"
+            title="Couldn't load your categories"
+            body={error}
+            ctaLabel="Try again"
+            onPressCta={() => fetchCategories(true)}
+          />
         ) : categories.length === 0 ? (
           <EmptyState icon="tag" title="No custom categories yet" body='Tap "+ Add" to create your first one' />
         ) : (
@@ -131,7 +143,7 @@ export default function ManageCategoriesScreen() {
         )}
 
         <Modal visible={showAddModal} transparent animationType="fade" onRequestClose={() => setShowAddModal(false)}>
-          <View style={styles.modalOverlay}>
+          <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
             <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={() => setShowAddModal(false)} activeOpacity={1} />
             <View style={[styles.modalCard, { backgroundColor: colors.surfaceHigh, borderColor: colors.borderSubtle }]}>
               <Text style={[typography.headline, { color: colors.text, textAlign: 'center', marginBottom: spacing.lg }]}>New Category</Text>
@@ -190,7 +202,9 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: '#00000080',
+    // Colour comes from colors.overlay inline — the token is theme-aware
+    // (0.5 scrim in light, 0.72 in dark) and this was the last hardcoded
+    // scrim in the app.
     justifyContent: 'center',
     alignItems: 'center',
     padding: spacing.xl,

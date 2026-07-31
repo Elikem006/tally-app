@@ -241,7 +241,7 @@ export default function ProfileScreen() {
 
   function handleLogout() {
     showConfirm({
-      icon: '👋',
+      icon: 'log-out',
       title: 'Log Out',
       message: 'Are you sure you want to log out of Tally?',
       confirmText: 'Log Out',
@@ -257,7 +257,7 @@ export default function ProfileScreen() {
 
   function handleRemovePhone() {
     showConfirm({
-      icon: '📱',
+      icon: 'smartphone',
       title: 'Remove MoMo Number',
       message: 'Are you sure you want to remove your MoMo number? You will need to re-enter it to make MoMo payments.',
       confirmText: 'Remove',

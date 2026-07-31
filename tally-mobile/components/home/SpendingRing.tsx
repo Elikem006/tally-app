@@ -138,7 +138,17 @@ export function SpendingRing({ categoryTotals }: SpendingRingProps) {
   return (
     <View style={styles.wrap}>
       <View style={{ width: SIZE, height: SIZE }}>
-        <Svg width={SIZE} height={SIZE}>
+        {/* The arcs are tappable, but they duplicate the legend chips below —
+            which carry the full category/amount/percentage label and the
+            selected state. Left in the tree they would be a second set of
+            unlabeled touchables saying nothing, so the graphic is hidden and
+            the legend is the accessible control. */}
+        <Svg
+          width={SIZE}
+          height={SIZE}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        >
           {/* Track — keeps the ring readable when one category dominates */}
           <Circle
             cx={SIZE / 2}
@@ -159,15 +169,35 @@ export function SpendingRing({ categoryTotals }: SpendingRingProps) {
           ))}
         </Svg>
 
-        {/* Centre readout — crossfades when the selection changes */}
-        <View style={styles.centre} pointerEvents="none">
+        {/* Centre readout — crossfades when the selection changes. Announced
+            as a live region so selecting a category confirms what the centre
+            now shows; the subtree remounts on selection, so it fires exactly
+            on change rather than on every render. */}
+        <View
+          style={styles.centre}
+          pointerEvents="none"
+          // Grouped so the label reads once, rather than the caption, amount
+          // and percentage being announced as three loose fragments.
+          accessible
+          accessibilityLiveRegion="polite"
+          accessibilityLabel={
+            active
+              ? `${active.category}, GHS ${active.amount.toFixed(2)}, ${(active.fraction * 100).toFixed(0)} percent of spending`
+              : `Total spent, GHS ${total.toFixed(2)}`
+          }
+        >
           <Animated.View key={active?.category ?? 'total'} entering={FadeIn.duration(duration.fast)} style={styles.centreInner}>
             <Text style={[typography.caption, { color: colors.textSecondary }]} numberOfLines={1}>
               {active ? active.category.toUpperCase() : 'TOTAL SPENT'}
             </Text>
             <AmountText value={active ? active.amount : total} size="display" />
             {active && (
-              <Text style={[typography.caption, { color: active.color }]}>
+              // Was the category's own colour, which measured 1.86–2.79:1 on
+              // the light surface — every category failed AA. The category is
+              // already identified by the arc and the legend dot, so the text
+              // does not need to carry it. Same remedy Phase 5 applied to
+              // textTertiary: change the colour, keep the size.
+              <Text style={[typography.caption, { color: colors.textSecondary }]}>
                 {(active.fraction * 100).toFixed(0)}% of spending
               </Text>
             )}

@@ -184,7 +184,7 @@ export default function RemindersScreen() {
 
   function handleDelete(reminderId: string) {
     showConfirm({
-      icon: '🔔',
+      icon: 'trash-2',
       title: 'Delete Reminder',
       message: 'Are you sure you want to delete this reminder?',
       confirmText: 'Delete',

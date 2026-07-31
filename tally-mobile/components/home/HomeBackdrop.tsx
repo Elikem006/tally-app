@@ -34,7 +34,15 @@ export function HomeBackdrop() {
   const peak = isDark ? 0.2 : 0.1;
 
   return (
-    <View style={styles.wrap} pointerEvents="none">
+    // pointerEvents alone only stops touches — on Android the view is still
+    // traversed and announced. Hidden the same way Skeleton and EmptyState's
+    // illustration wrapper are.
+    <View
+      style={styles.wrap}
+      pointerEvents="none"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
       <Svg width="100%" height={GLOW_HEIGHT}>
         <Defs>
           <RadialGradient id="homeGlow" cx="50%" cy="0%" rx="80%" ry="100%">

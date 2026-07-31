@@ -155,7 +155,7 @@ export default function LoginScreen() {
                   rememberMe && { backgroundColor: colors.primary, borderColor: colors.primary },
                 ]}
               >
-                {rememberMe && <Feather name="check" size={10} color="#ffffff" />}
+                {rememberMe && <Feather name="check" size={10} color={colors.onPrimary} />}
               </View>
               <Text style={[typography.caption, { color: colors.textSecondary }]}>Remember me</Text>
             </TouchableOpacity>

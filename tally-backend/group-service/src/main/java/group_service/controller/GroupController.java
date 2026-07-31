@@ -2,6 +2,7 @@ package group_service.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -259,6 +260,13 @@ public class GroupController {
             // @Version caught it and rolled back. Without this catch, the
             // blanket Exception handler below would swallow it into a 400
             // before it ever reached GlobalExceptionHandler's 409 mapping.
+            return ResponseEntity.status(409)
+                    .body(Map.of("error", "This settlement was already processed, please refresh", "success", false));
+        } catch (DataIntegrityViolationException e) {
+            // Two settle-up requests for the SAME user raced past the
+            // existsBySharedExpenseIdAndUserId check together — the
+            // UNIQUE(shared_expense_id, user_id) constraint on
+            // shared_expense_settlements caught the loser.
             return ResponseEntity.status(409)
                     .body(Map.of("error", "This settlement was already processed, please refresh", "success", false));
         } catch (Exception e) {

@@ -29,6 +29,8 @@ export interface ExtendedThemeColors extends ThemeColors {
   warningSubtle: string;
   /** Text/icon color that sits legibly on a `primary` fill (filled buttons, selected chips). */
   onPrimary: string;
+  /** Text/icon color that sits legibly on an `accent` fill — the amber MoMo controls. */
+  onAccent: string;
   /** Feature-card gradient, brand-violet family. Start color. */
   heroGradientFrom: string;
   /** Feature-card gradient, brand-violet family. End color. */
@@ -57,10 +59,17 @@ const lightExtensions: Omit<ExtendedThemeColors, keyof ThemeColors> = {
   warningSubtle: 'rgba(245, 158, 11, 0.14)',
   // light `primary` (#8B5CF6) is dark enough that white text clears AA on it.
   onPrimary: '#FFFFFF',
+  // Amber is light in BOTH themes, so unlike onPrimary this does not flip —
+  // white on #F59E0B measures 2.15:1, the worst pairing in the app. Near-black
+  // clears 8.32:1 here and 10.70:1 on the dark amber.
+  onAccent: '#1A1523',
   heroGradientFrom: '#7C3AED',
   heroGradientTo: '#5B21B6',
   onHero: '#FFFFFF',
-  onHeroDim: 'rgba(255, 255, 255, 0.72)',
+  // 0.72 measured 3.70:1 against the gradient's lighter end (#7C3AED) — below
+  // the 4.5:1 AA minimum, and this token is only ever used on 11–13px text,
+  // so the large-text allowance does not apply. 0.88 clears at 4.72:1.
+  onHeroDim: 'rgba(255, 255, 255, 0.88)',
   heroChipBg: 'rgba(255, 255, 255, 0.18)',
 };
 
@@ -80,10 +89,13 @@ const darkExtensions: Omit<ExtendedThemeColors, keyof ThemeColors> = {
   // dark `primary` (#A78BFA) is a light violet — white text on it fails AA,
   // so filled controls invert to near-black instead.
   onPrimary: '#1A1523',
+  onAccent: '#1A1523',
   heroGradientFrom: '#5B21B6',
   heroGradientTo: '#2E1065',
   onHero: '#F5F3FF',
-  onHeroDim: 'rgba(245, 243, 255, 0.66)',
+  // Same failure in dark: 0.66 measured 4.39:1 against #5B21B6. 0.78 clears
+  // at 5.56:1.
+  onHeroDim: 'rgba(245, 243, 255, 0.78)',
   heroChipBg: 'rgba(255, 255, 255, 0.12)',
 };
 
