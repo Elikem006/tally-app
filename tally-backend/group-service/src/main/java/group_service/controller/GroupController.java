@@ -72,6 +72,9 @@ public class GroupController {
             Long userId = Long.parseLong(userIdStr);
             GroupMember member = groupService.addMember(groupId, userId, AuthGuard.authUserId(httpRequest));
             return ResponseEntity.status(HttpStatus.CREATED).body(member);
+        } catch (group_service.client.DownstreamUnavailableException e) {
+            return ResponseEntity.status(503)
+                    .body(Map.of("error", e.getMessage(), "success", false));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", errorMessage(e), "success", false));
