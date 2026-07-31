@@ -285,14 +285,13 @@ public class MoMoController {
                         .body(Map.of("error", "Transfer limit reached (10 per hour). Please try again later.", "success", false));
             }
 
-            if (!isValidPhone(recipientPhone.trim())) {
-                return ResponseEntity.badRequest()
-                        .body(Map.of("error", "Recipient phone must contain only digits (9–15 characters)", "success", false));
-            }
-
             if (recipientPhone == null || recipientPhone.isBlank()) {
                 return ResponseEntity.badRequest()
                         .body(Map.of("error", "recipientPhone is required", "success", false));
+            }
+            if (!isValidPhone(recipientPhone.trim())) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Recipient phone must contain only digits (9–15 characters)", "success", false));
             }
             if (amountStr == null || amountStr.isBlank()) {
                 return ResponseEntity.badRequest()
