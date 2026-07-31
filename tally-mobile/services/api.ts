@@ -1,12 +1,15 @@
 import axios from "axios";
 
 // Set to true to use the local client-side mock backend, false to use the live Spring Boot server
-const USE_MOCK = true;
+const USE_MOCK = false;
 
 // ─── Backend URL ─────────────────────────────────────────────────────────────
 // Comes from EXPO_PUBLIC_API_URL in .env.local (local dev — the hotspot/LAN IP
 // of the machine running docker-compose) or .env.production (Railway gateway).
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || (USE_MOCK ? "http://mock-api.local" : undefined);
+// To switch: edit the value in the env file, then restart Expo with
+// `npx expo start --clear` — env vars are inlined at build time, so a plain
+// reload/hot-refresh will NOT pick up the change.
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 if (!BASE_URL) {
   throw new Error(
     "EXPO_PUBLIC_API_URL is not set. Create tally-mobile/.env.local from " +
