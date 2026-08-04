@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web",
+    "start": "node scripts/free-metro-port.js 8081 && expo start",
+    "android": "node scripts/free-metro-port.js 8081 && expo start --android",
+    "ios": "node scripts/free-metro-port.js 8081 && expo start --ios",
+    "web": "node scripts/free-metro-port.js 8081 && expo start --web",
     "update-ip": "powershell -ExecutionPolicy Bypass -File scripts/update-api-ip.ps1"
   },
   "dependencies": {
@@ -17,7 +17,7 @@
     "@react-native-community/datetimepicker": "8.4.4",
     "@react-native-community/netinfo": "11.4.1",
     "axios": "^1.16.0",
-    "expo": "~54.0.35",
+    "expo": "~54.0.36",
     "expo-blur": "~15.0.8",
     "expo-constants": "~18.0.13",
     "expo-device": "~8.0.10",
