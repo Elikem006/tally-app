@@ -29,6 +29,7 @@ export default function LoginScreen() {
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [checkingRemembered, setCheckingRemembered] = useState(true);
+  const [loginFailed, setLoginFailed] = useState(false);
 
   // Auto-login: restore a remembered session and skip the login screen entirely
   useEffect(() => {
@@ -53,6 +54,7 @@ export default function LoginScreen() {
       return;
     }
 
+    setLoginFailed(false);
     setLoading(true);
     try {
       const response = await authAPI.login(email, password);
@@ -93,6 +95,15 @@ export default function LoginScreen() {
           ? 'Cannot reach server. Check that the backend is running and the IP in api.ts is correct.'
           : error.message || 'Something went wrong');
       showToast(message, 'error');
+      // The login endpoint returns 400 for bad credentials (client-side already
+      // guards the "missing fields" 400 case above, so any 400 reaching here is
+      // a real mismatch). It deliberately doesn't distinguish wrong password
+      // from unregistered email, to avoid leaking which emails are registered —
+      // either way, forgot-password is the relevant next step, so nudge toward
+      // it instead of leaving the user stuck after the toast fades.
+      if (error.response?.status === 400) {
+        setLoginFailed(true);
+      }
     }
   }
 
@@ -122,7 +133,10 @@ export default function LoginScreen() {
             label="Email Address"
             placeholder="Enter your email"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(text) => {
+              setEmail(text);
+              setLoginFailed(false);
+            }}
             keyboardType="email-address"
             autoCapitalize="none"
           />
@@ -131,7 +145,10 @@ export default function LoginScreen() {
             label="Password"
             placeholder="Enter your password"
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(text) => {
+              setPassword(text);
+              setLoginFailed(false);
+            }}
             secureTextEntry={!showPassword}
             rightElement={
               <TouchableOpacity
@@ -145,6 +162,20 @@ export default function LoginScreen() {
               </TouchableOpacity>
             }
           />
+
+          {loginFailed && (
+            <TouchableOpacity
+              style={[styles.failedHint, { backgroundColor: colors.primarySubtle }]}
+              onPress={() => router.push('/(auth)/forgot-password')}
+              activeOpacity={0.7}
+            >
+              <Feather name="help-circle" size={16} color={colors.primary} />
+              <Text style={[typography.label, { color: colors.primary, flex: 1 }]}>
+                Wrong password? Reset it here
+              </Text>
+              <Feather name="chevron-right" size={16} color={colors.primary} />
+            </TouchableOpacity>
+          )}
 
           <View style={styles.optionsRow}>
             <TouchableOpacity style={styles.checkboxContainer} onPress={() => setRememberMe(!rememberMe)} activeOpacity={0.8}>
@@ -198,6 +229,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  failedHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderRadius: 10,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
   checkboxContainer: {
     flexDirection: 'row',
