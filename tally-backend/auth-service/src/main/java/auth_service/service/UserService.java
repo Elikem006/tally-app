@@ -137,12 +137,16 @@ public class UserService {
         try {
             mailService.sendPasswordResetOtp(user.getEmail(), otp);
         } catch (Exception e) {
+            // Logged unconditionally — the client-facing error is deliberately
+            // generic (no SMTP/provider detail leaked to the caller), so this is
+            // the only place the real cause (bad credentials, provider down,
+            // connection timeout) is visible if forgot-password breaks live.
+            System.err.println("Password reset email failed to send: " + e.getClass().getSimpleName() + ": " + e.getMessage());
             if (!otpDebugExpose) {
                 throw new RuntimeException("Failed to send the reset email. Please try again shortly.");
             }
             // Debug mode: SMTP isn't configured yet (or is down) — don't block
             // local dev/demo, the OTP is still returned to the caller below.
-            System.err.println("Password reset email failed to send (debug mode, continuing): " + e.getMessage());
         }
 
         return otpDebugExpose ? otp : null;

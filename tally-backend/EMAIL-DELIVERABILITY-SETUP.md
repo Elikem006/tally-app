@@ -49,24 +49,23 @@ works.
 
 ## 5. Update the env vars
 
-Both SMTP and SendGrid's SMTP relay work with the standard `spring.mail.*`
-config already wired up — no code change either way. Set these 6 values to
-what the ESP dashboard gives you:
+Email is sent via Brevo's **HTTP API** (`POST https://api.brevo.com/v3/smtp/email`),
+not SMTP — Railway blocks outbound SMTP (ports 465/587/2525) on non-Pro plans,
+which silently timed out every send regardless of ESP/credentials. The HTTP
+API has no such restriction, and this is a settled decision, not an open
+choice between ESPs anymore — `MailService` speaks Brevo's API directly.
 
-| Var | Mailgun example | SendGrid example |
-|---|---|---|
-| `MAIL_HOST` | `smtp.mailgun.org` | `smtp.sendgrid.net` |
-| `MAIL_PORT` | `587` | `587` |
-| `MAIL_USERNAME` | `postmaster@yourdomain.com` | `apikey` (literal string) |
-| `MAIL_PASSWORD` | the SMTP password Mailgun issues | your SendGrid API key |
-| `MAIL_FROM_ADDRESS` | `noreply@yourdomain.com` | `noreply@yourdomain.com` |
-| `MAIL_FROM_NAME` | `Tally` | `Tally` |
+| Var | Value |
+|---|---|
+| `BREVO_API_KEY` | Brevo dashboard → Settings → **SMTP & API** → **API Keys** tab → generate a key. **Not** the SMTP password from the SMTP tab — that's a different credential and won't work here. |
+| `MAIL_FROM_ADDRESS` | `noreply@yourdomain.com` |
+| `MAIL_FROM_NAME` | `Tally` |
 
 Leave `MAIL_REPLY_TO` unset unless you want a different reply address than
 `MAIL_FROM_ADDRESS`.
 
 Set these in **two places**:
-- Local: `tally-backend/auth-service/src/main/resources/application-local.properties` (gitignored) — replace the MailHog block.
+- Local: `tally-backend/auth-service/src/main/resources/application-local.properties` (gitignored).
 - Railway: `auth-service`'s Variables tab.
 
 Once real email works, set `OTP_DEBUG_EXPOSE=false` (or just leave it unset)

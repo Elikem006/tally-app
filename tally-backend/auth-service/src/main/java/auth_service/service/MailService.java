@@ -1,23 +1,40 @@
 package auth_service.service;
 
-import jakarta.mail.internet.MimeMessage;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+
 /**
- * Outbound transactional email. One method today (the password-reset OTP);
- * every message is sent as real multipart (HTML + plain-text alternative) —
- * a text-only or malformed-MIME message is itself a spam signal, independent
- * of which domain/ESP eventually sends it.
+ * Outbound transactional email via Brevo's HTTP API (not SMTP) — Railway
+ * blocks outbound SMTP (ports 465/587/2525) on non-Pro plans, which silently
+ * times out every send regardless of ESP/credentials. The HTTP API has no
+ * such restriction. One method today (the password-reset OTP); every
+ * message is sent with both an HTML and plain-text body — a text-only or
+ * malformed-MIME message is itself a spam signal, independent of ESP.
  */
 @Service
 public class MailService {
 
+    private static final String BREVO_SEND_URL = "https://api.brevo.com/v3/smtp/email";
+
+    private static final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .build();
+
     @Autowired
-    private JavaMailSender mailSender;
+    private ObjectMapper objectMapper;
+
+    @Value("${brevo.api-key}")
+    private String apiKey;
 
     @Value("${mail.from-address}")
     private String fromAddress;
@@ -56,16 +73,33 @@ public class MailService {
                 "<p style=\"font-size:13px;line-height:1.5;color:#999999;margin:24px 0 0;\">— Tally</p>" +
                 "</td></tr></table></body></html>";
 
-        MimeMessage message = mailSender.createMimeMessage();
-        // true = multipart; UTF-8 so the OTP box/dash render correctly everywhere
-        MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-        helper.setFrom(fromAddress, fromName);
-        helper.setReplyTo(replyTo);
-        helper.setTo(toEmail);
-        helper.setSubject(subject);
-        // Plain-text first, HTML second — the second call marks the message multipart/alternative
-        helper.setText(plainText, html);
+        Map<String, Object> body = Map.of(
+                "sender", Map.of("name", fromName, "email", fromAddress),
+                "to", List.of(Map.of("email", toEmail)),
+                "replyTo", Map.of("email", replyTo),
+                "subject", subject,
+                "htmlContent", html,
+                "textContent", plainText
+        );
 
-        mailSender.send(message);
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(BREVO_SEND_URL))
+                .header("api-key", apiKey)
+                .header("accept", "application/json")
+                .header("content-type", "application/json")
+                .timeout(Duration.ofSeconds(10))
+                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body)))
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        // Brevo returns 201 with a messageId on success; anything else is a
+        // real API-side error (bad key, unverified sender, etc.) with a
+        // structured JSON body — surface it so the caller's catch block logs
+        // something actionable instead of a generic failure.
+        if (response.statusCode() != 201) {
+            throw new RuntimeException(
+                    "Brevo API returned " + response.statusCode() + ": " + response.body());
+        }
     }
 }
