@@ -160,7 +160,7 @@ export default function HistoryScreen() {
         const rows = expenses
           .map((e) => {
             const cleanDesc = (e.description || '').replace(/"/g, '""');
-            const amt = e.type === 'income' ? `+${Math.abs(parseFloat(e.amount || '0')).toFixed(2)}` : `-${Math.abs(parseFloat(e.amount || '0')).toFixed(2)}`;
+            const amt = (e.type === 'income' || e.paymentMethod === 'SETTLEMENT') ? `+${Math.abs(parseFloat(e.amount || '0')).toFixed(2)}` : `-${Math.abs(parseFloat(e.amount || '0')).toFixed(2)}`;
             return `"${e.date || ''}","${e.category || ''}","${cleanDesc}","${amt}","${e.paymentMethod || 'CASH'}"`;
           })
           .join('\n');
@@ -190,14 +190,14 @@ export default function HistoryScreen() {
     const from = list.length > 0 ? list[0].date : '—';
     const to = list.length > 0 ? list[list.length - 1].date : '—';
     const totalSpentAbs = expenses
-      .filter((e) => e.type !== 'income')
+      .filter((e) => e.type !== 'income' && e.paymentMethod !== 'SETTLEMENT')
       .reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || '0')), 0);
 
     const rows = [...expenses]
       .sort((a, b) => String(b.date).localeCompare(String(a.date)))
       .map((e) => {
         const amt = parseFloat(e.amount || '0');
-        const sign = e.type === 'income' ? '+' : '-';
+        const sign = (e.type === 'income' || e.paymentMethod === 'SETTLEMENT') ? '+' : '-';
         return `<tr>
           <td>${htmlEscape(e.date)}</td>
           <td>${htmlEscape(e.category)}</td>

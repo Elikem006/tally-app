@@ -866,7 +866,12 @@ export default function HomeScreen() {
               const isShared = item.isShared || item.type === 'shared';
               const isMomo = item.paymentMethod === 'MOMO';
               const { cleanDescription, tags } = parseTagsFromDescription(item.description);
-              const isIncome = item.type === 'income';
+              // SETTLEMENT payment method covers money coming back to the user
+              // (a group member paying off what they owed) — same treatment
+              // as history.tsx's isSettlement check and this screen's own
+              // totalIncome/totalSpent filters below, which already exclude
+              // SETTLEMENT from spend and count it as incoming.
+              const isIncome = item.type === 'income' || item.paymentMethod === 'SETTLEMENT';
 
               return (
                 <TransactionRow
