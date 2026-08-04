@@ -8,7 +8,7 @@
     "icon": "./assets/icon-tally.png",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#0F1115"
     },
