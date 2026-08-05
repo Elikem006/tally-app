@@ -4,14 +4,19 @@
  * which has a new native-module API in v3 that breaks in Expo Go.
  */
 import * as FileSystem from "expo-file-system/legacy";
-import { getUserId } from "./storage";
+import { getToken, getUserId } from "./storage";
 
 // Notifications are per-account, not per-device. These paths used to be fixed
 // filenames, so every account signing in on the same device read and wrote one
 // shared history — each user saw everyone else's alerts. Scoping by userId
 // keeps them separate; logging out simply stops resolving to that file.
-const historyFile = () => `${FileSystem.documentDirectory}tally_notif_history_${getUserId() || "anon"}.json`;
-const seenFile    = () => `${FileSystem.documentDirectory}tally_seen_alerts_${getUserId() || "anon"}.json`;
+//
+// Gated on the token rather than the id alone: resetCurrentUser() leaves
+// userId at its '1' placeholder on logout, which would otherwise resolve a
+// logged-out session to the real user #1's file.
+const scope       = () => (getToken() ? getUserId() || "anon" : "anon");
+const historyFile = () => `${FileSystem.documentDirectory}tally_notif_history_${scope()}.json`;
+const seenFile    = () => `${FileSystem.documentDirectory}tally_seen_alerts_${scope()}.json`;
 const MAX_ITEMS   = 100;
 
 export type NotifType =
