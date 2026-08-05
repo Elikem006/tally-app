@@ -80,7 +80,7 @@ export default function HelpScreen() {
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
   const [expandedFaq, setExpandedFaq] = useState<string | null>(null);
-  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+  const { showToast, toastMessage, toastType, toastVisible, toastNonce, hideToast } = useToast();
 
   function toggleFaq(question: string) {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -176,7 +176,7 @@ export default function HelpScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
-      <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
+      <Toast message={toastMessage} type={toastType} visible={toastVisible} nonce={toastNonce} onHide={hideToast} />
     </View>
   );
 }

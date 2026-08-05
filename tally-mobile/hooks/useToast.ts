@@ -6,6 +6,11 @@ export function useToast() {
   const [toastVisible, setToastVisible] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<ToastType>('info');
+  // Bumped on every showToast so a toast fired while one is already on screen
+  // restarts the animation. Without it setToastVisible(true) is a no-op on an
+  // already-visible toast, and the new message inherits the old timer — a
+  // repeated submit tap could flash the error for a few frames.
+  const [toastNonce, setToastNonce] = useState(0);
 
   function showToast(message: string, type: ToastType = 'info') {
     // "Successful submit" is one of the four places the motion phase said
@@ -28,11 +33,12 @@ export function useToast() {
     setToastMessage(message);
     setToastType(type);
     setToastVisible(true);
+    setToastNonce((n) => n + 1);
   }
 
   function hideToast() {
     setToastVisible(false);
   }
 
-  return { showToast, toastMessage, toastType, toastVisible, hideToast };
+  return { showToast, toastMessage, toastType, toastVisible, toastNonce, hideToast };
 }

@@ -75,7 +75,7 @@ export default function BudgetScreen() {
   const [fetching, setFetching] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+  const { showToast, toastMessage, toastType, toastVisible, toastNonce, hideToast } = useToast();
   const { showConfirm, ConfirmModalComponent } = useConfirmModal();
 
   const notificationsSentRef = useRef(false);
@@ -174,6 +174,20 @@ export default function BudgetScreen() {
 
   async function handleSave() {
     const userId = getUserId();
+
+    // decimal-pad still permits "1.2.3" and pasted text, and a non-numeric or
+    // negative limit previously reached the API and came back as the generic
+    // "Failed to save budgets" — which doesn't say which category is wrong.
+    for (const category of CATEGORIES) {
+      const raw = (limits[category] || '').trim();
+      if (raw === '') continue;
+      const parsed = Number(raw);
+      if (isNaN(parsed) || parsed < 0) {
+        showToast(`Enter a valid amount for ${category}`, 'error');
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       for (const category of CATEGORIES) {
@@ -443,7 +457,7 @@ export default function BudgetScreen() {
         </View>
       </ScrollView>
 
-      <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
+      <Toast message={toastMessage} type={toastType} visible={toastVisible} nonce={toastNonce} onHide={hideToast} />
       {ConfirmModalComponent}
     </KeyboardAvoidingView>
   );

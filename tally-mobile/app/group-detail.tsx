@@ -74,7 +74,7 @@ export default function GroupDetailScreen() {
   const [settlingAmount, setSettlingAmount] = useState(0);
   const [momoLoading, setMomoLoading] = useState(false);
 
-  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+  const { showToast, toastMessage, toastType, toastVisible, toastNonce, hideToast } = useToast();
   const { showConfirm, ConfirmModalComponent } = useConfirmModal();
 
   useEffect(() => {
@@ -140,6 +140,12 @@ export default function GroupDetailScreen() {
   async function handleAddExpense() {
     if (!expenseAmount || !expenseDescription) {
       showToast('Please enter amount and description', 'error');
+      return;
+    }
+    // Matches the personal add-expense rule — "0" and "-5" are truthy strings,
+    // so the check above let them through to the API unvalidated.
+    if (isNaN(parseFloat(expenseAmount)) || parseFloat(expenseAmount) <= 0) {
+      showToast('Please enter a valid amount greater than zero', 'error');
       return;
     }
 
@@ -810,7 +816,7 @@ export default function GroupDetailScreen() {
       </Modal>
 
       {ConfirmModalComponent}
-      <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
+      <Toast message={toastMessage} type={toastType} visible={toastVisible} nonce={toastNonce} onHide={hideToast} />
     </KeyboardAvoidingView>
   );
 }

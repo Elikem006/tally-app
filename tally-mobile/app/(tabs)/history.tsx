@@ -72,7 +72,7 @@ export default function HistoryScreen() {
   const [activeTimeFilter, setActiveTimeFilter] = useState<'today' | 'week' | 'month' | 'year'>('month');
   const [momoOnly, setMomoOnly] = useState(false);
 
-  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+  const { showToast, toastMessage, toastType, toastVisible, toastNonce, hideToast } = useToast();
   const { showConfirm, ConfirmModalComponent } = useConfirmModal();
   const { showActionSheet, ActionSheetComponent } = useActionSheet();
 
@@ -706,7 +706,7 @@ export default function HistoryScreen() {
       </KeyboardAvoidingView>
       {ConfirmModalComponent}
       {ActionSheetComponent}
-      <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
+      <Toast message={toastMessage} type={toastType} visible={toastVisible} nonce={toastNonce} onHide={hideToast} />
       <ExpenseDetailModal
         visible={showExpenseDetail}
         expense={selectedExpense}

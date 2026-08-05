@@ -22,7 +22,7 @@ export default function ManageCategoriesScreen() {
   const [newName, setNewName] = useState('');
   const [newEmoji, setNewEmoji] = useState('');
   const [creating, setCreating] = useState(false);
-  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+  const { showToast, toastMessage, toastType, toastVisible, toastNonce, hideToast } = useToast();
   const { showConfirm, ConfirmModalComponent } = useConfirmModal();
 
   // First load only — returning from the add-category modal re-focuses this
@@ -166,7 +166,7 @@ export default function ManageCategoriesScreen() {
         </Modal>
 
         {ConfirmModalComponent}
-        <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
+        <Toast message={toastMessage} type={toastType} visible={toastVisible} nonce={toastNonce} onHide={hideToast} />
       </View>
     </KeyboardAvoidingView>
   );

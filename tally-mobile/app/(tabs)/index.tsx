@@ -59,7 +59,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
-  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+  const { showToast, toastMessage, toastType, toastVisible, toastNonce, hideToast } = useToast();
   const { showActionSheet, ActionSheetComponent } = useActionSheet();
   const { showConfirm, ConfirmModalComponent } = useConfirmModal();
 
@@ -979,7 +979,7 @@ export default function HomeScreen() {
 
       {ActionSheetComponent}
       {ConfirmModalComponent}
-      <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
+      <Toast message={toastMessage} type={toastType} visible={toastVisible} nonce={toastNonce} onHide={hideToast} />
     </View>
   );
 }

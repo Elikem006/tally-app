@@ -21,7 +21,7 @@ export default function AvatarBuilderScreen() {
   );
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+  const { showToast, toastMessage, toastType, toastVisible, toastNonce, hideToast } = useToast();
 
   /**
    * Resize to max 300×300 and compress to 60% JPEG before base64 encoding —
@@ -140,7 +140,7 @@ export default function AvatarBuilderScreen() {
       <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()}>
         <Text style={[typography.body, { color: colors.textSecondary }]}>Cancel</Text>
       </TouchableOpacity>
-      <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
+      <Toast message={toastMessage} type={toastType} visible={toastVisible} nonce={toastNonce} onHide={hideToast} />
     </View>
   );
 }
