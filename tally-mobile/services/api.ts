@@ -330,19 +330,26 @@ export const authAPI = {
     return mockResponse(user);
   },
 
+  /** currentPassword is required by the server only when the email changes. */
   updateProfile: async (
     userId: string,
-    fields: { name?: string; email?: string },
+    fields: { name?: string; email?: string; currentPassword?: string },
   ) => {
     if (!USE_MOCK) return api.put(`/api/auth/user/${userId}/profile`, fields);
     const user = mockUsers.find((u) => String(u.id) === String(userId));
     if (!user) return mockError("User not found", 404);
     if (fields.email !== undefined) {
-      const taken = mockUsers.some(
-        (u) => String(u.id) !== String(userId) && u.email === fields.email!.toLowerCase().trim(),
-      );
-      if (taken) return mockError("An account with this email already exists", 400);
-      user.email = fields.email.toLowerCase().trim();
+      const next = fields.email.toLowerCase().trim();
+      if (next !== user.email) {
+        if (!fields.currentPassword) {
+          return mockError("Enter your current password to change your email", 400);
+        }
+        const taken = mockUsers.some(
+          (u) => String(u.id) !== String(userId) && u.email === next,
+        );
+        if (taken) return mockError("An account with this email already exists", 400);
+        user.email = next;
+      }
     }
     if (fields.name !== undefined) user.name = fields.name.trim();
     return mockResponse(user);

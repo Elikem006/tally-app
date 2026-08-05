@@ -50,6 +50,8 @@ export default function ProfileScreen() {
   const [email, setEmail] = useState(currentUser.email || '');
   const [editingField, setEditingField] = useState<'name' | 'email' | null>(null);
   const [savingField, setSavingField] = useState(false);
+  // Only used for an email change — the server requires it there and nowhere else
+  const [currentPassword, setCurrentPassword] = useState('');
   const { showToast, toastMessage, toastType, toastVisible, toastNonce, hideToast } = useToast();
   const { showConfirm, ConfirmModalComponent } = useConfirmModal();
   const { showActionSheet, ActionSheetComponent } = useActionSheet();
@@ -215,12 +217,23 @@ export default function ProfileScreen() {
     const previous = field === 'name' ? currentUser.userName : currentUser.email;
     if (value === previous) {
       setEditingField(null);
+      setCurrentPassword('');
+      return;
+    }
+
+    // Changing the email is a credential-level change: it's the password-reset
+    // channel, so the server won't accept it without the account password.
+    if (field === 'email' && !currentPassword) {
+      showToast('Enter your current password to change your email', 'error');
       return;
     }
 
     setSavingField(true);
     try {
-      await authAPI.updateProfile(getUserId(), { [field]: value });
+      await authAPI.updateProfile(getUserId(), {
+        [field]: value,
+        ...(field === 'email' ? { currentPassword } : {}),
+      });
       if (field === 'name') {
         currentUser.userName = value;
       } else {
@@ -231,6 +244,7 @@ export default function ProfileScreen() {
       await refreshRememberedUser();
       notifyUserChanged();
       setEditingField(null);
+      setCurrentPassword('');
       showToast(field === 'name' ? 'Name updated!' : 'Email updated!', 'success');
     } catch (err: any) {
       showToast(err?.response?.data?.error || `Failed to update ${field}`, 'error');
@@ -585,7 +599,7 @@ export default function ProfileScreen() {
                         {stored || 'Not set'}
                       </Text>
                       <TouchableOpacity
-                        onPress={() => { setValue(stored || ''); setEditingField(field); }}
+                        onPress={() => { setValue(stored || ''); setCurrentPassword(''); setEditingField(field); }}
                         accessibilityRole="button"
                         accessibilityLabel={`Edit ${label.toLowerCase()}`}
                       >
@@ -594,10 +608,12 @@ export default function ProfileScreen() {
                     </View>
                   )}
                 </View>
+                {/* Email needs a second input and a note, which don't fit the
+                    single-line row the phone field uses — stack instead. */}
                 {isEditing && (
-                  <View style={styles.phoneInputRow}>
+                  <View style={[styles.phoneInputRow, field === 'email' && styles.stackedEditRow]}>
                     <TextInput
-                      style={[typography.bodyStrong, styles.phoneInputSmall, { backgroundColor: colors.surfaceElevated, borderColor: colors.border, color: colors.text }]}
+                      style={[typography.bodyStrong, styles.phoneInputSmall, field === 'email' && styles.stackedInput, { backgroundColor: colors.surfaceElevated, borderColor: colors.border, color: colors.text }]}
                       value={value}
                       onChangeText={setValue}
                       keyboardType={field === 'email' ? 'email-address' : 'default'}
@@ -607,6 +623,23 @@ export default function ProfileScreen() {
                       placeholderTextColor={colors.textTertiary}
                       autoFocus
                     />
+                    {field === 'email' && (
+                      <>
+                        <TextInput
+                          style={[typography.bodyStrong, styles.phoneInputSmall, styles.stackedInput, { backgroundColor: colors.surfaceElevated, borderColor: colors.border, color: colors.text }]}
+                          value={currentPassword}
+                          onChangeText={setCurrentPassword}
+                          secureTextEntry
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          placeholder="Current password"
+                          placeholderTextColor={colors.textTertiary}
+                        />
+                        <Text style={[typography.label, { color: colors.textSecondary }]}>
+                          Your email is how you reset your password, so changing it needs your password.
+                        </Text>
+                      </>
+                    )}
                     <View style={styles.phoneActions}>
                       <TouchableOpacity onPress={() => handleSaveField(field)} disabled={savingField} style={styles.phoneActionBtn}>
                         {savingField ? (
@@ -615,7 +648,7 @@ export default function ProfileScreen() {
                           <Text style={[typography.caption, { color: colors.primary, fontFamily: typography.bodyStrong.fontFamily }]}>Save</Text>
                         )}
                       </TouchableOpacity>
-                      <TouchableOpacity onPress={() => { setEditingField(null); setValue(stored || ''); }} style={styles.phoneActionBtn}>
+                      <TouchableOpacity onPress={() => { setEditingField(null); setValue(stored || ''); setCurrentPassword(''); }} style={styles.phoneActionBtn}>
                         <Text style={[typography.caption, { color: colors.textSecondary, fontFamily: typography.bodyStrong.fontFamily }]}>Cancel</Text>
                       </TouchableOpacity>
                     </View>
@@ -816,6 +849,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     marginTop: spacing.xs,
+  },
+  stackedEditRow: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+  },
+  // phoneInputSmall carries flex: 1 for the single-line phone row; in a column
+  // that would fight the fixed height, so pin it back off.
+  stackedInput: {
+    flex: 0,
+    width: '100%',
   },
   phoneInputSmall: {
     flex: 1,

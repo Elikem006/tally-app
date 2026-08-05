@@ -178,7 +178,8 @@ public class AuthController {
                 return ResponseEntity.badRequest()
                         .body(Map.of("error", "Provide a name or email to update", "success", false));
             }
-            var user = userService.updateProfile(userId, name, email);
+            // Required by updateProfile only when the email actually changes
+            var user = userService.updateProfile(userId, name, email, request.get("currentPassword"));
             return ResponseEntity.ok(Map.of(
                     "message", "Profile updated",
                     "userId", user.getId(),

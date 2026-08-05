@@ -122,8 +122,15 @@ public class UserService {
      * Changing the email does not invalidate the session: JwtAuthFilter
      * authorizes on the token's userId claim, and the email is only the
      * subject. The old token stays valid until it expires on its own.
+     *
+     * A change to the email — and only that — must be confirmed with the
+     * account's current password. Email is the password-reset channel, so an
+     * unconfirmed change turns temporary access to a logged-in device into
+     * permanent account takeover: set the address to your own, then "forget"
+     * the password. The password check is what stands in the way, since there
+     * is no email-verification step to do it instead.
      */
-    public User updateProfile(Long userId, String name, String email) {
+    public User updateProfile(Long userId, String name, String email, String currentPassword) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
@@ -141,12 +148,22 @@ public class UserService {
                 throw new RuntimeException("Email cannot be empty");
             }
             requireValidEmailFormat(normalized);
-            // Skip the uniqueness check when the email is unchanged, otherwise
-            // saving the name alone would trip on the user's own address.
-            if (!normalized.equals(user.getEmail()) && userRepository.existsByEmail(normalized)) {
-                throw new RuntimeException("An account with this email already exists");
+
+            // Only gate an actual change: re-saving the same address (or saving
+            // a name while the email field rides along unchanged) shouldn't
+            // demand a password.
+            if (!normalized.equals(user.getEmail())) {
+                if (currentPassword == null || currentPassword.isBlank()) {
+                    throw new RuntimeException("Enter your current password to change your email");
+                }
+                if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+                    throw new RuntimeException("Incorrect password");
+                }
+                if (userRepository.existsByEmail(normalized)) {
+                    throw new RuntimeException("An account with this email already exists");
+                }
+                user.setEmail(normalized);
             }
-            user.setEmail(normalized);
         }
 
         try {
