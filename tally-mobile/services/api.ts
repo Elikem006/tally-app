@@ -330,6 +330,31 @@ export const authAPI = {
     return mockResponse(user);
   },
 
+  /** currentPassword is required by the server only when the email changes. */
+  updateProfile: async (
+    userId: string,
+    fields: { name?: string; email?: string; currentPassword?: string },
+  ) => {
+    if (!USE_MOCK) return api.put(`/api/auth/user/${userId}/profile`, fields);
+    const user = mockUsers.find((u) => String(u.id) === String(userId));
+    if (!user) return mockError("User not found", 404);
+    if (fields.email !== undefined) {
+      const next = fields.email.toLowerCase().trim();
+      if (next !== user.email) {
+        if (!fields.currentPassword) {
+          return mockError("Enter your current password to change your email", 400);
+        }
+        const taken = mockUsers.some(
+          (u) => String(u.id) !== String(userId) && u.email === next,
+        );
+        if (taken) return mockError("An account with this email already exists", 400);
+        user.email = next;
+      }
+    }
+    if (fields.name !== undefined) user.name = fields.name.trim();
+    return mockResponse(user);
+  },
+
   updatePhone: async (userId: string, phoneNumber: string) => {
     if (!USE_MOCK)
       return api.put(`/api/auth/user/${userId}/phone`, { phoneNumber });
@@ -338,6 +363,10 @@ export const authAPI = {
     user.phoneNumber = phoneNumber;
     return mockResponse(user);
   },
+
+  /** Always resolves for a well-formed address — the server won't say whether it exists. */
+  resendVerification: (email: string) =>
+    api.post("/api/auth/resend-verification", { email }),
 
   forgotPassword: (email: string) =>
     api.post("/api/auth/forgot-password", { email }),

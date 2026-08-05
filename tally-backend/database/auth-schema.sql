@@ -11,5 +11,17 @@ CREATE TABLE IF NOT EXISTS users (
   avatar_data     TEXT,
   phone_number    VARCHAR(255),
   reset_otp       VARCHAR(255),
-  reset_otp_expiry TIMESTAMP
+  reset_otp_expiry TIMESTAMP,
+  email_verified  BOOLEAN NOT NULL DEFAULT FALSE,
+  verification_token VARCHAR(255),
+  verification_token_expiry TIMESTAMP
 );
+
+-- Applied to the live Neon database on 2026-08-05 (ddl-auto=validate means
+-- Hibernate never alters anything — this file is reference only):
+--
+--   ALTER TABLE users
+--     ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE,
+--     ADD COLUMN IF NOT EXISTS verification_token VARCHAR(255),
+--     ADD COLUMN IF NOT EXISTS verification_token_expiry TIMESTAMP;
+--   UPDATE users SET email_verified = TRUE;  -- grandfather pre-existing accounts

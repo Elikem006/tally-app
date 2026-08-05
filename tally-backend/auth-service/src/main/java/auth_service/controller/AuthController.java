@@ -154,8 +154,38 @@ public class AuthController {
                     "userId", user.getId(),
                     "name", user.getName(),
                     "email", user.getEmail(),
+                    "emailVerified", user.isEmailVerified(),
                     "avatarType", user.getAvatarType() != null ? user.getAvatarType() : "",
                     "avatarData", user.getAvatarData() != null ? user.getAvatarData() : "",
+                    "success", true
+            ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", errorMessage(e), "success", false));
+        }
+    }
+
+    /**
+     * PUT /api/auth/user/{userId}/profile — edit name and/or email.
+     * Self-only: JwtAuthFilter's /user/{id} ownership check covers this path.
+     */
+    @PutMapping("/user/{userId}/profile")
+    public ResponseEntity<?> updateProfile(
+            @PathVariable Long userId,
+            @RequestBody Map<String, String> request) {
+        try {
+            String name = request.get("name");
+            String email = request.get("email");
+            if (name == null && email == null) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Provide a name or email to update", "success", false));
+            }
+            // Required by updateProfile only when the email actually changes
+            var user = userService.updateProfile(userId, name, email, request.get("currentPassword"));
+            return ResponseEntity.ok(Map.of(
+                    "message", "Profile updated",
+                    "userId", user.getId(),
+                    "name", user.getName(),
+                    "email", user.getEmail(),
                     "success", true
             ));
         } catch (RuntimeException e) {
@@ -192,6 +222,75 @@ public class AuthController {
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", errorMessage(e), "success", false));
         }
+    }
+
+    /**
+     * GET /api/auth/verify-email?token=… — the target of the emailed link.
+     *
+     * Returns HTML, not JSON: this is opened by a mail client in a browser, by
+     * a person, not by the app. Public — the whole point is that it works
+     * while logged out, on whatever device happens to open the mail.
+     */
+    @GetMapping(value = "/verify-email", produces = "text/html;charset=UTF-8")
+    public ResponseEntity<String> verifyEmail(@RequestParam(required = false) String token) {
+        try {
+            userService.verifyEmailToken(token);
+            return ResponseEntity.ok(resultPage(
+                    "&#10003;",
+                    "#10B981",
+                    "Email confirmed",
+                    "Your Tally account is all set. You can close this tab and head back to the app."));
+        } catch (RuntimeException e) {
+            // 200 rather than 4xx: a human is reading this in a browser, and
+            // the page itself carries the outcome.
+            return ResponseEntity.ok(resultPage(
+                    "!",
+                    "#E05C5C",
+                    "Couldn't confirm this link",
+                    errorMessage(e)));
+        }
+    }
+
+    /** Minimal branded page matching the verification email's header band. */
+    private static String resultPage(String glyph, String accent, String heading, String detail) {
+        return "<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
+                + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+                + "<title>Tally</title></head>"
+                + "<body style=\"margin:0;padding:24px;background:#f5f5f5;font-family:-apple-system,"
+                + "Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;\">"
+                + "<table role=\"presentation\" width=\"100%\" style=\"max-width:420px;margin:48px auto;"
+                + "background:#ffffff;border-radius:12px;overflow:hidden;\">"
+                + "<tr><td style=\"background:#8B5CF6;padding:24px;text-align:center;color:#ffffff;"
+                + "font-size:18px;font-weight:600;\">Tally</td></tr>"
+                + "<tr><td style=\"padding:32px;text-align:center;\">"
+                + "<div style=\"width:56px;height:56px;line-height:56px;border-radius:28px;margin:0 auto 16px;"
+                + "background:" + accent + "1F;color:" + accent + ";font-size:26px;font-weight:700;\">"
+                + glyph + "</div>"
+                + "<h1 style=\"font-size:19px;margin:0 0 8px;\">" + heading + "</h1>"
+                + "<p style=\"font-size:14px;line-height:1.5;color:#666666;margin:0;\">" + detail + "</p>"
+                + "</td></tr></table></body></html>";
+    }
+
+    /**
+     * POST /api/auth/resend-verification — issue a fresh link.
+     * Always reports success: a distinct "no such account" here would be an
+     * email-enumeration oracle, since the endpoint is public.
+     */
+    @PostMapping("/resend-verification")
+    public ResponseEntity<?> resendVerification(@RequestBody Map<String, String> request) {
+        String email = request.get("email");
+        if (email == null || email.isBlank()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Email is required", "success", false));
+        }
+        if (!rateLimiter.allow("resend-verify:" + email.toLowerCase().trim(), 3, 15 * 60 * 1000)) {
+            return ResponseEntity.status(429)
+                    .body(Map.of("error", "Too many requests. Please try again in a few minutes.", "success", false));
+        }
+        userService.resendVerificationEmail(email);
+        return ResponseEntity.ok(Map.of(
+                "message", "If that address needs confirming, a new link is on its way.",
+                "success", true));
     }
 
     @PostMapping("/forgot-password")

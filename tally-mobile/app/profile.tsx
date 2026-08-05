@@ -18,7 +18,7 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { expenseAPI, authAPI } from '../services/api';
-import { getUserId, safeStorage, currentUser, resetCurrentUser, clearRememberedUser } from '../services/storage';
+import { getUserId, safeStorage, currentUser, resetCurrentUser, clearRememberedUser, refreshRememberedUser, notifyUserChanged } from '../services/storage';
 import Avatar from '../components/Avatar';
 import Toast from '../components/Toast';
 import { useToast } from '../hooks/useToast';
@@ -45,7 +45,14 @@ export default function ProfileScreen() {
   const [phoneNumber, setPhoneNumber] = useState(currentUser.phoneNumber || '');
   const [editingPhone, setEditingPhone] = useState(false);
   const [savingPhone, setSavingPhone] = useState(false);
-  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+
+  const [name, setName] = useState(currentUser.userName || '');
+  const [email, setEmail] = useState(currentUser.email || '');
+  const [editingField, setEditingField] = useState<'name' | 'email' | null>(null);
+  const [savingField, setSavingField] = useState(false);
+  // Only used for an email change — the server requires it there and nowhere else
+  const [currentPassword, setCurrentPassword] = useState('');
+  const { showToast, toastMessage, toastType, toastVisible, toastNonce, hideToast } = useToast();
   const { showConfirm, ConfirmModalComponent } = useConfirmModal();
   const { showActionSheet, ActionSheetComponent } = useActionSheet();
 
@@ -191,6 +198,66 @@ export default function ProfileScreen() {
       showToast('Failed to save phone number', 'error');
     } finally {
       setSavingPhone(false);
+    }
+  }
+
+  async function handleSaveField(field: 'name' | 'email') {
+    const value = (field === 'name' ? name : email).trim();
+
+    if (!value) {
+      showToast(field === 'name' ? 'Name cannot be empty' : 'Email cannot be empty', 'error');
+      return;
+    }
+    // Same rule the server applies, so the common typo is caught without a round trip
+    if (field === 'email' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) {
+      showToast('Please enter a valid email address', 'error');
+      return;
+    }
+
+    const previous = field === 'name' ? currentUser.userName : currentUser.email;
+    if (value === previous) {
+      setEditingField(null);
+      setCurrentPassword('');
+      return;
+    }
+
+    // Changing the email is a credential-level change: it's the password-reset
+    // channel, so the server won't accept it without the account password.
+    if (field === 'email' && !currentPassword) {
+      showToast('Enter your current password to change your email', 'error');
+      return;
+    }
+
+    setSavingField(true);
+    try {
+      await authAPI.updateProfile(getUserId(), {
+        [field]: value,
+        ...(field === 'email' ? { currentPassword } : {}),
+      });
+      if (field === 'name') {
+        currentUser.userName = value;
+      } else {
+        currentUser.email = value;
+        // The server un-verifies on change and sends a fresh link, so the
+        // nudge should reappear rather than claim the new address is confirmed.
+        currentUser.emailVerified = false;
+      }
+      // Keeps a "remember me" session from restoring the pre-edit values on
+      // next launch. Guarded so it can't create one the user declined.
+      await refreshRememberedUser();
+      notifyUserChanged();
+      setEditingField(null);
+      setCurrentPassword('');
+      showToast(
+        field === 'name'
+          ? 'Name updated!'
+          : 'Email updated — check your inbox to confirm it',
+        'success',
+      );
+    } catch (err: any) {
+      showToast(err?.response?.data?.error || `Failed to update ${field}`, 'error');
+    } finally {
+      setSavingField(false);
     }
   }
 
@@ -517,15 +584,87 @@ export default function ProfileScreen() {
 
           <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm + 2 }]}>Profile Details</Text>
 
-          <View style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-            <Text style={[typography.caption, { color: colors.text, fontFamily: typography.bodyStrong.fontFamily }]}>Name</Text>
-            <Text style={[typography.caption, { color: colors.textSecondary }]}>{currentUser.userName}</Text>
-          </View>
-
-          <View style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-            <Text style={[typography.caption, { color: colors.text, fontFamily: typography.bodyStrong.fontFamily }]}>Email</Text>
-            <Text style={[typography.caption, { color: colors.textSecondary }]}>{currentUser.email || 'N/A'}</Text>
-          </View>
+          {(['name', 'email'] as const).map((field) => {
+            const isEditing = editingField === field;
+            const label = field === 'name' ? 'Name' : 'Email';
+            const stored = field === 'name' ? currentUser.userName : currentUser.email;
+            const value = field === 'name' ? name : email;
+            const setValue = field === 'name' ? setName : setEmail;
+            return (
+              <View
+                key={field}
+                style={[
+                  styles.detailCapsule,
+                  { backgroundColor: colors.inputBg, borderColor: colors.border },
+                  isEditing && { height: 'auto', flexDirection: 'column', alignItems: 'stretch', gap: spacing.sm },
+                ]}
+              >
+                <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={[typography.caption, { color: colors.text, fontFamily: typography.bodyStrong.fontFamily }]}>{label}</Text>
+                  {!isEditing && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={[typography.caption, { color: colors.textSecondary, marginRight: spacing.sm }]} numberOfLines={1}>
+                        {stored || 'Not set'}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => { setValue(stored || ''); setCurrentPassword(''); setEditingField(field); }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Edit ${label.toLowerCase()}`}
+                      >
+                        <Text style={[typography.caption, { color: colors.primary, fontFamily: typography.bodyStrong.fontFamily }]}>Edit</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+                {/* Email needs a second input and a note, which don't fit the
+                    single-line row the phone field uses — stack instead. */}
+                {isEditing && (
+                  <View style={[styles.phoneInputRow, field === 'email' && styles.stackedEditRow]}>
+                    <TextInput
+                      style={[typography.bodyStrong, styles.phoneInputSmall, field === 'email' && styles.stackedInput, { backgroundColor: colors.surfaceElevated, borderColor: colors.border, color: colors.text }]}
+                      value={value}
+                      onChangeText={setValue}
+                      keyboardType={field === 'email' ? 'email-address' : 'default'}
+                      autoCapitalize={field === 'email' ? 'none' : 'words'}
+                      autoCorrect={false}
+                      placeholder={field === 'email' ? 'you@example.com' : 'Your full name'}
+                      placeholderTextColor={colors.textTertiary}
+                      autoFocus
+                    />
+                    {field === 'email' && (
+                      <>
+                        <TextInput
+                          style={[typography.bodyStrong, styles.phoneInputSmall, styles.stackedInput, { backgroundColor: colors.surfaceElevated, borderColor: colors.border, color: colors.text }]}
+                          value={currentPassword}
+                          onChangeText={setCurrentPassword}
+                          secureTextEntry
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          placeholder="Current password"
+                          placeholderTextColor={colors.textTertiary}
+                        />
+                        <Text style={[typography.label, { color: colors.textSecondary }]}>
+                          Your email is how you reset your password, so changing it needs your password.
+                        </Text>
+                      </>
+                    )}
+                    <View style={styles.phoneActions}>
+                      <TouchableOpacity onPress={() => handleSaveField(field)} disabled={savingField} style={styles.phoneActionBtn}>
+                        {savingField ? (
+                          <ActivityIndicator size="small" color={colors.primary} />
+                        ) : (
+                          <Text style={[typography.caption, { color: colors.primary, fontFamily: typography.bodyStrong.fontFamily }]}>Save</Text>
+                        )}
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => { setEditingField(null); setValue(stored || ''); setCurrentPassword(''); }} style={styles.phoneActionBtn}>
+                        <Text style={[typography.caption, { color: colors.textSecondary, fontFamily: typography.bodyStrong.fontFamily }]}>Cancel</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </View>
+            );
+          })}
 
           <View style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
             <Text style={[typography.caption, { color: colors.text, fontFamily: typography.bodyStrong.fontFamily }]}>User ID</Text>
@@ -617,7 +756,7 @@ export default function ProfileScreen() {
 
       {ConfirmModalComponent}
       {ActionSheetComponent}
-      <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
+      <Toast message={toastMessage} type={toastType} visible={toastVisible} nonce={toastNonce} onHide={hideToast} />
     </KeyboardAvoidingView>
   );
 }
@@ -718,6 +857,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     marginTop: spacing.xs,
+  },
+  stackedEditRow: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+  },
+  // phoneInputSmall carries flex: 1 for the single-line phone row; in a column
+  // that would fight the fixed height, so pin it back off.
+  stackedInput: {
+    flex: 0,
+    width: '100%',
   },
   phoneInputSmall: {
     flex: 1,

@@ -15,7 +15,7 @@ type Step = 1 | 2 | 3;
 export default function ForgotPasswordScreen() {
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
-  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+  const { showToast, toastMessage, toastType, toastVisible, toastNonce, hideToast } = useToast();
 
   const [step, setStep] = useState<Step>(1);
   const [loading, setLoading] = useState(false);
@@ -270,7 +270,7 @@ export default function ForgotPasswordScreen() {
         </View>
       </Card>
 
-      <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
+      <Toast message={toastMessage} type={toastType} visible={toastVisible} nonce={toastNonce} onHide={hideToast} />
 
       <ConfirmModal
         visible={successVisible}

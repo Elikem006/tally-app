@@ -13,7 +13,7 @@ import { useToast } from '../../hooks/useToast';
 export default function RegisterScreen() {
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
-  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+  const { showToast, toastMessage, toastType, toastVisible, toastNonce, hideToast } = useToast();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -30,6 +30,14 @@ export default function RegisterScreen() {
 
     if (password.length < 6) {
       showToast('Password must be at least 6 characters', 'error');
+      return;
+    }
+
+    // Mirrors the server's second password rule (UserService.registerUser) and
+    // the one forgot-password already checks client-side — without it the only
+    // feedback is a round-trip rejection.
+    if (!/\d/.test(password)) {
+      showToast('Password must contain at least one number', 'error');
       return;
     }
 
@@ -100,7 +108,7 @@ export default function RegisterScreen() {
         </View>
       </Card>
 
-      <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
+      <Toast message={toastMessage} type={toastType} visible={toastVisible} nonce={toastNonce} onHide={hideToast} />
 
       <ConfirmModal
         visible={successVisible}

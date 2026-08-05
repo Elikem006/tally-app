@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
+import java.util.UUID;
 
 @Service
 public class UserService {
@@ -28,6 +29,11 @@ public class UserService {
     @Value("${otp.debug-expose:false}")
     private boolean otpDebugExpose;
 
+    // Public origin the emailed confirmation link points at. The gateway, not
+    // this service directly — that's the address that's actually reachable.
+    @Value("${app.public-base-url}")
+    private String publicBaseUrl;
+
     private BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     public User registerUser(String name, String email, String password) {
@@ -44,11 +50,7 @@ public class UserService {
             throw new RuntimeException("Password must contain at least one number");
         }
 
-        // Basic email format validation — must contain @ with a dot somewhere after it
-        int atIndex = email.indexOf('@');
-        if (atIndex < 1 || email.indexOf('.', atIndex) < 0) {
-            throw new RuntimeException("Please enter a valid email address");
-        }
+        requireValidEmailFormat(email);
 
         // Duplicate email check (DB unique constraint is the final backstop
         // for simultaneous registrations with the same email)
@@ -60,12 +62,94 @@ public class UserService {
         user.setName(name);
         user.setEmail(email);
         user.setPasswordHash(passwordEncoder.encode(password));
+        user.setEmailVerified(false);
+        user.setVerificationToken(newVerificationToken());
+        user.setVerificationTokenExpiry(LocalDateTime.now().plusHours(VERIFICATION_TTL_HOURS));
+
+        User saved;
         try {
-            return userRepository.save(user);
+            saved = userRepository.save(user);
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             // Race: another registration with the same email won the DB write
             throw new RuntimeException("An account with this email already exists");
         }
+
+        // Deliberately after the commit and deliberately swallowed. Verification
+        // is soft — the account is usable either way — so a Brevo outage must
+        // not turn into a failed signup. Contrast generatePasswordResetOtp,
+        // which DOES throw, because there the email is the entire point.
+        sendVerificationEmailQuietly(saved);
+        return saved;
+    }
+
+    private static final int VERIFICATION_TTL_HOURS = 24;
+
+    private static String newVerificationToken() {
+        // SecureRandom-backed and URL-safe — this value travels in a link.
+        return UUID.randomUUID().toString().replace("-", "")
+                + UUID.randomUUID().toString().replace("-", "");
+    }
+
+    private void sendVerificationEmailQuietly(User user) {
+        try {
+            String link = publicBaseUrl.replaceAll("/+$", "")
+                    + "/api/auth/verify-email?token=" + user.getVerificationToken();
+            mailService.sendVerificationEmail(user.getEmail(), user.getName(), link);
+        } catch (Exception e) {
+            System.err.println("Verification email failed to send for " + user.getEmail()
+                    + ": " + e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * Confirms an address from the emailed link. Idempotent on the happy path:
+     * a second click of an already-used link reports success rather than an
+     * error, because to the person clicking it the state they wanted is true.
+     *
+     * @return true when this call is what flipped the flag
+     */
+    public boolean verifyEmailToken(String token) {
+        if (token == null || token.isBlank()) {
+            throw new RuntimeException("This confirmation link is not valid.");
+        }
+        User user = userRepository.findByVerificationToken(token).orElse(null);
+        if (user == null) {
+            // Either never valid, or already consumed and cleared. Can't tell
+            // the two apart without keeping spent tokens around, and the
+            // friendlier reading is the common one.
+            throw new RuntimeException(
+                    "This confirmation link has already been used or is no longer valid.");
+        }
+        if (user.getVerificationTokenExpiry() != null
+                && LocalDateTime.now().isAfter(user.getVerificationTokenExpiry())) {
+            throw new RuntimeException(
+                    "This confirmation link has expired. You can request a new one from the app.");
+        }
+
+        user.setEmailVerified(true);
+        user.setVerificationToken(null);
+        user.setVerificationTokenExpiry(null);
+        userRepository.save(user);
+        return true;
+    }
+
+    /**
+     * Issues a fresh link. Silent about whether the address exists — this is
+     * reachable while logged out, so a distinct "no such account" would make
+     * it an email-enumeration oracle.
+     */
+    public void resendVerificationEmail(String email) {
+        if (email == null || email.isBlank()) {
+            throw new RuntimeException("Email is required");
+        }
+        User user = userRepository.findByEmail(email.toLowerCase().trim()).orElse(null);
+        if (user == null || user.isEmailVerified()) {
+            return;
+        }
+        user.setVerificationToken(newVerificationToken());
+        user.setVerificationTokenExpiry(LocalDateTime.now().plusHours(VERIFICATION_TTL_HOURS));
+        userRepository.save(user);
+        sendVerificationEmailQuietly(user);
     }
 
     public Map<String, Object> loginUser(String email, String password) {
@@ -88,6 +172,8 @@ public class UserService {
         response.put("avatarType", user.getAvatarType());
         response.put("avatarData", user.getAvatarData());
         response.put("phoneNumber", user.getPhoneNumber() != null ? user.getPhoneNumber() : "");
+        // Drives the in-app nudge. Login is deliberately not gated on it.
+        response.put("emailVerified", user.isEmailVerified());
 
         return response;
     }
@@ -107,6 +193,91 @@ public class UserService {
 
     public boolean userExists(Long userId) {
         return userId != null && userRepository.existsById(userId);
+    }
+
+    // Shared by registration and profile edit so the two can't drift apart —
+    // must contain @ with a dot somewhere after it.
+    private static void requireValidEmailFormat(String email) {
+        int atIndex = email.indexOf('@');
+        if (atIndex < 1 || email.indexOf('.', atIndex) < 0) {
+            throw new RuntimeException("Please enter a valid email address");
+        }
+    }
+
+    /**
+     * Updates name and/or email. A null field is left untouched, so the caller
+     * can send either one alone. Email is normalized and uniqueness-checked the
+     * same way registration does.
+     *
+     * Changing the email does not invalidate the session: JwtAuthFilter
+     * authorizes on the token's userId claim, and the email is only the
+     * subject. The old token stays valid until it expires on its own.
+     *
+     * A change to the email — and only that — must be confirmed with the
+     * account's current password. Email is the password-reset channel, so an
+     * unconfirmed change turns temporary access to a logged-in device into
+     * permanent account takeover: set the address to your own, then "forget"
+     * the password. The password check is what stands in the way, since there
+     * is no email-verification step to do it instead.
+     */
+    public User updateProfile(Long userId, String name, String email, String currentPassword) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        boolean emailChanged = false;
+
+        if (name != null) {
+            String trimmed = name.trim();
+            if (trimmed.isEmpty()) {
+                throw new RuntimeException("Name cannot be empty");
+            }
+            user.setName(trimmed);
+        }
+
+        if (email != null) {
+            String normalized = email.toLowerCase().trim();
+            if (normalized.isEmpty()) {
+                throw new RuntimeException("Email cannot be empty");
+            }
+            requireValidEmailFormat(normalized);
+
+            // Only gate an actual change: re-saving the same address (or saving
+            // a name while the email field rides along unchanged) shouldn't
+            // demand a password.
+            if (!normalized.equals(user.getEmail())) {
+                if (currentPassword == null || currentPassword.isBlank()) {
+                    throw new RuntimeException("Enter your current password to change your email");
+                }
+                if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+                    throw new RuntimeException("Incorrect password");
+                }
+                if (userRepository.existsByEmail(normalized)) {
+                    throw new RuntimeException("An account with this email already exists");
+                }
+                user.setEmail(normalized);
+
+                // The new address is unconfirmed by definition. Carrying the old
+                // verified flag across would let someone launder an unowned
+                // address into a verified one just by editing it.
+                user.setEmailVerified(false);
+                user.setVerificationToken(newVerificationToken());
+                user.setVerificationTokenExpiry(LocalDateTime.now().plusHours(VERIFICATION_TTL_HOURS));
+                emailChanged = true;
+            }
+        }
+
+        User saved;
+        try {
+            saved = userRepository.save(user);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            throw new RuntimeException("An account with this email already exists");
+        }
+
+        // After the commit, and non-fatal: the address is already changed, so a
+        // mail outage shouldn't fail the edit. Resend covers the gap.
+        if (emailChanged) {
+            sendVerificationEmailQuietly(saved);
+        }
+        return saved;
     }
 
     public User updatePhoneNumber(Long userId, String phoneNumber) {

@@ -72,7 +72,7 @@ export default function AddScreen() {
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [showHint, setShowHint] = useState(true);
-  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+  const { showToast, toastMessage, toastType, toastVisible, toastNonce, hideToast } = useToast();
 
   // Success confirmation — set on a successful save, cleared when the burst
   // finishes, which is also what hands the user back to the dashboard.
@@ -847,7 +847,7 @@ export default function AddScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
+      <Toast message={toastMessage} type={toastType} visible={toastVisible} nonce={toastNonce} onHide={hideToast} />
 
       <SuccessBurst
         visible={!!successInfo}

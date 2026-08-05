@@ -96,7 +96,7 @@ export default function RemindersScreen() {
   const DAYS = Array.from({ length: daysInMonth }, (_, i) => String(i + 1).padStart(2, '0'));
 
   const [saving, setSaving] = useState(false);
-  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+  const { showToast, toastMessage, toastType, toastVisible, toastNonce, hideToast } = useToast();
   const { showConfirm, ConfirmModalComponent } = useConfirmModal();
 
   useEffect(() => {
@@ -430,7 +430,7 @@ export default function RemindersScreen() {
         )}
       </View>
       {ConfirmModalComponent}
-      <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
+      <Toast message={toastMessage} type={toastType} visible={toastVisible} nonce={toastNonce} onHide={hideToast} />
     </KeyboardAvoidingView>
   );
 }

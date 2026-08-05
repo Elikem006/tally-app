@@ -14,6 +14,8 @@ interface ToastProps {
   message: string;
   type: ToastType;
   visible: boolean;
+  /** Changes on every showToast call so a re-fire restarts the animation. */
+  nonce?: number;
   onHide: () => void;
 }
 
@@ -26,7 +28,7 @@ const ICONS: Record<ToastType, keyof typeof Feather.glyphMap> = {
 
 const AUTO_HIDE_MS = 3000;
 
-export default function Toast({ message, type, visible, onHide }: ToastProps) {
+export default function Toast({ message, type, visible, nonce, onHide }: ToastProps) {
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
   const translateY = useSharedValue(100);
@@ -35,23 +37,30 @@ export default function Toast({ message, type, visible, onHide }: ToastProps) {
   const bg = { success: colors.positive, error: colors.negative, warning: colors.warning, info: colors.surfaceHigh }[type];
   const textColor = type === 'warning' ? '#1A1F2E' : type === 'info' ? colors.text : '#FFFFFF';
 
+  // Entrance and auto-hide must be one withSequence per value: assigning
+  // `.value` twice in a tick cancels the first animation, and withDelay holds
+  // whatever value it started at — which left opacity pinned at 0 for the whole
+  // delay, so the toast never appeared at all.
   useEffect(() => {
     if (visible) {
-      translateY.value = withTiming(0, { duration: duration.base, easing: easing.decelerate });
-      opacity.value = withTiming(1, { duration: duration.base, easing: easing.standard });
-
-      translateY.value = withDelay(
-        AUTO_HIDE_MS,
-        withTiming(100, { duration: duration.base, easing: easing.accelerate }, (finished) => {
-          if (finished) runOnJS(onHide)();
-        }),
+      translateY.value = withSequence(
+        withTiming(0, { duration: duration.base, easing: easing.decelerate }),
+        withDelay(
+          AUTO_HIDE_MS,
+          withTiming(100, { duration: duration.base, easing: easing.accelerate }, (finished) => {
+            if (finished) runOnJS(onHide)();
+          }),
+        ),
       );
-      opacity.value = withDelay(AUTO_HIDE_MS, withTiming(0, { duration: duration.base, easing: easing.accelerate }));
+      opacity.value = withSequence(
+        withTiming(1, { duration: duration.base, easing: easing.standard }),
+        withDelay(AUTO_HIDE_MS, withTiming(0, { duration: duration.base, easing: easing.accelerate })),
+      );
     } else {
       translateY.value = 100;
       opacity.value = 0;
     }
-  }, [visible]);
+  }, [visible, nonce]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,

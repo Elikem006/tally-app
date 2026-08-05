@@ -43,4 +43,19 @@ public class User {
 
     @Column(name = "reset_otp_expiry", nullable = true)
     private LocalDateTime resetOtpExpiry;
+
+    // Signup email confirmation. Verification is soft — an unverified account
+    // works normally and is only nudged in-app — so nothing here gates login.
+    // Accounts that predate this column were backfilled to true rather than
+    // waking every existing user with a banner about an address they've been
+    // using all along.
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified = false;
+
+    @JsonIgnore
+    @Column(name = "verification_token", nullable = true)
+    private String verificationToken;
+
+    @Column(name = "verification_token_expiry", nullable = true)
+    private LocalDateTime verificationTokenExpiry;
 }

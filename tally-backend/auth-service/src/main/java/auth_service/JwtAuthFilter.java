@@ -35,6 +35,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             "/api/auth/health",
             "/api/auth/forgot-password",  // password reset happens while logged out
             "/api/auth/reset-password",   // password reset happens while logged out
+            "/api/auth/verify-email",     // opened from a mail client, no session
+            "/api/auth/resend-verification",
             "/api/momo/callback"   // MoMo's servers call this — they have no JWT
     );
 

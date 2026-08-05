@@ -27,6 +27,7 @@ import { HomeBackdrop } from '../../components/home/HomeBackdrop';
 import { TransactionRow } from '../../components/home/TransactionRow';
 import { QuickAddModal } from '../../components/home/QuickAddModal';
 import Toast from '../../components/Toast';
+import VerifyEmailBanner from '../../components/VerifyEmailBanner';
 import { useToast } from '../../hooks/useToast';
 import { useActionSheet } from '../../hooks/useActionSheet';
 import { useConfirmModal } from '../../hooks/useConfirmModal';
@@ -59,7 +60,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { theme, colors: baseColors } = useTheme();
   const colors = getExtendedColors(theme, baseColors);
-  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+  const { showToast, toastMessage, toastType, toastVisible, toastNonce, hideToast } = useToast();
   const { showActionSheet, ActionSheetComponent } = useActionSheet();
   const { showConfirm, ConfirmModalComponent } = useConfirmModal();
 
@@ -587,6 +588,9 @@ export default function HomeScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />}
         keyboardShouldPersistTaps="handled"
       >
+        {/* Renders nothing once the address is confirmed, or once dismissed */}
+        <VerifyEmailBanner onNotify={showToast} />
+
         {/* Header Row */}
         <View style={styles.headerRow}>
           <View style={{ flex: 1, marginRight: spacing.sm }}>
@@ -979,7 +983,7 @@ export default function HomeScreen() {
 
       {ActionSheetComponent}
       {ConfirmModalComponent}
-      <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
+      <Toast message={toastMessage} type={toastType} visible={toastVisible} nonce={toastNonce} onHide={hideToast} />
     </View>
   );
 }
