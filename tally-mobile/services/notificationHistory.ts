@@ -4,10 +4,15 @@
  * which has a new native-module API in v3 that breaks in Expo Go.
  */
 import * as FileSystem from "expo-file-system/legacy";
+import { getUserId } from "./storage";
 
-const HISTORY_FILE   = FileSystem.documentDirectory + "tally_notif_history.json";
-const SEEN_FILE      = FileSystem.documentDirectory + "tally_seen_alerts.json";
-const MAX_ITEMS      = 100;
+// Notifications are per-account, not per-device. These paths used to be fixed
+// filenames, so every account signing in on the same device read and wrote one
+// shared history — each user saw everyone else's alerts. Scoping by userId
+// keeps them separate; logging out simply stops resolving to that file.
+const historyFile = () => `${FileSystem.documentDirectory}tally_notif_history_${getUserId() || "anon"}.json`;
+const seenFile    = () => `${FileSystem.documentDirectory}tally_seen_alerts_${getUserId() || "anon"}.json`;
+const MAX_ITEMS   = 100;
 
 export type NotifType =
   | "budget_over"
@@ -54,11 +59,11 @@ async function writeJSON(path: string, data: unknown): Promise<void> {
 // ─── CRUD ────────────────────────────────────────────────────────────────────
 
 export async function getHistory(): Promise<HistoryNotif[]> {
-  return readJSON<HistoryNotif[]>(HISTORY_FILE, []);
+  return readJSON<HistoryNotif[]>(historyFile(), []);
 }
 
 async function _save(list: HistoryNotif[]): Promise<void> {
-  await writeJSON(HISTORY_FILE, list.slice(0, MAX_ITEMS));
+  await writeJSON(historyFile(), list.slice(0, MAX_ITEMS));
 }
 
 export async function addHistoryItem(
@@ -101,11 +106,11 @@ export async function shouldFireBudgetAlert(
 ): Promise<boolean> {
   try {
     const today = new Date().toISOString().split("T")[0];
-    const data  = await readJSON<Record<string, string[]>>(SEEN_FILE, {});
+    const data  = await readJSON<Record<string, string[]>>(seenFile(), {});
     const seen  = data[today] ?? [];
     const id    = `${category}_${type}`;
     if (seen.includes(id)) return false;
-    await writeJSON(SEEN_FILE, { [today]: [...seen, id] });
+    await writeJSON(seenFile(), { [today]: [...seen, id] });
     return true;
   } catch {
     return true;
