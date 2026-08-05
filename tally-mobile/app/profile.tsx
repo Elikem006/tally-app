@@ -18,7 +18,7 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { expenseAPI, authAPI } from '../services/api';
-import { getUserId, safeStorage, currentUser, resetCurrentUser, clearRememberedUser } from '../services/storage';
+import { getUserId, safeStorage, currentUser, resetCurrentUser, clearRememberedUser, refreshRememberedUser, notifyUserChanged } from '../services/storage';
 import Avatar from '../components/Avatar';
 import Toast from '../components/Toast';
 import { useToast } from '../hooks/useToast';
@@ -45,7 +45,12 @@ export default function ProfileScreen() {
   const [phoneNumber, setPhoneNumber] = useState(currentUser.phoneNumber || '');
   const [editingPhone, setEditingPhone] = useState(false);
   const [savingPhone, setSavingPhone] = useState(false);
-  const { showToast, toastMessage, toastType, toastVisible, hideToast } = useToast();
+
+  const [name, setName] = useState(currentUser.userName || '');
+  const [email, setEmail] = useState(currentUser.email || '');
+  const [editingField, setEditingField] = useState<'name' | 'email' | null>(null);
+  const [savingField, setSavingField] = useState(false);
+  const { showToast, toastMessage, toastType, toastVisible, toastNonce, hideToast } = useToast();
   const { showConfirm, ConfirmModalComponent } = useConfirmModal();
   const { showActionSheet, ActionSheetComponent } = useActionSheet();
 
@@ -191,6 +196,46 @@ export default function ProfileScreen() {
       showToast('Failed to save phone number', 'error');
     } finally {
       setSavingPhone(false);
+    }
+  }
+
+  async function handleSaveField(field: 'name' | 'email') {
+    const value = (field === 'name' ? name : email).trim();
+
+    if (!value) {
+      showToast(field === 'name' ? 'Name cannot be empty' : 'Email cannot be empty', 'error');
+      return;
+    }
+    // Same rule the server applies, so the common typo is caught without a round trip
+    if (field === 'email' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) {
+      showToast('Please enter a valid email address', 'error');
+      return;
+    }
+
+    const previous = field === 'name' ? currentUser.userName : currentUser.email;
+    if (value === previous) {
+      setEditingField(null);
+      return;
+    }
+
+    setSavingField(true);
+    try {
+      await authAPI.updateProfile(getUserId(), { [field]: value });
+      if (field === 'name') {
+        currentUser.userName = value;
+      } else {
+        currentUser.email = value;
+      }
+      // Keeps a "remember me" session from restoring the pre-edit values on
+      // next launch. Guarded so it can't create one the user declined.
+      await refreshRememberedUser();
+      notifyUserChanged();
+      setEditingField(null);
+      showToast(field === 'name' ? 'Name updated!' : 'Email updated!', 'success');
+    } catch (err: any) {
+      showToast(err?.response?.data?.error || `Failed to update ${field}`, 'error');
+    } finally {
+      setSavingField(false);
     }
   }
 
@@ -517,15 +562,68 @@ export default function ProfileScreen() {
 
           <Text style={[typography.label, { color: colors.textSecondary, marginBottom: spacing.sm + 2 }]}>Profile Details</Text>
 
-          <View style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-            <Text style={[typography.caption, { color: colors.text, fontFamily: typography.bodyStrong.fontFamily }]}>Name</Text>
-            <Text style={[typography.caption, { color: colors.textSecondary }]}>{currentUser.userName}</Text>
-          </View>
-
-          <View style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
-            <Text style={[typography.caption, { color: colors.text, fontFamily: typography.bodyStrong.fontFamily }]}>Email</Text>
-            <Text style={[typography.caption, { color: colors.textSecondary }]}>{currentUser.email || 'N/A'}</Text>
-          </View>
+          {(['name', 'email'] as const).map((field) => {
+            const isEditing = editingField === field;
+            const label = field === 'name' ? 'Name' : 'Email';
+            const stored = field === 'name' ? currentUser.userName : currentUser.email;
+            const value = field === 'name' ? name : email;
+            const setValue = field === 'name' ? setName : setEmail;
+            return (
+              <View
+                key={field}
+                style={[
+                  styles.detailCapsule,
+                  { backgroundColor: colors.inputBg, borderColor: colors.border },
+                  isEditing && { height: 'auto', flexDirection: 'column', alignItems: 'stretch', gap: spacing.sm },
+                ]}
+              >
+                <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={[typography.caption, { color: colors.text, fontFamily: typography.bodyStrong.fontFamily }]}>{label}</Text>
+                  {!isEditing && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={[typography.caption, { color: colors.textSecondary, marginRight: spacing.sm }]} numberOfLines={1}>
+                        {stored || 'Not set'}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => { setValue(stored || ''); setEditingField(field); }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Edit ${label.toLowerCase()}`}
+                      >
+                        <Text style={[typography.caption, { color: colors.primary, fontFamily: typography.bodyStrong.fontFamily }]}>Edit</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+                {isEditing && (
+                  <View style={styles.phoneInputRow}>
+                    <TextInput
+                      style={[typography.bodyStrong, styles.phoneInputSmall, { backgroundColor: colors.surfaceElevated, borderColor: colors.border, color: colors.text }]}
+                      value={value}
+                      onChangeText={setValue}
+                      keyboardType={field === 'email' ? 'email-address' : 'default'}
+                      autoCapitalize={field === 'email' ? 'none' : 'words'}
+                      autoCorrect={false}
+                      placeholder={field === 'email' ? 'you@example.com' : 'Your full name'}
+                      placeholderTextColor={colors.textTertiary}
+                      autoFocus
+                    />
+                    <View style={styles.phoneActions}>
+                      <TouchableOpacity onPress={() => handleSaveField(field)} disabled={savingField} style={styles.phoneActionBtn}>
+                        {savingField ? (
+                          <ActivityIndicator size="small" color={colors.primary} />
+                        ) : (
+                          <Text style={[typography.caption, { color: colors.primary, fontFamily: typography.bodyStrong.fontFamily }]}>Save</Text>
+                        )}
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => { setEditingField(null); setValue(stored || ''); }} style={styles.phoneActionBtn}>
+                        <Text style={[typography.caption, { color: colors.textSecondary, fontFamily: typography.bodyStrong.fontFamily }]}>Cancel</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </View>
+            );
+          })}
 
           <View style={[styles.detailCapsule, { backgroundColor: colors.inputBg, borderColor: colors.border }]}>
             <Text style={[typography.caption, { color: colors.text, fontFamily: typography.bodyStrong.fontFamily }]}>User ID</Text>
@@ -617,7 +715,7 @@ export default function ProfileScreen() {
 
       {ConfirmModalComponent}
       {ActionSheetComponent}
-      <Toast message={toastMessage} type={toastType} visible={toastVisible} onHide={hideToast} />
+      <Toast message={toastMessage} type={toastType} visible={toastVisible} nonce={toastNonce} onHide={hideToast} />
     </KeyboardAvoidingView>
   );
 }

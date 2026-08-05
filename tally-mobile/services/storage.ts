@@ -157,3 +157,13 @@ export async function loadRememberedUser(): Promise<boolean> {
 export async function clearRememberedUser(): Promise<void> {
   await safeStorage.removeItem(REMEMBERED_USER_KEY);
 }
+
+/**
+ * Re-persist the session only if one was already remembered, so an edit to the
+ * profile doesn't resurrect a "remember me" the user declined at login.
+ */
+export async function refreshRememberedUser(): Promise<void> {
+  const raw = await safeStorage.getItem(REMEMBERED_USER_KEY);
+  if (!raw) return;
+  await saveRememberedUser();
+}

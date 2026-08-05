@@ -44,11 +44,7 @@ public class UserService {
             throw new RuntimeException("Password must contain at least one number");
         }
 
-        // Basic email format validation — must contain @ with a dot somewhere after it
-        int atIndex = email.indexOf('@');
-        if (atIndex < 1 || email.indexOf('.', atIndex) < 0) {
-            throw new RuntimeException("Please enter a valid email address");
-        }
+        requireValidEmailFormat(email);
 
         // Duplicate email check (DB unique constraint is the final backstop
         // for simultaneous registrations with the same email)
@@ -107,6 +103,57 @@ public class UserService {
 
     public boolean userExists(Long userId) {
         return userId != null && userRepository.existsById(userId);
+    }
+
+    // Shared by registration and profile edit so the two can't drift apart —
+    // must contain @ with a dot somewhere after it.
+    private static void requireValidEmailFormat(String email) {
+        int atIndex = email.indexOf('@');
+        if (atIndex < 1 || email.indexOf('.', atIndex) < 0) {
+            throw new RuntimeException("Please enter a valid email address");
+        }
+    }
+
+    /**
+     * Updates name and/or email. A null field is left untouched, so the caller
+     * can send either one alone. Email is normalized and uniqueness-checked the
+     * same way registration does.
+     *
+     * Changing the email does not invalidate the session: JwtAuthFilter
+     * authorizes on the token's userId claim, and the email is only the
+     * subject. The old token stays valid until it expires on its own.
+     */
+    public User updateProfile(Long userId, String name, String email) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (name != null) {
+            String trimmed = name.trim();
+            if (trimmed.isEmpty()) {
+                throw new RuntimeException("Name cannot be empty");
+            }
+            user.setName(trimmed);
+        }
+
+        if (email != null) {
+            String normalized = email.toLowerCase().trim();
+            if (normalized.isEmpty()) {
+                throw new RuntimeException("Email cannot be empty");
+            }
+            requireValidEmailFormat(normalized);
+            // Skip the uniqueness check when the email is unchanged, otherwise
+            // saving the name alone would trip on the user's own address.
+            if (!normalized.equals(user.getEmail()) && userRepository.existsByEmail(normalized)) {
+                throw new RuntimeException("An account with this email already exists");
+            }
+            user.setEmail(normalized);
+        }
+
+        try {
+            return userRepository.save(user);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            throw new RuntimeException("An account with this email already exists");
+        }
     }
 
     public User updatePhoneNumber(Long userId, String phoneNumber) {

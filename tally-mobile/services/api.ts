@@ -330,6 +330,24 @@ export const authAPI = {
     return mockResponse(user);
   },
 
+  updateProfile: async (
+    userId: string,
+    fields: { name?: string; email?: string },
+  ) => {
+    if (!USE_MOCK) return api.put(`/api/auth/user/${userId}/profile`, fields);
+    const user = mockUsers.find((u) => String(u.id) === String(userId));
+    if (!user) return mockError("User not found", 404);
+    if (fields.email !== undefined) {
+      const taken = mockUsers.some(
+        (u) => String(u.id) !== String(userId) && u.email === fields.email!.toLowerCase().trim(),
+      );
+      if (taken) return mockError("An account with this email already exists", 400);
+      user.email = fields.email.toLowerCase().trim();
+    }
+    if (fields.name !== undefined) user.name = fields.name.trim();
+    return mockResponse(user);
+  },
+
   updatePhone: async (userId: string, phoneNumber: string) => {
     if (!USE_MOCK)
       return api.put(`/api/auth/user/${userId}/phone`, { phoneNumber });

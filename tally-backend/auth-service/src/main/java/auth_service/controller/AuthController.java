@@ -163,6 +163,34 @@ public class AuthController {
         }
     }
 
+    /**
+     * PUT /api/auth/user/{userId}/profile — edit name and/or email.
+     * Self-only: JwtAuthFilter's /user/{id} ownership check covers this path.
+     */
+    @PutMapping("/user/{userId}/profile")
+    public ResponseEntity<?> updateProfile(
+            @PathVariable Long userId,
+            @RequestBody Map<String, String> request) {
+        try {
+            String name = request.get("name");
+            String email = request.get("email");
+            if (name == null && email == null) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Provide a name or email to update", "success", false));
+            }
+            var user = userService.updateProfile(userId, name, email);
+            return ResponseEntity.ok(Map.of(
+                    "message", "Profile updated",
+                    "userId", user.getId(),
+                    "name", user.getName(),
+                    "email", user.getEmail(),
+                    "success", true
+            ));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", errorMessage(e), "success", false));
+        }
+    }
+
     @PutMapping("/user/{userId}/phone")
     public ResponseEntity<?> updatePhone(
             @PathVariable Long userId,
