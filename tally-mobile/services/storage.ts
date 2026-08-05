@@ -16,6 +16,7 @@ export let currentUser = {
   avatarType: '',
   avatarData: '',
   phoneNumber: '',
+  emailVerified: true,
   lastCategory: 'Food',
   lastPaymentMethod: 'CASH',
 };
@@ -64,6 +65,7 @@ export function resetCurrentUser(): void {
   currentUser.avatarType = '';
   currentUser.avatarData = '';
   currentUser.phoneNumber = '';
+  currentUser.emailVerified = true;
   currentUser.lastCategory = 'Food';
   currentUser.lastPaymentMethod = 'CASH';
   notifyUserChanged();
@@ -114,6 +116,7 @@ export interface RememberedUser {
   avatarType: string;
   avatarData: string;
   phoneNumber: string;
+  emailVerified: boolean;
 }
 
 /** Persist the current session so the user is logged in automatically next launch. */
@@ -126,6 +129,7 @@ export async function saveRememberedUser(): Promise<void> {
     avatarType: currentUser.avatarType,
     avatarData: currentUser.avatarData,
     phoneNumber: currentUser.phoneNumber,
+    emailVerified: currentUser.emailVerified,
   };
   await safeStorage.setItem(REMEMBERED_USER_KEY, JSON.stringify(payload));
 }
@@ -148,6 +152,8 @@ export async function loadRememberedUser(): Promise<boolean> {
     currentUser.avatarType = saved.avatarType || '';
     currentUser.avatarData = saved.avatarData || '';
     currentUser.phoneNumber = saved.phoneNumber || '';
+    // Older remembered payloads predate this field — absent means "do not nag"
+    currentUser.emailVerified = saved.emailVerified !== false;
     return true;
   } catch {
     return false;

@@ -58,7 +58,7 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const response = await authAPI.login(email, password);
-      const { token, userId, name, email: userEmail, avatarType, avatarData, phoneNumber } = response.data;
+      const { token, userId, name, email: userEmail, avatarType, avatarData, phoneNumber, emailVerified } = response.data;
 
       currentUser.token = token;
       currentUser.userId = String(userId);
@@ -67,6 +67,9 @@ export default function LoginScreen() {
       currentUser.avatarType = avatarType ?? '';
       currentUser.avatarData = avatarData ?? '';
       currentUser.phoneNumber = phoneNumber ?? '';
+      // Only false when the server explicitly says so — a backend that predates
+      // this field must not make every existing user look unverified.
+      currentUser.emailVerified = emailVerified !== false;
       currentUser.lastCategory = 'Food';
       currentUser.lastPaymentMethod = 'CASH';
 

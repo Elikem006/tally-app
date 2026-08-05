@@ -364,6 +364,10 @@ export const authAPI = {
     return mockResponse(user);
   },
 
+  /** Always resolves for a well-formed address — the server won't say whether it exists. */
+  resendVerification: (email: string) =>
+    api.post("/api/auth/resend-verification", { email }),
+
   forgotPassword: (email: string) =>
     api.post("/api/auth/forgot-password", { email }),
 

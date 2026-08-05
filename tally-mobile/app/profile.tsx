@@ -238,6 +238,9 @@ export default function ProfileScreen() {
         currentUser.userName = value;
       } else {
         currentUser.email = value;
+        // The server un-verifies on change and sends a fresh link, so the
+        // nudge should reappear rather than claim the new address is confirmed.
+        currentUser.emailVerified = false;
       }
       // Keeps a "remember me" session from restoring the pre-edit values on
       // next launch. Guarded so it can't create one the user declined.
@@ -245,7 +248,12 @@ export default function ProfileScreen() {
       notifyUserChanged();
       setEditingField(null);
       setCurrentPassword('');
-      showToast(field === 'name' ? 'Name updated!' : 'Email updated!', 'success');
+      showToast(
+        field === 'name'
+          ? 'Name updated!'
+          : 'Email updated — check your inbox to confirm it',
+        'success',
+      );
     } catch (err: any) {
       showToast(err?.response?.data?.error || `Failed to update ${field}`, 'error');
     } finally {

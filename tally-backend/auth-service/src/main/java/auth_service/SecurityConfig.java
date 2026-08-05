@@ -94,10 +94,13 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // CORS preflight never carries credentials
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        // Public endpoints: registration, login, health, MoMo callback, password reset
+                        // Public endpoints: registration, login, health, MoMo callback,
+                        // password reset, signup email confirmation.
+                        // MUST stay in sync with JwtAuthFilter.PUBLIC_PATHS.
                         .requestMatchers("/api/auth/register", "/api/auth/login",
                                 "/api/auth/health", "/api/auth/forgot-password",
-                                "/api/auth/reset-password", "/api/momo/callback").permitAll()
+                                "/api/auth/reset-password", "/api/auth/verify-email",
+                                "/api/auth/resend-verification", "/api/momo/callback").permitAll()
                         // Everything else requires a valid JWT (see JwtAuthFilter)
                         .anyRequest().authenticated()
                 )
